@@ -105,6 +105,20 @@ class EngineBridgeInstrumentedTest {
     }
 
     @Test
+    fun scanningDoesNotTouchMeetingFiles() {
+        // 只读浏览：扫描不能让用户的会议文件发生任何变化
+        val transcript = File(
+            File(File(root, "meetings"), "2026-10-28_1430_官网注册转化复盘"),
+            "transcript.json",
+        )
+        val before = transcript.readBytes().contentHashCode()
+
+        repeat(3) { engine.scanLibrary() }
+
+        assertEquals(before, transcript.readBytes().contentHashCode())
+    }
+
+    @Test
     fun unknownMeetingIdIsReportedAsMissing() {
         val failure = runCatching { engine.readMeeting("2020-01-01_0000_不存在") }.exceptionOrNull()
         assertEquals(FailureKind.MISSING, (failure as TingoFailure).kind)
