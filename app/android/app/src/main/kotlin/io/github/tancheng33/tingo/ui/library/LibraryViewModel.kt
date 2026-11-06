@@ -54,27 +54,58 @@ class LibraryViewModel(
     private var query: String = ""
     private var archivedOnly: Boolean = false
 
+    /** 最近一次写操作的失败原因；为 null 表示没有失败。 */
+    var lastError: FailureKind? = null
+        private set
+
     init {
         refresh()
     }
 
     fun refresh() {
-        viewModelScope.launch(io) {
-            val next = try {
-                val snapshot = repository.load()
-                lastSnapshot = snapshot
-                render(snapshot)
-            } catch (e: TingoFailure) {
-                // 刷新失败不清空已有内容：用户正在看的列表比"最新但为空"更有用
-                lastSnapshot?.let { render(it) } ?: LibraryUiState.Failed(e.kind)
-            }
-            _state.value = next
+        viewModelScope.launch(io) { refreshNow() }
+    }
+
+    /** 已在 IO 协程里时直接调用，避免再起一层。 */
+    private suspend fun refreshNow() {
+        val next = try {
+            val snapshot = repository.load()
+            lastSnapshot = snapshot
+            render(snapshot)
+        } catch (e: TingoFailure) {
+            // 刷新失败不清空已有内容：用户正在看的列表比"最新但为空"更有用
+            lastSnapshot?.let { render(it) } ?: LibraryUiState.Failed(e.kind)
         }
+        _state.value = next
     }
 
     fun onQueryChange(text: String) {
         query = text
         lastSnapshot?.let { _state.value = render(it) }
+    }
+
+    /** 归档或取消归档；成功后刷新列表，失败就保留原列表并记下原因。 */
+    fun setArchived(id: String, archived: Boolean) {
+        viewModelScope.launch(io) {
+            try {
+                repository.setArchived(id, archived)
+            } catch (e: TingoFailure) {
+                lastError = e.kind
+            }
+            refreshNow()
+        }
+    }
+
+    /** 删除整场会议；界面负责先确认。 */
+    fun delete(id: String) {
+        viewModelScope.launch(io) {
+            try {
+                repository.delete(id)
+            } catch (e: TingoFailure) {
+                lastError = e.kind
+            }
+            refreshNow()
+        }
     }
 
     fun onArchivedOnlyChange(enabled: Boolean) {

@@ -47,8 +47,11 @@ import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
+import io.github.tancheng33.tingo.minutes.LlamaMinutesGenerator
+import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.transcription.TranscriptionPipeline
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
+import io.github.tancheng33.tingo.ui.detail.MinutesViewModel
 import io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel
 import io.github.tancheng33.tingo.ui.detail.DetailViewModel
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
@@ -171,6 +174,8 @@ fun TingoRoot(
                         onUnreadableClick = { card ->
                             unreadablePath = "${container.dataRoot.absolutePath}/meetings/${card.id}"
                         },
+                        onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
+                        onDelete = { card -> libraryViewModel.delete(card.id) },
                     )
                 }
                 if (wide) {
@@ -256,6 +261,25 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
     val transcription by transcriptionViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { transcriptionViewModel.prepare() }
 
+    val minutesViewModel: MinutesViewModel = viewModel(
+        key = "minutes-$meetingId",
+        factory = viewModelFactory {
+            initializer {
+                val meetingDir = java.io.File(java.io.File(container.dataRoot, "meetings"), meetingId)
+                MinutesViewModel(
+                    serviceFactory = {
+                        MinutesService(LlamaMinutesGenerator(container.llmFile))
+                    },
+                    store = container.models,
+                    modelFile = container.llmFile,
+                    meetingDir = meetingDir,
+                )
+            }
+        },
+    )
+    val minutesState by minutesViewModel.state.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(meetingId) { minutesViewModel.prepare() }
+
     // 能力矩阵由引擎给出：没有纪要解析能力就不展示纪要栏
     val showMinutesTab = remember(container) { container.engine.capabilities().minutesParse }
 
@@ -280,6 +304,9 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             transcription = transcription,
             onTranscribe = transcriptionViewModel::start,
             onCancelTranscribe = transcriptionViewModel::cancel,
+            minutesGeneration = minutesState,
+            onGenerateMinutes = minutesViewModel::start,
+            onCancelMinutes = minutesViewModel::cancel,
         )
     }
 }

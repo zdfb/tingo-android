@@ -146,4 +146,51 @@ class LibraryViewModelTest {
         assertTrue(content.archivedOnly)
         assertEquals(listOf("old"), content.items.map { it.id })
     }
+
+    @Test
+    fun archivingRefreshesTheList() = runTest(dispatcher) {
+        var archived = false
+        val engine = FakeEnginePort(onScan = { listOf(summary("m1", archived = archived)) })
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+
+        vm.setArchived("m1", true)
+        archived = true
+        advanceUntilIdle()
+
+        assertEquals(listOf("m1" to true), engine.archived)
+        val state = vm.state.value as LibraryUiState.Content
+        assertTrue(state.items.single().archived)
+    }
+
+    @Test
+    fun deletingRemovesTheMeetingFromTheList() = runTest(dispatcher) {
+        var meetings = listOf(summary("m1"))
+        val engine = FakeEnginePort(onScan = { meetings }, onDelete = { 1_024uL })
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+
+        vm.delete("m1")
+        meetings = emptyList()
+        advanceUntilIdle()
+
+        assertEquals(listOf("m1"), engine.deleted)
+        assertEquals(LibraryUiState.Empty, vm.state.value)
+    }
+
+    @Test
+    fun archiveFailureKeepsListAndRecordsReason() = runTest(dispatcher) {
+        val engine = FakeEnginePort(
+            onScan = { listOf(summary("m1")) },
+            onArchive = { _, _ -> throw TingoFailure(FailureKind.PERMISSION_DENIED, "read-only") },
+        )
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+
+        vm.setArchived("m1", true)
+        advanceUntilIdle()
+
+        assertEquals(FailureKind.PERMISSION_DENIED, vm.lastError)
+        assertTrue(vm.state.value is LibraryUiState.Content)
+    }
 }

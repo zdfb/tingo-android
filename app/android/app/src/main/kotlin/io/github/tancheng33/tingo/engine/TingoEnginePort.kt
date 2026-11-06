@@ -46,6 +46,12 @@ interface TingoEnginePort {
 
     fun parseFishbone(text: String): Fishbone?
 
+    /** 归档 / 取消归档；只改 meta.json 的 archived 字段。 */
+    fun setArchived(id: String, archived: Boolean)
+
+    /** 删除整场会议，返回释放的字节数。 */
+    fun deleteMeeting(id: String): ULong
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -67,6 +73,11 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
     override fun parseMinutes(text: String): MinutesDoc = mapEngineCall { engine.parseMinutes(text) }
 
     override fun parseFishbone(text: String): Fishbone? = mapEngineCall { engine.parseFishbone(text) }
+
+    override fun setArchived(id: String, archived: Boolean) =
+        mapEngineCall { engine.setArchived(id, archived) }
+
+    override fun deleteMeeting(id: String): ULong = mapEngineCall { engine.deleteMeeting(id) }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

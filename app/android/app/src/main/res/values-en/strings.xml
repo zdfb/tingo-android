@@ -70,4 +70,14 @@
     <string name="transcribe_downloading">Downloading speech models…</string>
     <string name="transcribe_running">Transcribing on this device; you can leave this page…</string>
     <string name="action_cancel">Cancel</string>
+    <string name="minutes_generate">Generate minutes</string>
+    <string name="minutes_need_model">A one-time language model download of about %1$d MB is needed. Everything runs on this device.</string>
+    <string name="minutes_generating">Generating minutes on this device; a short meeting usually takes a few tens of seconds…</string>
+    <string name="library_more">More actions</string>
+    <string name="library_archive">Archive</string>
+    <string name="library_unarchive">Unarchive</string>
+    <string name="library_delete">Delete meeting</string>
+    <string name="library_delete_title">Delete this meeting?</string>
+    <string name="library_delete_body">Recording, transcript and minutes are deleted together. This cannot be undone.</string>
+    <string name="library_delete_confirm">Delete</string>
 </resources>

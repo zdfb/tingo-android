@@ -125,6 +125,29 @@ class EngineBridgeInstrumentedTest {
     }
 
     /** 把 androidTest 里的夹具复制进被测应用的会议库；文件属主是应用自己，引擎才读得到。 */
+    @Test
+    fun archivesAndDeletesAMeetingThroughTheBridge() {
+        val meetings = File(root, "meetings")
+        val id = "2026-11-01_0900_临时会议"
+        val dir = File(meetings, id)
+        dir.mkdirs()
+        File(dir, "纪要.md").writeText("# 临时会议\n\n## 决议\n- 先这样\n")
+
+        engine.setArchived(id, true)
+        assertTrue("归档没有写进 meta.json", File(dir, "meta.json").readText().contains("archived"))
+
+        val freed = engine.deleteMeeting(id)
+        assertTrue("删除后目录还在", !dir.exists())
+        assertTrue("释放字节数应为正", freed > 0uL)
+        assertTrue("删除后会议库里不该再有它", engine.scanLibrary().none { it.id == id })
+    }
+
+    @Test
+    fun archivingUnknownMeetingFails() {
+        val failure = runCatching { engine.setArchived("2020-01-01_0000_不存在", true) }.exceptionOrNull()
+        assertTrue("应当报错而不是静默成功", failure != null)
+    }
+
     private fun copyFixtures(context: Context) {
         val meetings = File(root, "meetings")
         // 夹具随测试 APK 打包，因此从 instrumentation 的 context 取 assets，写入 targetContext 的目录

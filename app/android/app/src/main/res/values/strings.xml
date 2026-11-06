@@ -70,4 +70,14 @@
     <string name="transcribe_downloading">正在下载语音模型…</string>
     <string name="transcribe_running">正在本机转写，可以离开这一页…</string>
     <string name="action_cancel">取消</string>
+    <string name="minutes_generate">生成会议纪要</string>
+    <string name="minutes_need_model">需要先下载语言模型，约 %1$d MB。全部在本机运行。</string>
+    <string name="minutes_generating">正在本机生成纪要，一分钟左右的会议通常要等几十秒…</string>
+    <string name="library_more">更多操作</string>
+    <string name="library_archive">归档</string>
+    <string name="library_unarchive">取消归档</string>
+    <string name="library_delete">删除会议</string>
+    <string name="library_delete_title">删除这场会议？</string>
+    <string name="library_delete_body">录音、转写、纪要会一起删除，无法恢复。</string>
+    <string name="library_delete_confirm">删除</string>
 </resources>

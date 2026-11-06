@@ -11,14 +11,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -41,6 +52,8 @@ fun LibraryScreen(
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
     onUnreadableClick: (MeetingCard) -> Unit = {},
+    onSetArchived: (MeetingCard, Boolean) -> Unit = { _, _ -> },
+    onDelete: (MeetingCard) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -100,6 +113,8 @@ fun LibraryScreen(
                         card = card,
                         onClick = { onOpenMeeting(card.id) },
                         onUnreadableClick = { onUnreadableClick(card) },
+                        onSetArchived = { onSetArchived(card, it) },
+                        onDelete = { onDelete(card) },
                     )
                 }
             }
@@ -108,7 +123,35 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun MeetingCardRow(card: MeetingCard, onClick: () -> Unit, onUnreadableClick: () -> Unit) {
+private fun MeetingCardRow(
+    card: MeetingCard,
+    onClick: () -> Unit,
+    onUnreadableClick: () -> Unit,
+    onSetArchived: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.library_delete_title)) },
+            text = { Text(stringResource(R.string.library_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
+                    },
+                ) { Text(stringResource(R.string.library_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,6 +167,36 @@ private fun MeetingCardRow(card: MeetingCard, onClick: () -> Unit, onUnreadableC
                         onClick = onUnreadableClick,
                         label = { Text(stringResource(R.string.library_unreadable)) },
                     )
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.library_more),
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (card.archived) R.string.library_unarchive else R.string.library_archive,
+                                    ),
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onSetArchived(!card.archived)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.library_delete)) },
+                            onClick = {
+                                menuOpen = false
+                                confirmDelete = true
+                            },
+                        )
+                    }
                 }
             }
             Text(

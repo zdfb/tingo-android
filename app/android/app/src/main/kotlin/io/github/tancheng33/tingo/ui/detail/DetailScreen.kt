@@ -58,6 +58,9 @@ fun DetailScreen(
     transcription: TranscriptionUiState = TranscriptionUiState.Idle,
     onTranscribe: () -> Unit = {},
     onCancelTranscribe: () -> Unit = {},
+    minutesGeneration: MinutesUiState = MinutesUiState.Idle,
+    onGenerateMinutes: () -> Unit = {},
+    onCancelMinutes: () -> Unit = {},
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -96,6 +99,9 @@ fun DetailScreen(
                         minutes = state.minutes,
                         minutesFailure = state.minutesFailure,
                         fishbone = detail?.fishbone,
+                        generation = minutesGeneration,
+                        onGenerate = onGenerateMinutes,
+                        onCancel = onCancelMinutes,
                     )
                 } else {
                     TranscriptPane(
@@ -116,14 +122,21 @@ private fun MinutesPane(
     minutes: MinutesDoc?,
     minutesFailure: FailureKind?,
     fishbone: Fishbone?,
+    generation: MinutesUiState,
+    onGenerate: () -> Unit,
+    onCancel: () -> Unit,
 ) {
+    MinutesGenerationBar(state = generation, onGenerate = onGenerate, onCancel = onCancel)
     when {
         minutesFailure != null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
             Text(stringResource(R.string.detail_minutes_parse_failed, failureText(minutesFailure)))
         }
 
-        minutes == null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
-            Text(stringResource(R.string.detail_no_minutes))
+        minutes == null -> {
+            if (generation is MinutesUiState.Generating) return
+            Box(Modifier.fillMaxSize().padding(24.dp)) {
+                Text(stringResource(R.string.detail_no_minutes))
+            }
         }
 
         else -> LazyColumn(
@@ -176,6 +189,48 @@ private fun FishboneCard(fishbone: Fishbone) {
 }
 
 private const val FISHBONE_FENCE = "```fishbone"
+
+/** 纪要生成状态条：缺模型先提示下载，生成中给取消，失败给原因。 */
+@Composable
+private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, onCancel: () -> Unit) {
+    when (state) {
+        MinutesUiState.Idle -> Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
+        }
+
+        is MinutesUiState.NeedModel -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.minutes_need_model, state.missingBytes / 1_000_000),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
+        }
+
+        MinutesUiState.Generating -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(stringResource(R.string.minutes_generating), style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        }
+
+        is MinutesUiState.Done -> Unit
+
+        is MinutesUiState.Failed -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(state.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
+        }
+    }
+}
 
 /** 转写状态条：缺模型、下载中、识别中、失败各自给出可操作的下一步。 */
 @Composable

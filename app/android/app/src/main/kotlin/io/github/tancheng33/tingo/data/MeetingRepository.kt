@@ -25,6 +25,14 @@ class MeetingRepository(
     suspend fun load(): List<MeetingCard> = withContext(io) {
         engine.scanLibrary().map { it.toCard() }
     }
+
+    /** 归档或取消归档。 */
+    suspend fun setArchived(id: String, archived: Boolean) = withContext(io) {
+        engine.setArchived(id, archived)
+    }
+
+    /** 删除整场会议，返回释放的字节数。 */
+    suspend fun delete(id: String): ULong = withContext(io) { engine.deleteMeeting(id) }
 }
 
 internal fun MeetingSummary.toCard(): MeetingCard = MeetingCard(

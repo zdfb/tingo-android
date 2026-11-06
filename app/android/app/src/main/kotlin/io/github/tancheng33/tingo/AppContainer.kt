@@ -54,6 +54,12 @@ class AppContainer(context: Context) {
     )
     val models: ModelStore = ModelStore(File(dataRoot, "models"), UrlFetcher())
 
+    /** 纪要用的语言模型：与语音模型分开列出，两套不要求同时驻留内存。 */
+    val llmCatalog: ModelCatalog = ModelCatalog.parse(
+        appContext.assets.open("llm.json").bufferedReader().use { it.readText() },
+    )
+    val llmFile: File = models.fileFor(llmCatalog.files.single())
+
     /**
      * 首次启动时建好会议库目录并写入探针文件。
      *
@@ -80,6 +86,10 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
         throw TingoFailure(FailureKind.INTERNAL, "engine unavailable: ${cause.message}", cause)
 
     override fun engineVersion(): String = "unavailable"
+
+    override fun setArchived(id: String, archived: Boolean): Nothing = fail()
+
+    override fun deleteMeeting(id: String): Nothing = fail()
 
     override fun capabilities(): Capabilities =
         Capabilities(

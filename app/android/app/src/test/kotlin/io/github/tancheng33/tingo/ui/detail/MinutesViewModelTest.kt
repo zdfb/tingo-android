@@ -1,0 +1,182 @@
+package io.github.tancheng33.tingo.ui.detail
+
+import io.github.tancheng33.tingo.minutes.MinutesGenerator
+import io.github.tancheng33.tingo.minutes.MinutesService
+import io.github.tancheng33.tingo.models.HttpFetcher
+import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.transcription.Transcript
+import io.github.tancheng33.tingo.transcription.TranscriptSentence
+import io.github.tancheng33.tingo.transcription.TranscriptWriter
+import java.io.File
+import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class MinutesViewModelTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    private val good = """
+        # 复盘
+
+        ## 一句话总结
+        转化率下滑。
+
+        ## 议题与讨论
+        ### 1. 转化
+        - 掉了三个点（[00:00]）
+
+        ## 决议
+        - 先修首屏（[00:00]）
+
+        ## 待办
+        | 事项 | 负责人 | 截止时间 | 出处 |
+        |---|---|---|---|
+        | 修首屏 | 林舟 | 未明确 | [00:00] |
+
+        ## 待定问题与风险
+        - 无
+    """.trimIndent()
+
+    private class FakeGenerator(private val output: String, private val fail: Boolean = false) : MinutesGenerator {
+        var calls = 0
+        override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String {
+            calls++
+            if (fail) throw IllegalStateException("显存不够")
+            return output
+        }
+    }
+
+    private val store = ModelStore(
+        Files.createTempDirectory("tingo-llm").toFile(),
+        object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long) = error("测试不该下载")
+        },
+    )
+
+    private fun meeting(withTranscript: Boolean = true): File {
+        val dir = Files.createTempDirectory("tingo-meeting").toFile()
+        if (withTranscript) {
+            TranscriptWriter.write(
+                dir,
+                Transcript("录音.wav", 1_000, listOf(TranscriptSentence(0, 0, 1_000, "复盘注册转化。"))),
+            )
+        }
+        return dir
+    }
+
+    private fun readyModel(): File =
+        Files.createTempFile("tingo-model", ".gguf").toFile().apply { writeBytes(ByteArray(16)); deleteOnExit() }
+
+    private fun viewModel(
+        dir: File,
+        generator: MinutesGenerator,
+        model: File = readyModel(),
+    ) = MinutesViewModel(
+        serviceFactory = { MinutesService(generator) },
+        store = store,
+        modelFile = model,
+        meetingDir = dir,
+        io = dispatcher,
+    )
+
+    @Test
+    fun prepareAsksForModelWhenMissing() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good), model = File("/nonexistent/x.gguf"))
+
+        vm.prepare()
+
+        assertTrue(vm.state.value is MinutesUiState.NeedModel)
+    }
+
+    @Test
+    fun prepareStaysIdleWhenEverythingReady() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good))
+
+        vm.prepare()
+
+        assertEquals(MinutesUiState.Idle, vm.state.value)
+    }
+
+    @Test
+    fun prepareDoesNothingWithoutTranscript() = runTest(dispatcher) {
+        val vm = viewModel(meeting(withTranscript = false), FakeGenerator(good), model = File("/nonexistent"))
+
+        vm.prepare()
+
+        assertEquals(MinutesUiState.Idle, vm.state.value)
+    }
+
+    @Test
+    fun startWritesMinutesFile() = runTest(dispatcher) {
+        val dir = meeting()
+        val vm = viewModel(dir, FakeGenerator(good))
+
+        vm.start()
+        advanceUntilIdle()
+
+        val state = vm.state.value as MinutesUiState.Done
+        assertTrue(state.file.isFile)
+        assertEquals(MinutesService.FILE_NAME, state.file.name)
+    }
+
+    @Test
+    fun missingTranscriptFailsWithHint() = runTest(dispatcher) {
+        val vm = viewModel(meeting(withTranscript = false), FakeGenerator(good))
+
+        vm.start()
+        advanceUntilIdle()
+
+        assertTrue((vm.state.value as MinutesUiState.Failed).reason.contains("先生成转写"))
+    }
+
+    @Test
+    fun rejectedOutputIsReportedWithReason() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator("# 标题\n\n## 一句话总结\n不行"))
+
+        vm.start()
+        advanceUntilIdle()
+
+        val state = vm.state.value as MinutesUiState.Failed
+        assertTrue(state.reason.contains("模型没有按要求输出"))
+    }
+
+    @Test
+    fun generatorCrashSurfacesMessage() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good, fail = true))
+
+        vm.start()
+        advanceUntilIdle()
+
+        assertEquals(MinutesUiState.Failed("显存不够"), vm.state.value)
+    }
+
+    @Test
+    fun cancelReturnsToIdle() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good))
+
+        vm.start()
+        vm.cancel()
+        advanceUntilIdle()
+
+        assertEquals(MinutesUiState.Idle, vm.state.value)
+    }
+}

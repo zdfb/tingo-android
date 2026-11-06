@@ -48,7 +48,13 @@ fun summary(
 class FakeEnginePort(
     private val onScan: () -> List<MeetingSummary> = { emptyList() },
     private val onRead: (String) -> MeetingDetail = { id -> throw TingoFailure(io.github.tancheng33.tingo.engine.FailureKind.MISSING, id) },
+    private val onArchive: (String, Boolean) -> Unit = { _, _ -> },
+    private val onDelete: (String) -> ULong = { 0uL },
 ) : TingoEnginePort {
+    /** 归档与删除的调用记录，供用例断言"界面确实把动作传下去了"。 */
+    val archived = mutableListOf<Pair<String, Boolean>>()
+    val deleted = mutableListOf<String>()
+
     override fun engineVersion(): String = "test"
 
     override fun capabilities(): Capabilities = Capabilities(
@@ -67,6 +73,16 @@ class FakeEnginePort(
     override fun readMeeting(id: String): MeetingDetail = onRead(id)
 
     override fun parseMinutes(text: String): MinutesDoc = MinutesDoc(title = "", sections = emptyList())
+
+    override fun setArchived(id: String, archived: Boolean) {
+        this.archived += id to archived
+        onArchive(id, archived)
+    }
+
+    override fun deleteMeeting(id: String): ULong {
+        deleted += id
+        return onDelete(id)
+    }
 
     override fun parseFishbone(text: String): Fishbone? = null
 }

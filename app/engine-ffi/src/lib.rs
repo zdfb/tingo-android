@@ -200,6 +200,31 @@ impl TingoEngine {
         guard("parse_minutes", move || Ok(to_minutes(engine_minutes::parse(&text))))
     }
 
+    /// 归档 / 取消归档。只改 meta.json 的 `archived` 字段，其它字段原样保留。
+    pub fn set_archived(&self, id: String, archived: bool) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("set_archived", move || {
+            let mut meta = meetings::read_meta(&dir);
+            if meta.archived == archived {
+                return Ok(());
+            }
+            meta.archived = archived;
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "set_archived"))
+        })
+    }
+
+    /// 删除整场会议（含录音、转写、纪要），返回释放的字节数。
+    ///
+    /// 直接删而不是进废纸篓：Android 沙箱里没有系统废纸篓，界面必须先确认。
+    pub fn delete_meeting(&self, id: String) -> Result<u64, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("delete_meeting", move || {
+            let freed = meetings::size_of(&dir);
+            std::fs::remove_dir_all(&dir).map_err(|e| io_error(e, "delete_meeting"))?;
+            Ok(freed)
+        })
+    }
+
     /// 解析纪要里的鱼骨图代码块。没有代码块返回 `None`；内容非法返回 `Malformed`。
     pub fn parse_fishbone(&self, minutes_text: String) -> Result<Option<Fishbone>, EngineError> {
         guard("parse_fishbone", move || {
@@ -413,6 +438,67 @@ mod tests {
         assert!(caps.fishbone_parse);
         assert!(caps.speaker_naming);
         assert!(caps.terms_extract);
+    }
+
+    /// 造一个最小会议目录：只有纪要，引擎也认得。
+    fn meeting(root: &Path, id: &str) -> PathBuf {
+        // 引擎的会议库在 data_root/meetings 下
+        let dir = root.join("meetings").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("纪要.md"), "# 标题\n\n## 决议\n- 先修首屏\n").unwrap();
+        dir
+    }
+
+    /// 每个用例一个独立根目录：测试并行跑，共用一个目录会互相踩。
+    fn temp_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("tingo-ffi-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn set_archived_flips_meta_and_keeps_other_fields() {
+        let root = temp_root("archive");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        let mut meta = meetings::read_meta(&dir);
+        meta.title = Some("复盘".to_string());
+        meta.tags = vec!["产品".to_string()];
+        meetings::write_meta(&dir, &meta).unwrap();
+
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.set_archived("2026-10-28_1430_复盘".to_string(), true).unwrap();
+
+        let after = meetings::read_meta(&dir);
+        assert!(after.archived);
+        assert_eq!(after.title.as_deref(), Some("复盘"));
+        assert_eq!(after.tags, vec!["产品".to_string()]);
+
+        engine.set_archived("2026-10-28_1430_复盘".to_string(), false).unwrap();
+        assert!(!meetings::read_meta(&dir).archived);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_meeting_removes_folder_and_reports_freed_bytes() {
+        let root = temp_root("delete");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let freed = engine.delete_meeting("2026-10-28_1430_复盘".to_string()).unwrap();
+
+        assert!(!dir.exists());
+        assert!(freed > 0);
+        assert!(engine.scan_library().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn archive_rejects_path_traversal_ids() {
+        let root = temp_root("traversal");
+        let engine = TingoEngine::new(root.display().to_string());
+        assert!(engine.set_archived("../etc".to_string(), true).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
