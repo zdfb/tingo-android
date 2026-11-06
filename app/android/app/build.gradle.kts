@@ -134,6 +134,15 @@ android {
     namespace = "io.github.tancheng33.tingo"
     compileSdk = 37
 
+    // 与 Rust 交叉编译用同一个 NDK，避免两套工具链打架
+    ndkVersion = "30.0.16248370"
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+
     defaultConfig {
         applicationId = "io.github.tancheng33.tingo"
         minSdk = 26

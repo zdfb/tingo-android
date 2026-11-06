@@ -12,3 +12,7 @@ build/
 .tools/
 app/engine/target/
 app/engine-ffi/target/
+
+# 交叉编译产物：用 app/android/scripts/build-llama-android.sh 生成
+app/android/app/src/main/jniLibs/
+app/android/app/src/main/cpp/include/

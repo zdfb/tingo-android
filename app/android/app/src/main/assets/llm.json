@@ -1,0 +1,12 @@
+{
+  "note": "端侧纪要用的语言模型。与语音模型分开，避免两套模型同时驻留内存。",
+  "files": [
+    {
+      "id": "qwen3-0.6b",
+      "file_name": "Qwen3-0.6B-Q4_K_M.gguf",
+      "url": "https://hf-mirror.com/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+      "bytes": 396705472,
+      "sha256": ""
+    }
+  ]
+}
