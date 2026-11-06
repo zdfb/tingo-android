@@ -40,14 +40,29 @@ llama-quantize --allow-requantize Qwen3-0.6B-Q8_0.gguf Qwen3-0.6B-Q4_0.gguf  Q4_
 并在自检不过时重试；"决议/待办/待定"三节内容重复这类问题自检查不出来，需要提示词里点名要求
 （例如"待办必须是带责任人的动作项"）。0.6B 是否够用要拿真实会议人工评一轮，再决定是否升到 1.7B。
 
+### 端侧运行（已跑通，模拟器性能不可用）
+
+`llama.cpp b12110` 用 NDK 30 交叉编译成 Android arm64-v8a（`bin/llama` + 一组 `lib*.so`），
+推到模拟器（API 36 arm64）后**能加载 Q4_K_M 模型并生成中文**：
+
+```
+$ adb shell "cd /data/local/tmp/llama && LD_LIBRARY_PATH=. ./llama cli -m Qwen3-0.6B-Q4_K_M.gguf \
+    -p '用一句话总结：张三说注册转化率掉了30%，李四说要先修首屏。' -n 48 --temp 0 -t 4 -st"
+[Start thinking] 好的，用户让我用一句话总结张三和李四的对话……
+[ Prompt: 3.3 t/s | Generation: 0.1 t/s ]
+```
+
+**性能数字不可用于决策**：模拟器是软件模拟 CPU（本机没有硬件虚拟化直通），实测
+prompt 3.3 t/s、生成 0.1 t/s，与真机差一到两个数量级。这条证据只能说明"能跑"，
+真机速度要拿真机测（按公开数据，骁龙 8 Gen2 级别跑 0.6B Q4 大致 15–25 t/s 量级，
+需实测确认）。
+
 ### 端侧运行的剩余工作
 
-宿主机跑通只证明"量化模型可用"。要在手机上跑，还缺：
-
-1. `llama.cpp` 交叉编译出 Android 的 `libllama.so`（NDK 30，arm64-v8a）
-2. 一层 JNI（或用官方 `llama.android` 封装）把 token 流接到 Kotlin
-3. 内存门槛实测：Q4_K_M 权重 378 MB + KV cache，6 GB 机型要确认能加载；
+1. 把 `libllama.so` 与一层 JNI（或官方 `llama.android` 封装）接进 APK，token 流接到 Kotlin
+2. 真机实测速度与内存：Q4_K_M 权重 378 MB + KV cache，6 GB 机型要确认能加载；
    加载失败时按设计"本机暂不支持"降级
+3. 模型随用随下（不塞进 APK）
 
 ## 二、识别模型：还能再量化吗
 
