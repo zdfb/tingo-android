@@ -12,6 +12,8 @@ import java.io.RandomAccessFile
 class WavWriter(
     private val file: File,
     val sampleRate: Int = SAMPLE_RATE,
+    /** 声道数。系统内录是立体声，麦克风是单声道；默认单声道 */
+    private val channels: Int = CHANNELS,
     /** 只为"修复已有文件"而存在：把已写入的 PCM 字节数认下来，不截断文件 */
     private val existingDataBytes: Long? = null,
 ) : AutoCloseable {
@@ -41,7 +43,7 @@ class WavWriter(
     }
 
     /** 录音时长（毫秒），由已写入的字节数换算，不依赖系统时钟。 */
-    fun durationMs(): Long = dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE)
+    fun durationMs(): Long = dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE * channels)
 
     /** 回填长度字段并关闭；重复调用无副作用（进程被杀后由恢复流程再调一次）。 */
     override fun close() {
@@ -54,7 +56,7 @@ class WavWriter(
 
     private fun header(dataBytes: Long): ByteArray {
         val dataSize = (dataBytes and 0xFFFFFFFFL).toInt()
-        val byteRate = sampleRate * BYTES_PER_SAMPLE
+        val byteRate = sampleRate * BYTES_PER_SAMPLE * channels
         val buf = ByteArray(HEADER_SIZE)
         var i = 0
         fun ascii(s: String) { for (c in s) buf[i++] = c.code.toByte() }
@@ -75,7 +77,7 @@ class WavWriter(
         ascii("fmt ")
         le32(16) // fmt 块长度
         le16(1) // PCM
-        le16(CHANNELS)
+        le16(channels)
         le32(sampleRate)
         le32(byteRate)
         le16(BYTES_PER_SAMPLE) // 块对齐

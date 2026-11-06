@@ -101,4 +101,9 @@
     <string name="task_need_model">需要先下载语音模型，约 %1$d MB。下载一次可重复使用。</string>
     <string name="minutes_draft_saved">模型输出已存为「纪要-草稿.md」，可以手动改完再另存为纪要</string>
     <string name="export_transcript_title">会议转写</string>
+    <string name="record_system_audio_label">同时录下会议软件的声音</string>
+    <string name="record_system_audio_hint">用于录对方说话声。多数会议软件禁止被抓，抓不到时只录本机麦克风。</string>
+    <string name="record_system_audio_unsupported">Android 10 以下没有系统内录能力，只能录麦克风</string>
+    <string name="record_system_audio_missing">没抓到会议软件的声音（对方多半禁止了内录），本次只有麦克风</string>
+    <string name="record_system_audio_denied">未授予屏幕录制权限，本次只录麦克风</string>
 </resources>

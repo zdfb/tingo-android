@@ -23,10 +23,12 @@ sherpa-onnx 运行），配 CT-Transformer 标点、CAM++ 声纹、silero VAD，
 - **"未完成录音"的处理方式**：初版规格要求下次启动时把未收尾的录音**标记**为"未完成"。实现改为
   启动时直接**修复**（补好 wav 头，使它可播放、可转写），列表不新增状态字段——引擎的
   `meta.json` 没有这个字段，为了一个标签改跨版本格式不划算。规格已按此修订。
-- **系统内录（录会议软件的声音）**：规格里是 SHALL + 必须给出替代做法，但这一轮**未实现**
-  `MediaProjection`/`AudioPlaybackCapture`。原因：会议软件普遍用 `USAGE_VOICE_COMMUNICATION`，
-  该通路抓不到声音，先把"抓不到就要说清楚"的提示做出来、把真正的系统内录留到后续变更。
-  见 specs/recording-capture 中该条的验收状态。
+- **系统内录的验证边界**：`MediaProjection` + `AudioPlaybackCapture` 已实现（`SystemAudioCapture`），
+  但这条通路**无法在自动化测试里验证真实音频**：模拟器没有真实播放源，会议软件也普遍禁止被抓。
+  因此把可测的部分全部下沉到纯函数：`SystemAudioSupport.decide`（系统版本/授权/开关三态）、
+  `AudioMix`（立体声降单声道、48k→16k 重采样、双轨混音削顶）、`TrackMerger`（`mic.wav`+`system.wav`
+  → `录音.wav`），共 13 个单测。真机上的完整链路（授权→落盘→合成）仍需人工验收一次，
+  README 的"已知限制"里写明了这条。
 
 ## 决策
 

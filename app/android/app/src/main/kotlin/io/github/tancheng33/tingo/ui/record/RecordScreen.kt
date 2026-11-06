@@ -16,6 +16,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +48,13 @@ fun RecordScreen(
     onStop: () -> Unit,
     onDiscard: () -> Unit,
     onOpenMeeting: (String) -> Unit,
+    /** 用户是否勾选"同时录下会议软件的声音" */
+    systemAudioEnabled: Boolean = false,
+    onSystemAudioChange: (Boolean) -> Unit = {},
+    /** 系统声音这一路是否真的在录；false 表示没抓到（会议软件不允许抓通常如此） */
+    systemAudioActive: Boolean = false,
+    /** 用户拒绝了屏幕录制授权 */
+    systemAudioDenied: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -170,6 +178,31 @@ fun RecordScreen(
                     Button(onClick = ::startWithPermission) { Text(stringResource(R.string.record_start)) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * "同时录下会议软件的声音"开关。
+ *
+ * 只在 Android 10 以上出现；低版本没有 AudioPlaybackCapture，与其给个点不动的开关，
+ * 不如直接说清楚为什么没有。
+ */
+@Composable
+private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Switch(checked = enabled && supported, enabled = supported, onCheckedChange = onChange)
+        Column {
+            Text(stringResource(R.string.record_system_audio_label), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(
+                    if (supported) R.string.record_system_audio_hint else R.string.record_system_audio_unsupported,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

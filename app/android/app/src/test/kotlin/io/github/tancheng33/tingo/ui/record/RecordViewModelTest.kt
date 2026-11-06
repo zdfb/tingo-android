@@ -2,6 +2,7 @@ package io.github.tancheng33.tingo.ui.record
 
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.recording.AudioCapture
+import io.github.tancheng33.tingo.recording.WavWriter
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
@@ -31,9 +32,17 @@ class RecordViewModelTest {
         var stopped = 0
         var failWith: Exception? = null
 
+        private var writer: WavWriter? = null
+
         override fun start(file: File) {
             failWith?.let { throw it }
             started = file
+            writer = WavWriter(file, 16_000)
+        }
+
+        /** 追加一段静音，模拟真实写盘，供"合成 录音.wav"的用例使用。 */
+        fun emit(pcm: ByteArray) {
+            writer?.append(pcm)
         }
 
         override fun pause() { pauses++ }
@@ -42,6 +51,8 @@ class RecordViewModelTest {
 
         override fun stop(): Long {
             stopped++
+            writer?.close()
+            writer = null
             return durationMs
         }
 
@@ -69,7 +80,8 @@ class RecordViewModelTest {
         assertEquals(0L, state.elapsedMs)
         val file = requireNonNull(capture.started)
         assertTrue(file.parentFile!!.name.endsWith("_录音"))
-        assertEquals("录音.wav", file.name)
+        // 录制过程中先写原始音轨，结束时合成 录音.wav
+        assertEquals("mic.wav", file.name)
     }
 
     @Test
@@ -142,6 +154,22 @@ class RecordViewModelTest {
     }
 
     private fun <T> requireNonNull(value: T?): T = requireNotNull(value)
+
+    @Test
+    fun stoppingMergesRawTracksIntoRecordingFile() = runTest(dispatcher) {
+        val root = root()
+        val capture = FakeCapture()
+        val vm = viewModel(capture, root)
+        vm.start()
+        capture.emit(ByteArray(3_200))
+        vm.stop()
+
+        val dir = root.listFiles()!!.single()
+        val mixed = File(dir, RecordViewModel.RECORDING_FILE)
+        assertTrue("停止后应合成 录音.wav", mixed.isFile)
+        assertTrue("合成结果不能是空文件", mixed.length() > 44)
+        assertTrue("原始音轨保留在磁盘上，便于排查", File(dir, RecordViewModel.MIC_TRACK).isFile)
+    }
 
     @Test
     fun meetingIdMatchesEngineFolderPattern() = runTest(dispatcher) {

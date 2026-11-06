@@ -45,7 +45,7 @@ object WavReader {
     }
 
     /** 解析并校验 44 字节头：只支持 16 bit 单声道 PCM，和我们的录音格式一致。 */
-    private fun readHeader(raf: RandomAccessFile, name: String): ByteArray {
+    private fun readHeader(raf: RandomAccessFile, name: String, allowStereo: Boolean = false): ByteArray {
         val header = ByteArray(HEADER_BYTES.toInt())
         if (raf.read(header) != header.size) error("不是有效的 wav：$name")
         require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
@@ -53,7 +53,7 @@ object WavReader {
         val channels = u16(header, 22)
         val bits = u16(header, 34)
         require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
-        require(channels == 1) { "只支持单声道，实际 $channels" }
+        require(allowStereo || channels == 1) { "只支持单声道，实际 $channels" }
         return header
     }
 
@@ -81,10 +81,19 @@ object WavReader {
         }
     }
 
-    fun read(file: File): Pcm {
+    /**
+     * 宽容读取：立体声会降到单声道。
+     *
+     * 系统内录拿到的是 48 kHz 立体声，而我们自己录的是 16 kHz 单声道；
+     * 后者用严格的 [read]，前者用这个。
+     */
+    fun readAnyChannels(file: File): Pcm = read(file, allowStereo = true)
+
+    fun read(file: File, allowStereo: Boolean = false): Pcm {
         RandomAccessFile(file, "r").use { raf ->
-            val header = readHeader(raf, file.name)
+            val header = readHeader(raf, file.name, allowStereo)
             val sampleRate = u32(header, 24)
+            val channels = u16(header, 22)
             val dataBytes = max(0L, (file.length() - HEADER_BYTES)).toInt()
             val raw = ByteArray(dataBytes)
             var read = 0
@@ -94,7 +103,14 @@ object WavReader {
                 read += n
             }
             val buffer = ByteBuffer.wrap(raw, 0, read).order(ByteOrder.LITTLE_ENDIAN)
-            val samples = FloatArray(read / 2) { buffer.short / 32_768f }
+            val interleaved = FloatArray(read / 2) { buffer.short / 32_768f }
+            val samples = if (channels == 1) interleaved else {
+                FloatArray(interleaved.size / channels) { frame ->
+                    var sum = 0f
+                    for (channel in 0 until channels) sum += interleaved[frame * channels + channel]
+                    sum / channels
+                }
+            }
             return Pcm(samples, sampleRate)
         }
     }

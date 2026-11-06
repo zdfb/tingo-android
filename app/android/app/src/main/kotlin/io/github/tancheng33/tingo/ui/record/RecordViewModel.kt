@@ -5,6 +5,7 @@ import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
+import io.github.tancheng33.tingo.recording.TrackMerger
 import io.github.tancheng33.tingo.recording.WavWriter
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -57,13 +58,19 @@ class RecordViewModel(
     private val _state = MutableStateFlow<RecordUiState>(RecordUiState.Idle)
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
 
+    /** 系统声音那一路是否真的在录；抓不到时为 false，界面据此提示。 */
+    private val _systemAudioActive = MutableStateFlow(false)
+    val systemAudioActive: StateFlow<Boolean> = _systemAudioActive.asStateFlow()
+
     private var currentDir: File? = null
+    private var systemAudio: io.github.tancheng33.tingo.recording.SystemAudioCapture? = null
     private var ticker: kotlinx.coroutines.Job? = null
 
     fun start() {
         if (_state.value is RecordUiState.Recording) return
         val dir = File(meetingsRoot, newMeetingId())
-        val file = File(dir, RECORDING_FILE)
+        // 原始音轨先各写各的，结束时合成 录音.wav——和桌面版的文件布局一致
+        val file = File(dir, MIC_TRACK)
         try {
             dir.mkdirs()
             capture.start(file)
@@ -76,6 +83,25 @@ class RecordViewModel(
         session.start(clock())
         _state.value = RecordUiState.Recording(0, 0f)
         startTicker()
+    }
+
+    /**
+     * 挂上系统声音捕获（会议软件的对方声音）。
+     *
+     * 必须在 [start] 之后调用：目录是 start 建的。抓不到就算了，麦克风那一路照常录。
+     */
+    fun attachSystemAudio(capture: io.github.tancheng33.tingo.recording.SystemAudioCapture) {
+        val dir = currentDir ?: return
+        runCatching { capture.start(File(dir, SYSTEM_TRACK)) }
+            .onSuccess {
+                systemAudio = capture
+                _systemAudioActive.value = true
+            }
+            .onFailure {
+                // 抓不到系统声音不影响录音：麦克风那一路继续，界面提示一句
+                runCatching { capture.stop() }
+                _systemAudioActive.value = false
+            }
     }
 
     fun pause() {
@@ -98,7 +124,13 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         val duration = try {
-            capture.stop()
+            val micDuration = capture.stop()
+            systemAudio?.let { runCatching { it.stop() } }
+            systemAudio = null
+            _systemAudioActive.value = false
+            // 两路音轨合成 录音.wav；只有麦克风一路时也走这里，文件名统一
+            TrackMerger.mixInto(dir)
+            micDuration
         } catch (e: Exception) {
             session.fail(e.message ?: "结束录音失败")
             _state.value = RecordUiState.Failed(R.string.err_stop_failed, e.message)
@@ -121,6 +153,9 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
+        systemAudio?.let { runCatching { it.stop() } }
+        systemAudio = null
+        runCatching { TrackMerger.mixInto(currentDir!!) }
         currentDir = null
         _state.value = RecordUiState.Failed(R.string.err_recording_interrupted)
     }
@@ -130,6 +165,8 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
+        systemAudio?.let { runCatching { it.stop() } }
+        systemAudio = null
         session.fail("用户取消")
         currentDir?.deleteRecursively()
         currentDir = null
@@ -164,8 +201,10 @@ class RecordViewModel(
         return "${base}_$index"
     }
 
-    private companion object {
-        const val RECORDING_FILE = "录音.wav"
+    companion object {
+        const val RECORDING_FILE = TrackMerger.MIXED
+        const val MIC_TRACK = TrackMerger.MIC_TRACK
+        const val SYSTEM_TRACK = TrackMerger.SYSTEM_TRACK
         const val TICK_MS = 200L
     }
 }

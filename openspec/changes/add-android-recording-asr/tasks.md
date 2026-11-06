@@ -14,7 +14,9 @@
 - [x] 2.3 前台服务与常驻通知：`RecordingService`（`microphone` 类型）+ 通知栏显示「正在录音 · mm:ss / 已暂停」；服务被系统结束时把录音判为中断失败，已写入部分保留；验证：JVM 单测覆盖"何时该挂前台"与通知文案，真机手动确认锁屏不中断
 - [ ] 2.3b 前台服务与通知（`microphone` 类型，通知带"结束"操作）；验证：设备测试断言切后台后仍在录音、通知存在
 - [ ] 2.4 权限流程：`RECORD_AUDIO` 与 `POST_NOTIFICATIONS` 的请求、拒绝后的降级路径；验证：设备测试覆盖拒绝后仍可浏览、界面给出原因
-- [ ] 2.5 系统内录开关（`MediaProjection` + `AudioPlaybackCapture`），不可捕获时回落并解释；验证：设备测试覆盖回落路径，界面文案断言出现
+- [x] 2.5 系统内录开关（`MediaProjection` + `AudioPlaybackCapture`），不可捕获时回落并解释；
+  验证：`SystemAudioSupportTest` 覆盖三态回落，`AudioMixTest` 覆盖降声道/重采样/混音，
+  `RecordViewModelTest` 覆盖 `mic.wav`→`录音.wav` 合成；真实抓音需真机人工验收（见 design 偏差记录）
 - [ ] 2.6 进程被杀后的"未完成录音"恢复；验证：设备测试构造半截 wav，断言下次启动被标记为未完成且可播放
 
 ## 3. 转写流水线

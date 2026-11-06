@@ -58,6 +58,7 @@ class RecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        withSystemAudio = intent?.getBooleanExtra(EXTRA_SYSTEM_AUDIO, false) ?: withSystemAudio
         if (intent?.action == ACTION_STOP) {
             // 通知上的"结束录音"：请求界面收尾，然后自己退出
             RecordingKeepAlive.onStopRequested()
@@ -98,8 +99,16 @@ class RecordingService : Service() {
         super.onDestroy()
     }
 
+    /** 是否同时录系统声音：决定要不要把 mediaProjection 类型一起声明。 */
+    private var withSystemAudio = false
+
     private fun startForegroundCompat(state: RecordUiState) {
-        val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        val type = if (withSystemAudio) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
         ServiceCompat.startForeground(
             this,
             RecordingNotification.NOTIFICATION_ID,
@@ -163,9 +172,17 @@ class RecordingService : Service() {
     companion object {
         const val ACTION_STOP = "io.github.tancheng33.tingo.action.STOP_RECORDING"
         /** 开始或更新前台服务；已在运行时不重复 startForeground。 */
-        fun start(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java))
+        /**
+         * @param systemAudio 是否在抓系统声音（会议软件的对方声音）。为 true 时前台服务
+         *   必须同时声明 mediaProjection 类型，否则 Android 14 会直接杀掉进程。
+         */
+        fun start(context: Context, systemAudio: Boolean = false) {
+            val intent = Intent(context, RecordingService::class.java)
+            intent.putExtra(EXTRA_SYSTEM_AUDIO, systemAudio)
+            ContextCompat.startForegroundService(context, intent)
         }
+
+        const val EXTRA_SYSTEM_AUDIO = "systemAudio"
 
         fun stop(context: Context) {
             context.stopService(Intent(context, RecordingService::class.java))
