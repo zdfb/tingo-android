@@ -78,10 +78,13 @@ jobs:
           java-version: '21'
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android, x86_64-linux-android
       - run: cargo install cargo-ndk --locked
       - name: 指向 runner 自带的 NDK
         run: echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_SDK_ROOT"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+      # 打 APK 需要两个 ABI 的 llama.cpp 产物（不进仓库，构建前交叉编译）
+      - name: 交叉编译 llama.cpp（两个 ABI）
+        run: ./scripts/build-llama-android.sh arm64-v8a x86_64
       # Gradle 走 settings.gradle.kts 里配的镜像，wrapper 发行版走腾讯镜像
       - run: ./gradlew :app:testDebugUnitTest
       - run: ./gradlew :app:assembleDebug
@@ -109,6 +112,9 @@ jobs:
       - run: cargo install cargo-ndk --locked
       - name: 指向 runner 自带的 NDK
         run: echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_SDK_ROOT"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+      # jniLibs 里的 llama.cpp 产物不进仓库，构建前必须按目标 ABI 交叉编译一次
+      - name: 交叉编译 llama.cpp（x86_64）
+        run: ./scripts/build-llama-android.sh x86_64
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36

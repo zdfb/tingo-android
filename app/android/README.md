@@ -50,12 +50,20 @@ cd app/android && echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 
+# 首次构建先交叉编译 llama.cpp（libllama/libggml*，约 6 MB，产物不进仓库）
+./scripts/build-llama-android.sh arm64-v8a x86_64
+
 ./gradlew :app:assembleDebug            # 产出 app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:testDebugUnitTest        # JVM 单测（仓库、ViewModel、工具函数、权限清单）
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
 
-只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`。
+只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`（此时
+llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
+
+模型不进 APK：语音模型（Paraformer 227 MB + 标点 76 MB + CAM++ 28 MB + VAD 0.6 MB）与
+语言模型（Qwen3-0.6B Q4_K_M 397 MB）由 App 首次使用时按 `assets/models.json`、`assets/llm.json`
+下载到 `files/tingo/models/`，带续传与 sha256 校验。
 
 ### 在模拟器上验证
 
