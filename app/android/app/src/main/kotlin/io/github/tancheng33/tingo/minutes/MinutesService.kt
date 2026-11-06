@@ -19,7 +19,11 @@ class MinutesService(
     private val generator: MinutesGenerator,
     private val maxTokens: Int = 1_200,
 ) {
-    class MinutesRejected(val problems: List<String>) : Exception(problems.joinToString("；"))
+    /** @param draft 自检不通过时保留的草稿文件（可能为 null：连草稿都写不下去） */
+    class MinutesRejected(
+        val problems: List<String>,
+        val draft: File? = null,
+    ) : Exception(problems.joinToString("；"))
 
     /**
      * @return 写好的 `纪要.md`
@@ -35,19 +39,26 @@ class MinutesService(
             markdown = generator.generate(MinutesPrompt.retryPrompt(prompt, problems), maxTokens, onToken)
             problems = MinutesPrompt.validate(markdown)
         }
-        if (problems.isNotEmpty()) throw MinutesRejected(problems)
+        if (problems.isNotEmpty()) {
+            // 规格要求"保留原文供手动编辑"：不写坏的 纪要.md，但把模型输出留在草稿里
+            val draft = runCatching { write(meetingDir, markdown, DRAFT_FILE_NAME) }.getOrNull()
+            throw MinutesRejected(problems, draft)
+        }
 
         return write(meetingDir, markdown)
     }
 
     /** 先写临时文件再改名：被系统杀掉时不会留下半截纪要。 */
-    fun write(meetingDir: File, markdown: String): File {
-        val target = File(meetingDir, FILE_NAME)
+    fun write(meetingDir: File, markdown: String, fileName: String = FILE_NAME): File {
+        val target = File(meetingDir, fileName)
         writeAtomically(target, markdown.trimEnd() + "\n")
         return target
     }
 
     companion object {
         const val FILE_NAME = "纪要.md"
+
+        /** 自检不通过时模型输出的落点，供用户手动改完再另存 */
+        const val DRAFT_FILE_NAME = "纪要-草稿.md"
     }
 }

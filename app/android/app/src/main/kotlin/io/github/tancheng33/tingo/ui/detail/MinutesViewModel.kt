@@ -26,7 +26,12 @@ sealed interface MinutesUiState {
     data class Done(val file: File) : MinutesUiState
 
     /** @param detail 动态部分（校验问题、异常信息），拼进已本地化的模板 */
-    data class Failed(val reasonRes: Int, val detail: String? = null) : MinutesUiState
+    data class Failed(
+        val reasonRes: Int,
+        val detail: String? = null,
+        /** 自检不通过时保留的草稿路径 */
+        val draft: File? = null,
+    ) : MinutesUiState
 }
 
 /**
@@ -47,12 +52,16 @@ class MinutesViewModel(
 
     private var job: Job? = null
 
-    /** 进入详情页时调一次：有转写、没模型就提示下载。 */
+    /** 进入详情页时调一次：有转写、没模型就提示下载。读文件放到 IO。 */
     fun prepare() {
         if (_state.value !is MinutesUiState.Idle) return
-        if (TranscriptWriter.read(meetingDir) == null) return
-        if (modelFile.isFile && modelFile.length() > 0) return
-        _state.value = MinutesUiState.NeedModel(missingBytes = LLM_BYTES_HINT)
+        viewModelScope.launch(io) {
+            val hasTranscript = TranscriptWriter.read(meetingDir) != null
+            val modelReady = modelFile.isFile && modelFile.length() > 0
+            if (hasTranscript && !modelReady && _state.value is MinutesUiState.Idle) {
+                _state.value = MinutesUiState.NeedModel(missingBytes = LLM_BYTES_HINT)
+            }
+        }
     }
 
     fun start() {
@@ -77,6 +86,7 @@ class MinutesViewModel(
                 _state.value = MinutesUiState.Failed(
                     R.string.err_minutes_rejected,
                     e.problems.firstOrNull() ?: "structure",
+                    draft = e.draft,
                 )
             } catch (e: OutOfMemoryError) {
                 // 0.6B 模型在低内存设备上可能装不下；规格要求"只保留转写稿、其它功能不受影响"

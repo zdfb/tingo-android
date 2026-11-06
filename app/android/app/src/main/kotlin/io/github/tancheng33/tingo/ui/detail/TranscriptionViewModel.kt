@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
 sealed interface TranscriptionUiState {
     data object Idle : TranscriptionUiState
 
-    /** 模型还没下齐；[missing] 是缺的模型 id，界面据此说明要下多少 */
-    data class NeedModels(val missingBytes: Long, val missing: List<String>) : TranscriptionUiState
+    /** 模型还没下齐；[missingBytes] 用来告诉用户要下多少 */
+    data class NeedModels(val missingBytes: Long) : TranscriptionUiState
 
     /** @param fraction 0..1 */
     data class Downloading(val fraction: Float) : TranscriptionUiState
@@ -64,10 +64,7 @@ class TranscriptionViewModel(
         val missing = catalog.files.filterNot { store.isReady(it) }
         if (missing.isEmpty()) return
         if (wavFile() == null) return
-        _state.value = TranscriptionUiState.NeedModels(
-            missingBytes = missing.sumOf { it.bytes },
-            missing = missing.map { it.id },
-        )
+        _state.value = TranscriptionUiState.NeedModels(missingBytes = missing.sumOf { it.bytes })
     }
 
     fun start() {
@@ -109,6 +106,8 @@ class TranscriptionViewModel(
                     transcriber.transcribe(wav, meetingDir) { fraction ->
                         _state.value = TranscriptionUiState.Running(fraction)
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     if (retried) throw e
                     // 模型文件可能损坏：作废后重下一次，仍失败才报错

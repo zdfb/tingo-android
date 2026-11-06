@@ -11,5 +11,7 @@ class TingoApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.ensureDataRoot()
+        // 进程被杀留下的半截录音：启动时补好头，用户下次就见不到"点不开"的条目
+        container.repairInterruptedRecordingsOnStart()
     }
 }

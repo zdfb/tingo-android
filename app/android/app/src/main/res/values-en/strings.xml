@@ -99,4 +99,6 @@
     <string name="library_action_failed">Action failed: %1$s</string>
     <string name="err_llm_unsupported">On-device minutes are not supported on this device; the transcript is kept</string>
     <string name="task_need_model">A one-time model download of about %1$d MB is needed.</string>
+    <string name="minutes_draft_saved">The model output is saved as 纪要-草稿.md so you can edit it by hand</string>
+    <string name="export_transcript_title">Meeting transcript</string>
 </resources>

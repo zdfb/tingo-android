@@ -70,23 +70,26 @@ class TranscriptionPipeline(
     ): Transcript = requireModel().use { model ->
         val format = WavReader.format(wav)
         require(format.dataBytes > 0) { "录音是空的" }
+        val totalSamples = format.dataBytes / 2
+        // 在 suspend 上下文里取出协程上下文，供切段回调里检查取消
+        val callerContext = coroutineContext
 
-        val segments = cutByVad(model.vad, wav)
-        if (segments.isEmpty()) {
-            val empty = Transcript(source = wav.name, durationMs = format.durationMs, sentences = emptyList())
-            TranscriptWriter.write(outputDir, empty)
-            onProgress(1f)
-            return@use empty
-        }
-
-        val recognized = ArrayList<RecognizedSegment>(segments.size)
-        segments.forEachIndexed { index, segment ->
-            coroutineContext.ensureActive()
+        // 边切边识别：内存里只有当前段的音频，记下来的是文本与声纹向量
+        val recognized = ArrayList<RecognizedSegment>()
+        cutByVad(model.vad, wav, format.sampleRate) { segment ->
+            callerContext.ensureActive()
             val text = model.recognize(segment.samples, format.sampleRate)
             val punctuated = model.punctuate(text)
             val embedding = model.embed(segment.samples, format.sampleRate)
             recognized += RecognizedSegment(segment.startMs, segment.endMs, punctuated, embedding)
-            onProgress((index + 1).toFloat() / segments.size)
+            onProgress(if (totalSamples == 0L) 0f else (segment.endSample.toFloat() / totalSamples).coerceIn(0f, 1f))
+        }
+
+        if (recognized.isEmpty()) {
+            val empty = Transcript(source = wav.name, durationMs = format.durationMs, sentences = emptyList())
+            TranscriptWriter.write(outputDir, empty)
+            onProgress(1f)
+            return@use empty
         }
 
         val speakers = clustering.cluster(recognized.map { it.embedding })
@@ -103,35 +106,48 @@ class TranscriptionPipeline(
             speakerNames = renaming,
         )
         TranscriptWriter.write(outputDir, transcript)
+        onProgress(1f)
         transcript
     }
 
     private fun previousNames(outputDir: File, speakers: List<Int>): Map<Int, String> =
         carryOverSpeakerNames(TranscriptWriter.read(outputDir)?.speakerNames, speakers)
 
-    private class Segment(val startMs: Long, val endMs: Long, val samples: FloatArray)
+    /** @param endSample 该段末尾在整段音频里的样本下标，用来算进度 */
+    private class Segment(
+        val startMs: Long,
+        val endMs: Long,
+        val endSample: Long,
+        val samples: FloatArray,
+    )
 
     /**
-     * 流式切段：wav 分块喂给 VAD，内存里只保留当前块与已切出的语音段。
+     * 流式切段：wav 分块喂给 VAD，每切出一段就交给 [onSegment]，随即丢弃它的音频。
      *
-     * 小时级会议录音如果整段读进 FloatArray，单是样本就要几百兆，真机必 OOM。
+     * 小时级会议录音如果整段读进内存，单是样本就要几百兆；逐段回调意味着
+     * 常驻内存只与"最长的一段话"有关，与录音总长无关。
      */
-    private fun cutByVad(vad: Vad, wav: File): List<Segment> {
+    private fun cutByVad(
+        vad: Vad,
+        wav: File,
+        sampleRate: Int,
+        onSegment: (Segment) -> Unit,
+    ) {
         val window = vad.config.sileroVadModelConfig.windowSize.takeIf { it > 0 } ?: 512
-        val sampleRate = WavReader.format(wav).sampleRate
-        val result = ArrayList<Segment>()
         var carry = FloatArray(0)
 
         fun drain() {
             while (!vad.empty()) {
                 val speech = vad.front()
                 vad.pop()
-                val startSample = speech.start.toInt()
-                result += Segment(
-                    startSample * 1000L / sampleRate,
-                    (startSample + speech.samples.size) * 1000L / sampleRate,
-                    speech.samples,
-                )
+                val startSample = speech.start.toLong()
+                val endSample = startSample + speech.samples.size
+                val startMs = startSample * 1000L / sampleRate
+                val endMs = endSample * 1000L / sampleRate
+                // 太短的段大概率是噪声或半个字，丢掉
+                if (endMs - startMs >= MIN_SEGMENT_MS) {
+                    onSegment(Segment(startMs, endMs, endSample, speech.samples))
+                }
             }
         }
 
@@ -147,8 +163,6 @@ class TranscriptionPipeline(
         }
         vad.flush()
         drain()
-        // 太短的段大概率是噪声或半个字，丢掉
-        return result.filter { it.endMs - it.startMs >= MIN_SEGMENT_MS }
     }
 
     /** 四个模型都就绪后才建对象；缺任何一个都直接报错，不做半残障运行。 */

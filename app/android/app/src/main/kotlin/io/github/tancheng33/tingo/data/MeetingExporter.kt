@@ -14,26 +14,32 @@ import java.io.File
 object MeetingExporter {
 
     /** @return 写好的文件；会议既没纪要也没转写时返回 null */
-    fun export(meetingDir: File, meetingTitle: String, into: File): File? {
+    fun export(
+        meetingDir: File,
+        meetingTitle: String,
+        into: File,
+        transcriptTitle: String = "会议转写",
+        emptyTitle: String = "会议纪要",
+    ): File? {
         val minutes = File(meetingDir, MinutesService.FILE_NAME).takeIf { it.isFile }?.readText()
         val transcript = TranscriptWriter.read(meetingDir)
-        val body = compose(minutes, transcript) ?: return null
+        val body = compose(minutes, transcript, transcriptTitle) ?: return null
 
         into.mkdirs()
-        val file = File(into, fileStem(meetingTitle) + ".md")
+        val file = File(into, fileStem(meetingTitle, emptyTitle) + ".md")
         file.writeText(body)
         return file
     }
 
     /** 有纪要就只导纪要；没有纪要但有转写，就把转写排成可读的 Markdown。 */
-    fun compose(minutes: String?, transcript: Transcript?): String? {
+    fun compose(minutes: String?, transcript: Transcript?, transcriptTitle: String = "会议转写"): String? {
         val trimmedMinutes = minutes?.trim().orEmpty()
         if (trimmedMinutes.isNotEmpty()) {
             return if (trimmedMinutes.endsWith("\n")) trimmedMinutes else "$trimmedMinutes\n"
         }
         if (transcript == null || transcript.sentences.isEmpty()) return null
         return buildString {
-            append("# 会议转写\n\n")
+            append("# ").append(transcriptTitle).append("\n\n")
             transcript.sentences.forEach { sentence ->
                 append("- **").append(transcript.speakerLabel(sentence.speaker)).append("**（")
                 append(Transcript.mmss(sentence.startMs)).append("）：")
@@ -43,13 +49,13 @@ object MeetingExporter {
     }
 
     /** 文件名：清掉路径分隔符与控制字符，过长截断。空标题给一个兜底名。 */
-    fun fileStem(title: String): String {
+    fun fileStem(title: String, emptyTitle: String = "会议纪要"): String {
         val cleaned = title
             .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
             .trim('.')
-        val safe = cleaned.ifEmpty { "会议纪要" }
+        val safe = cleaned.ifEmpty { emptyTitle }
         return if (safe.length <= MAX_STEM) safe else safe.take(MAX_STEM).trim()
     }
 

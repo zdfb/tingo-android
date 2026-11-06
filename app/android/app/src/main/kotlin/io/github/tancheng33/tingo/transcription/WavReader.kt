@@ -37,18 +37,24 @@ object WavReader {
      */
     fun format(file: File): Format {
         RandomAccessFile(file, "r").use { raf ->
-            val header = ByteArray(44)
-            if (raf.read(header) != 44) error("不是有效的 wav：${file.name}")
-            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
-            require(String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "不是 WAVE 文件" }
-            val channels = u16(header, 22)
+            val header = readHeader(raf, file.name)
             val sampleRate = u32(header, 24)
-            val bits = u16(header, 34)
-            require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
-            require(channels == 1) { "只支持单声道，实际 $channels" }
             // 头部长度字段在"边录边写"时不可信，按文件实际大小算
             return Format(sampleRate, max(0L, file.length() - HEADER_BYTES))
         }
+    }
+
+    /** 解析并校验 44 字节头：只支持 16 bit 单声道 PCM，和我们的录音格式一致。 */
+    private fun readHeader(raf: RandomAccessFile, name: String): ByteArray {
+        val header = ByteArray(HEADER_BYTES.toInt())
+        if (raf.read(header) != header.size) error("不是有效的 wav：$name")
+        require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
+        require(String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "不是 WAVE 文件" }
+        val channels = u16(header, 22)
+        val bits = u16(header, 34)
+        require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
+        require(channels == 1) { "只支持单声道，实际 $channels" }
+        return header
     }
 
     /**
@@ -77,19 +83,9 @@ object WavReader {
 
     fun read(file: File): Pcm {
         RandomAccessFile(file, "r").use { raf ->
-            val header = ByteArray(44)
-            if (raf.read(header) != 44) error("不是有效的 wav：${file.name}")
-            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
-            require(String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "不是 WAVE 文件" }
-
-            val channels = u16(header, 22)
+            val header = readHeader(raf, file.name)
             val sampleRate = u32(header, 24)
-            val bits = u16(header, 34)
-            require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
-            require(channels == 1) { "只支持单声道，实际 $channels" }
-
-            // 头部里的长度字段在"边录边写"时不可信，按文件实际大小算
-            val dataBytes = max(0L, (file.length() - 44)).toInt()
+            val dataBytes = max(0L, (file.length() - HEADER_BYTES)).toInt()
             val raw = ByteArray(dataBytes)
             var read = 0
             while (read < dataBytes) {

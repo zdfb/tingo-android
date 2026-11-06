@@ -11,6 +11,7 @@ import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.TingoEnginePort
 import io.github.tancheng33.tingo.engine.TingoFailure
 import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.recording.InterruptedRecordings
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
 import io.github.tancheng33.tingo.settings.AppSettings
@@ -59,6 +60,17 @@ class AppContainer(context: Context) {
         appContext.assets.open("llm.json").bufferedReader().use { it.readText() },
     )
     val llmFile: File = models.fileFor(llmCatalog.files.single())
+
+    /**
+     * 启动时修复没来得及收尾的录音（进程被杀 / 服务被系统结束）。
+     *
+     * 放到后台线程做：会议多的时候要逐个读文件头，不该卡启动。
+     */
+    fun repairInterruptedRecordingsOnStart() {
+        kotlin.concurrent.thread(name = "tingo-repair", isDaemon = true) {
+            runCatching { InterruptedRecordings.repairUnder(File(dataRoot, "meetings")) }
+        }
+    }
 
     /** 单个会议的目录；id 是会议库根目录下的单层目录名。 */
     fun meetingDir(id: String): File = File(File(dataRoot, "meetings"), id)

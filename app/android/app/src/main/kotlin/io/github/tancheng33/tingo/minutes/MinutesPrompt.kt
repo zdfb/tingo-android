@@ -10,7 +10,7 @@ import io.github.tancheng33.tingo.transcription.Transcript
  */
 object MinutesPrompt {
 
-    /** 纪要必备的六个二级标题；「原因分析」可以省略（没分析原因就不该有鱼骨图）。 */
+    /** 纪要必备的五个二级标题；「原因分析」按需出现（没分析原因就不该有鱼骨图，见 design 偏差记录）。 */
     val REQUIRED_SECTIONS = listOf("## 一句话总结", "## 议题与讨论", "## 决议", "## 待办", "## 待定问题与风险")
 
     const val FISHBONE_SECTION = "## 原因分析"

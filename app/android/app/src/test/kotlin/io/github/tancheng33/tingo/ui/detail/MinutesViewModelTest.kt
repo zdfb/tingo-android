@@ -93,6 +93,7 @@ class MinutesViewModelTest {
         val vm = viewModel(meeting(), FakeGenerator(good), model = File("/nonexistent/x.gguf"))
 
         vm.prepare()
+        advanceUntilIdle() // prepare 现在在 IO 协程里读 transcript.json
 
         assertTrue(vm.state.value is MinutesUiState.NeedModel)
     }
@@ -102,6 +103,7 @@ class MinutesViewModelTest {
         val vm = viewModel(meeting(), FakeGenerator(good))
 
         vm.prepare()
+        advanceUntilIdle()
 
         assertEquals(MinutesUiState.Idle, vm.state.value)
     }
@@ -111,6 +113,7 @@ class MinutesViewModelTest {
         val vm = viewModel(meeting(withTranscript = false), FakeGenerator(good), model = File("/nonexistent"))
 
         vm.prepare()
+        advanceUntilIdle()
 
         assertEquals(MinutesUiState.Idle, vm.state.value)
     }

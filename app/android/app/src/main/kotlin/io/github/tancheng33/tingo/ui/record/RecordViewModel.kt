@@ -150,17 +150,18 @@ class RecordViewModel(
     }
 
     /**
-     * 会议目录名。精确到秒并做占用检查：同一分钟内按下两次"开始"不能复用目录，
-     * 否则第二次会截断第一次已经写下的 wav。
+     * 会议目录名，格式与引擎的 `FOLDER` 正则严格一致：`yyyy-MM-dd_HHmm_标题`。
+     *
+     * 重名（同一分钟内按下两次"开始"）用 `_2`、`_3` 后缀——引擎的 `new_folder` 也是这个规则。
+     * 名字里不能塞秒：引擎按 `(\d{2})(\d{2})` 取时分，多两位会让会议时间显示为空。
      */
     private fun newMeetingId(): String {
         val now = java.time.LocalDateTime.now()
-        val stamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss"))
-        val base = "${stamp}_录音"
+        val base = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm_")) + "录音"
         if (!File(meetingsRoot, base).exists()) return base
         var index = 2
-        while (File(meetingsRoot, "${base}-$index").exists()) index++
-        return "${base}-$index"
+        while (File(meetingsRoot, "${base}_$index").exists()) index++
+        return "${base}_$index"
     }
 
     private companion object {

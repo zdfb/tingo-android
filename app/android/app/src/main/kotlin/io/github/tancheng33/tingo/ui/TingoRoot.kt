@@ -248,7 +248,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
             initializer {
                 RecordViewModel(
                     capture = MicRecorder(),
-                    meetingsRoot = File(container.dataRoot, "meetings"),
+                    meetingsRoot = File(container.dataRoot, "meetings"), // 会议库根目录固定为 dataRoot/meetings
                 )
             }
         },
@@ -259,7 +259,12 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
     val serviceContext = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.DisposableEffect(Unit) {
         RecordingKeepAlive.onServiceDestroyed = { viewModel.onInterrupted() }
-        onDispose { RecordingKeepAlive.onServiceDestroyed = {} }
+        // 通知栏的"结束录音"走正常收尾，文件会被保存（不能当成被系统中断）
+        RecordingKeepAlive.onStopRequested = { viewModel.stop() }
+        onDispose {
+            RecordingKeepAlive.onServiceDestroyed = {}
+            RecordingKeepAlive.onStopRequested = {}
+        }
     }
     androidx.compose.runtime.LaunchedEffect(state) {
         RecordingKeepAlive.publish(state)
@@ -370,7 +375,13 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                 val title = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
                 exportScope.launch {
                     val exported = withContext(Dispatchers.IO) {
-                        MeetingExporter.export(dir, title, File(context.cacheDir, "exports"))
+                        MeetingExporter.export(
+                            dir,
+                            title,
+                            File(context.cacheDir, "exports"),
+                            transcriptTitle = context.getString(R.string.export_transcript_title),
+                            emptyTitle = context.getString(R.string.detail_tab_minutes),
+                        )
                     }
                     if (exported != null) shareFile(context, exported)
                 }

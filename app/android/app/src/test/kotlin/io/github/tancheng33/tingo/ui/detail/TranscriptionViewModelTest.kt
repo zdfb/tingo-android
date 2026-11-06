@@ -87,7 +87,6 @@ class TranscriptionViewModelTest {
         vm.prepare()
 
         val state = vm.state.value as TranscriptionUiState.NeedModels
-        assertEquals(listOf("paraformer"), state.missing)
         assertEquals(1_000L, state.missingBytes)
     }
 

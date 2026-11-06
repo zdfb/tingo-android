@@ -33,7 +33,8 @@ sealed interface TaskStatus {
 
     data object Done : TaskStatus
 
-    data class Failed(val message: String) : TaskStatus
+    /** @param hint 可选的第二行（例如"草稿已保留，可手动编辑"） */
+    data class Failed(val message: String, val hint: String? = null) : TaskStatus
 }
 
 /**
@@ -92,6 +93,9 @@ fun TaskStatusBar(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )
+            status.hint?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
             Button(onClick = onAction) { Text(actionLabel) }
         }
     }

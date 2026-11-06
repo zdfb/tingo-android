@@ -260,7 +260,10 @@ private fun MinutesUiState.toTaskStatus(): TaskStatus = when (this) {
     is MinutesUiState.NeedModel -> TaskStatus.NeedModel(missingMb = missingBytes / 1_000_000)
     MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating)
     is MinutesUiState.Done -> TaskStatus.Done
-    is MinutesUiState.Failed -> TaskStatus.Failed(failureMessage(reasonRes, detail))
+    is MinutesUiState.Failed -> TaskStatus.Failed(
+        message = failureMessage(reasonRes, detail),
+        hint = draft?.let { stringResource(R.string.minutes_draft_saved) },
+    )
 }
 
 @Composable

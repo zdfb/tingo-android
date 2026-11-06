@@ -144,6 +144,29 @@ class RecordViewModelTest {
     private fun <T> requireNonNull(value: T?): T = requireNotNull(value)
 
     @Test
+    fun meetingIdMatchesEngineFolderPattern() = runTest(dispatcher) {
+        val root = root()
+        val vm = viewModel(FakeCapture(), root)
+        vm.start()
+
+        val id = root.listFiles()!!.single().name
+        // 引擎 meetings.rs 的 FOLDER 正则：yyyy-MM-dd_HHmm_标题
+        assertTrue("目录名不符合引擎约定：$id", Regex("""^(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})_(.+)$""").matches(id))
+    }
+
+    @Test
+    fun secondRecordingInTheSameMinuteDoesNotReuseFolder() = runTest(dispatcher) {
+        val root = root()
+        viewModel(FakeCapture(), root).start()
+        val second = viewModel(FakeCapture(), root)
+        second.start()
+
+        val names = root.listFiles()!!.map { it.name }.sorted()
+        assertEquals(2, names.size)
+        assertTrue("第二个会议应带序号后缀：$names", names.any { it.endsWith("_2") })
+    }
+
+    @Test
     fun interruptionMarksRecordingAsFailedAndKeepsFile() = runTest(dispatcher) {
         val root = root()
         val capture = FakeCapture()
