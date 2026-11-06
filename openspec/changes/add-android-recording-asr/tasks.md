@@ -3,8 +3,8 @@
 ## 1. 模型与运行时可行性（先验证再改代码）
 
 - [x] 1.1 量化实验：用 llama.cpp 把 Qwen3-0.6B 从 Q8_0 再量化到 Q4_K_M 与 Q4_0，记录体积、加载时间、生成速度与同题输出差异；产物与命令写进 `spike/on-device-models/`；验证：`RESULTS.md` 里有三档对比表与可复现命令（Q8_0 610 MB / 107 t/s、Q4_K_M 378 MB / 141 t/s、Q4_0 364 MB / 146 t/s，3 次取中位数）
-- [ ] 1.2 ASR 模型可得性：确认 sherpa-onnx 的 Paraformer int8 / CT-Transformer / CAM++ / silero VAD 四个模型可从公开源下载，记录体积与 sha256；验证：下载脚本能把四个文件拉齐并通过校验（已确认 Paraformer int8 与官方量化脚本可从 hf-mirror 获取；其余三个与 sha256 清单待补）
-- [ ] 1.3 sherpa-onnx Android AAR 接入验证：能拉取或本地引入 AAR，跑通一次 `OfflineRecognizer` 初始化；验证：设备级测试里能创建识别器并识别一段 3 秒音频（AAR 已接入、`libsherpa-onnx-jni.so` 在设备上加载通过；还需带模型跑一次真实识别）
+- [x] 1.2 ASR 模型可得性：四个模型的地址、体积与 sha256 已写进 `assets/models.json` 并经真实下载核对（合计 331 MB）；设备级测试验证了"清单 → 真实 HTTPS 下载 → 校验 → 交给 sherpa"整条链路
+- [ ] 1.3 sherpa-onnx Android AAR 接入验证：能拉取或本地引入 AAR，跑通一次 `OfflineRecognizer` 初始化；验证：设备级测试里能创建识别器并识别一段 3 秒音频（AAR 接入、VAD 已带真实模型初始化通过；识别器与标点/声纹还差一次端到端识别）
 - [ ] 1.4 llama.cpp Android 构建验证：交叉编译出 `libllama.so` 并打进 APK；验证：设备上能加载模型并输出一句 token，记录耗时与内存（已交叉编译并在模拟器上跑通 Q4_K_M 生成，见 `spike/on-device-models/RESULTS.md`；还剩"打进 APK + JNI 接入"，模拟器速度不可用作真机指标）
 
 ## 2. 录音采集
@@ -18,7 +18,7 @@
 
 ## 3. 转写流水线
 
-- [ ] 3.1 模型管理：清单 JSON、断点续传下载、sha256 校验、删除模型；验证：JVM 单测覆盖续传与校验失败重下
+- [x] 3.1 模型管理：清单 JSON、断点续传下载、sha256 校验、删除模型；验证：JVM 单测 8 个覆盖续传、校验失败重下、删除与占用统计；设备级测试覆盖真实 HTTPS 下载
 - [ ] 3.2 VAD 分段：silero VAD 切段并限制单段长度；验证：JVM 单测用合成音频断言段数与边界
 - [ ] 3.3 识别 + 标点 + 切句：产出带毫秒时间戳的句子；验证：设备测试用打包音频断言句子数与时间戳单调
 - [ ] 3.4 声纹与聚类：CAM++ 抽取 + 谱聚类（移植桌面实现），产出 speaker 分组；验证：Rust 侧既有聚类测试复用 + Kotlin 侧对接测试断言两人会议出两个说话人

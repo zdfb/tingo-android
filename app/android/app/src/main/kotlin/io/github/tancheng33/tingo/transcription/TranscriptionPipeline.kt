@@ -145,7 +145,7 @@ class TranscriptionPipeline(
         )
 
         val recognizer = OfflineRecognizer(
-            assetManager = context.assets,
+            assetManager = null,
             config = OfflineRecognizerConfig(
                 modelConfig = OfflineModelConfig(
                     paraformer = OfflineParaformerModelConfig(model = path("paraformer")),
@@ -158,18 +158,19 @@ class TranscriptionPipeline(
         )
 
         val punctuation = OfflinePunctuation(
-            assetManager = context.assets,
+            assetManager = null,
             config = OfflinePunctuationConfig(
                 model = OfflinePunctuationModelConfig(ctTransformer = path("punct"), numThreads = 1),
             ),
         )
 
         val extractor = SpeakerEmbeddingExtractor(
-            assetManager = context.assets,
+            assetManager = null,
             config = SpeakerEmbeddingExtractorConfig(model = path("campplus"), numThreads = 1),
         )
 
-        return Model(Vad(context.assets, vadConfig), recognizer, punctuation, extractor)
+        // 模型在文件系统上：assetManager 必须传 null，否则 sherpa 会当成 asset 去读并直接 abort
+        return Model(Vad(assetManager = null, config = vadConfig), recognizer, punctuation, extractor)
     }
 
     /** 一次性持有四个推理对象，用完释放。 */

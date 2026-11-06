@@ -36,6 +36,8 @@ class ManifestPermissionTest {
         // 录音功能已实现，所以 RECORD_AUDIO 是必要权限；
         // 前台服务与通知权限在录音保活（任务 2.3）里再加，现在不该提前声明。
         assertTrue(manifest.contains("RECORD_AUDIO"))
+        // INTERNET 只用于下载模型；转写与纪要都在本机推理
+        assertTrue(manifest.contains("INTERNET"))
         assertFalse(manifest.contains("POST_NOTIFICATIONS"))
         assertFalse(manifest.contains("FOREGROUND_SERVICE"))
     }
