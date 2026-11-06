@@ -3,6 +3,8 @@ package io.github.tancheng33.tingo.ui.detail
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +51,8 @@ fun DetailScreen(
     onSentenceClick: (ULong) -> Unit,
     modifier: Modifier = Modifier,
     initialTab: Int = 0,
+    /** 能力矩阵里没有纪要解析时（例如换了个精简引擎），不展示纪要栏 */
+    showMinutesTab: Boolean = true,
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -66,7 +70,8 @@ fun DetailScreen(
 
         else -> {
             val detail = state.detail
-            var tab by remember { mutableIntStateOf(initialTab) }
+            val tabs = if (showMinutesTab) 2 else 1
+            var tab by remember { mutableIntStateOf(initialTab.coerceIn(0, tabs - 1)) }
             Column(modifier.fillMaxSize()) {
                 Text(
                     text = detail?.summary?.title.orEmpty(),
@@ -74,15 +79,18 @@ fun DetailScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
                 TabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.detail_tab_minutes)) })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(stringResource(R.string.detail_tab_transcript)) })
+                    if (showMinutesTab) {
+                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.detail_tab_minutes)) })
+                        Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(stringResource(R.string.detail_tab_transcript)) })
+                    } else {
+                        Tab(selected = true, onClick = {}, text = { Text(stringResource(R.string.detail_tab_transcript)) })
+                    }
                 }
-                if (tab == 0) {
+                if (showMinutesTab && tab == 0) {
                     MinutesPane(
                         minutes = state.minutes,
                         minutesFailure = state.minutesFailure,
                         fishbone = detail?.fishbone,
-                        hasMinutes = !detail?.minutesText.isNullOrBlank(),
                     )
                 } else {
                     TranscriptPane(turns = detail?.transcript?.turns.orEmpty(), onSentenceClick = onSentenceClick)
@@ -97,15 +105,10 @@ private fun MinutesPane(
     minutes: MinutesDoc?,
     minutesFailure: FailureKind?,
     fishbone: Fishbone?,
-    hasMinutes: Boolean,
 ) {
     when {
         minutesFailure != null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
             Text(stringResource(R.string.detail_minutes_parse_failed, failureText(minutesFailure)))
-        }
-
-        minutes == null && !hasMinutes -> Box(Modifier.fillMaxSize().padding(24.dp)) {
-            Text(stringResource(R.string.detail_no_minutes))
         }
 
         minutes == null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
@@ -123,6 +126,14 @@ private fun MinutesPane(
                     if (section.kind == SectionKind.ROOT_CAUSE && fishbone != null) {
                         FishboneCard(fishbone)
                     } else {
+                        // 有 ```fishbone 代码块但没解析出图，就照原文展示并标注，别让用户以为内容丢了
+                        if (section.body.contains(FISHBONE_FENCE)) {
+                            Text(
+                                stringResource(R.string.detail_fishbone_invalid),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         Text(section.body.trim(), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
@@ -153,6 +164,9 @@ private fun FishboneCard(fishbone: Fishbone) {
     }
 }
 
+private const val FISHBONE_FENCE = "```fishbone"
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TranscriptPane(turns: List<Turn>, onSentenceClick: (ULong) -> Unit) {
     if (turns.isEmpty()) {
@@ -173,6 +187,19 @@ private fun TranscriptPane(turns: List<Turn>, onSentenceClick: (ULong) -> Unit) 
                     }
                 }
                 Text(turn.text, style = MaterialTheme.typography.bodyMedium)
+                // 转写按说话人合并成一段，但每句自己的时间戳保留下来：定位要靠它
+                if (turn.sentences.size > 1) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        turn.sentences.forEach { sentence ->
+                            TextButton(
+                                onClick = { onSentenceClick(sentence.startMs) },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            ) {
+                                Text(clockOf(sentence.startMs), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

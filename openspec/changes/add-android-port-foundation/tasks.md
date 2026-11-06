@@ -5,7 +5,7 @@
 - [x] 1.1 在 `app/engine/Cargo.toml` 增加 `http-server` / `sherpa-asr` / `desktop-shell` 三个 feature，`default` 保持三者全开，模块声明按 feature 门控；验证：`cargo build` 与 `cargo build --no-default-features` 均成功，`cargo test` 全绿
 - [x] 1.2 为 feature 组合加 CI 守护：`.github/workflows/ci.yml` 增加桌面（默认 feature）与 Android（`--no-default-features --target aarch64-linux-android`）两条编译路径；验证：本地以相同命令复现通过
 - [x] 1.3 引入 `EnginePaths { meetings_root, config_dir, cache_dir }` 与 `Platform`，替换 `config.rs` / `meetings.rs` / `storage.rs` 中的 `HOME` 与 `~/.config` / `~/Documents` 推导；验证：新增单元测试断言注入路径被使用，且桌面默认值仍解析到原路径
-- [x] 1.4 把磁盘余量探测抽象为 trait（桌面 `statvfs` 实现，Android `StatFs` 实现），并把 `meetings.rs:379` 的 `libc` 调用迁到桌面实现内；验证：`cargo test` 通过且 `--no-default-features` 下不再引用 `libc`
+- [x] 1.4 把磁盘余量探测抽象为 trait（桌面与 Android 都实现为 `statvfs`，Android 侧不依赖 `desktop-shell` feature），并把 `meetings.rs:379` 的 `libc` 调用迁到桌面实现内；验证：`cargo test` 通过且 `--no-default-features` 下不再引用 `libc`
 - [x] 1.5 以桌面 v0.5.2 真实产出构造会议夹具（`app/engine/tests/fixtures/`），供引擎侧解析测试使用；验证：夹具被测试引用且测试通过
 
 ## 2. engine-ffi 桥接边界

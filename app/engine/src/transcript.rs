@@ -189,7 +189,13 @@ pub fn fmt_ts(ms: u64) -> String {
 /// SRT 的时间：HH:MM:SS,mmm
 pub fn srt_time(ms: u64) -> String {
     let s = ms / 1000;
-    format!("{:02}:{:02}:{:02},{:03}", s / 3600, s / 60 % 60, s % 60, ms % 1000)
+    format!(
+        "{:02}:{:02}:{:02},{:03}",
+        s / 3600,
+        s / 60 % 60,
+        s % 60,
+        ms % 1000
+    )
 }
 
 mod string_keys {
@@ -282,8 +288,14 @@ mod tests {
         let mut t = tr();
         t.rename(&["Alice".into()]);
         let en = t.localized(Lang::En);
-        assert_eq!((en.name_of(1).as_str(), en.name_of(0).as_str()), ("Alice", "Speaker 1"));
-        assert_eq!(en.to_prompt_text_in(Lang::En).lines().nth(1).unwrap(), "[00:02] Speaker 1: 好的。");
+        assert_eq!(
+            (en.name_of(1).as_str(), en.name_of(0).as_str()),
+            ("Alice", "Speaker 1")
+        );
+        assert_eq!(
+            en.to_prompt_text_in(Lang::En).lines().nth(1).unwrap(),
+            "[00:02] Speaker 1: 好的。"
+        );
         assert_eq!(t.name_of(0), "说话人1"); // 原件不变
         assert_eq!(t.localized(Lang::Zh).name_of(0), "说话人1");
     }

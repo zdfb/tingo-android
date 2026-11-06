@@ -23,7 +23,12 @@ pub enum AsrKind {
 }
 
 impl AsrKind {
-    pub const ALL: [AsrKind; 4] = [AsrKind::Paraformer, AsrKind::SenseVoice, AsrKind::FunAsrNano, AsrKind::AppleSpeech];
+    pub const ALL: [AsrKind; 4] = [
+        AsrKind::Paraformer,
+        AsrKind::SenseVoice,
+        AsrKind::FunAsrNano,
+        AsrKind::AppleSpeech,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -40,7 +45,10 @@ impl AsrKind {
 
     /// 能指定会议语言（[asr] language）；Paraformer 只认中文
     pub fn uses_language(self) -> bool {
-        matches!(self, AsrKind::SenseVoice | AsrKind::FunAsrNano | AsrKind::AppleSpeech)
+        matches!(
+            self,
+            AsrKind::SenseVoice | AsrKind::FunAsrNano | AsrKind::AppleSpeech
+        )
     }
 
     /// 模型自己会加标点（不用再过 CT-Transformer）。SenseVoice 按 VAD 切出的短段识别时基本不出标点，照样要过
@@ -196,9 +204,21 @@ fn archive(kind: AsrKind) -> Option<&'static str> {
 
 fn paraformer_downloads() -> Vec<Download> {
     vec![
-        Download { url: format!("{MODELSCOPE}/model_quant.onnx"), to: "download/paraformer.onnx", size: 238_380_216 },
-        Download { url: format!("{MODELSCOPE}/am.mvn"), to: "download/am.mvn", size: 11_203 },
-        Download { url: format!("{MODELSCOPE}/tokens.json"), to: "download/tokens.json", size: 93_676 },
+        Download {
+            url: format!("{MODELSCOPE}/model_quant.onnx"),
+            to: "download/paraformer.onnx",
+            size: 238_380_216,
+        },
+        Download {
+            url: format!("{MODELSCOPE}/am.mvn"),
+            to: "download/am.mvn",
+            size: 11_203,
+        },
+        Download {
+            url: format!("{MODELSCOPE}/tokens.json"),
+            to: "download/tokens.json",
+            size: 93_676,
+        },
     ]
 }
 
@@ -226,28 +246,58 @@ pub fn total_size() -> u64 {
 }
 
 /// 下载一个识别模型（连同还没下载的基础模型）。`progress(已下载字节, 总字节)`。
-pub fn ensure_model(paths: &ModelPaths, kind: AsrKind, mut progress: impl FnMut(u64, u64)) -> Result<(), String> {
+pub fn ensure_model(
+    paths: &ModelPaths,
+    kind: AsrKind,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<(), String> {
     if kind == AsrKind::AppleSpeech {
         let list = base_downloads();
         fetch_all(paths, &list, &mut progress)?;
-        if !paths.punct().is_file() { extract_punct(&paths.dir.join("download/punct.tar.bz2"), paths.punct().parent().unwrap())?; }
+        if !paths.punct().is_file() {
+            extract_punct(
+                &paths.dir.join("download/punct.tar.bz2"),
+                paths.punct().parent().unwrap(),
+            )?;
+        }
         cleanup(paths, &list);
-        return if paths.base_ready() { Ok(()) } else { Err("Shared speech models are incomplete".into()) };
+        return if paths.base_ready() {
+            Ok(())
+        } else {
+            Err("Shared speech models are incomplete".into())
+        };
     }
-    let Some(name) = archive(kind) else { return ensure(paths, progress) };
+    let Some(name) = archive(kind) else {
+        return ensure(paths, progress);
+    };
     if paths.base_ready() && paths.asr_ready(kind) {
         return Ok(());
     }
-    let mut list = if paths.base_ready() { Vec::new() } else { base_downloads() };
-    let size = catalog().iter().find(|m| m.kind == kind).map(|m| m.size).unwrap_or(0);
+    let mut list = if paths.base_ready() {
+        Vec::new()
+    } else {
+        base_downloads()
+    };
+    let size = catalog()
+        .iter()
+        .find(|m| m.kind == kind)
+        .map(|m| m.size)
+        .unwrap_or(0);
     let tar_to: &'static str = match kind {
         AsrKind::SenseVoice => "download/sensevoice.tar.bz2",
         _ => "download/funasr-nano.tar.bz2",
     };
-    list.push(Download { url: format!("{SHERPA}/asr-models/{name}.tar.bz2"), to: tar_to, size });
+    list.push(Download {
+        url: format!("{SHERPA}/asr-models/{name}.tar.bz2"),
+        to: tar_to,
+        size,
+    });
     fetch_all(paths, &list, &mut progress)?;
     if !paths.base_ready() {
-        extract_punct(&paths.dir.join("download/punct.tar.bz2"), paths.punct().parent().unwrap())?;
+        extract_punct(
+            &paths.dir.join("download/punct.tar.bz2"),
+            paths.punct().parent().unwrap(),
+        )?;
     }
     extract_dir(&paths.dir.join(tar_to), &paths.asr_dir(kind))?;
     cleanup(paths, &list);
@@ -267,14 +317,27 @@ pub fn remove_model(paths: &ModelPaths, kind: AsrKind) -> Result<(), String> {
     if matches!(kind, AsrKind::Paraformer | AsrKind::AppleSpeech) {
         return Err(tr("默认模型不能删除", "The default model can't be deleted").into());
     }
-    fs::remove_dir_all(paths.asr_dir(kind)).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
+    fs::remove_dir_all(paths.asr_dir(kind)).or_else(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Ok(())
+        } else {
+            Err(e.to_string())
+        }
+    })
 }
 
 fn ok_marker(dest: &Path) -> PathBuf {
-    dest.with_extension(format!("{}.ok", dest.extension().and_then(|e| e.to_str()).unwrap_or("")))
+    dest.with_extension(format!(
+        "{}.ok",
+        dest.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ))
 }
 
-fn fetch_all(paths: &ModelPaths, list: &[Download], progress: &mut impl FnMut(u64, u64)) -> Result<(), String> {
+fn fetch_all(
+    paths: &ModelPaths,
+    list: &[Download],
+    progress: &mut impl FnMut(u64, u64),
+) -> Result<(), String> {
     let total: u64 = list.iter().map(|d| d.size).sum();
     let mut done_before = 0u64;
     let client = reqwest::blocking::Client::builder()
@@ -422,11 +485,21 @@ pub fn prepare_paraformer(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     let mvn = fs::read_to_string(src.join("am.mvn"))
         .map_err(|e| tr(&format!("读 am.mvn：{e}"), &format!("Reading am.mvn: {e}")).to_string())?;
-    let tokens: Vec<String> = serde_json::from_str(
-        &fs::read_to_string(src.join("tokens.json"))
-            .map_err(|e| tr(&format!("读 tokens.json：{e}"), &format!("Reading tokens.json: {e}")).to_string())?,
-    )
-    .map_err(|e| tr(&format!("tokens.json 格式不对：{e}"), &format!("tokens.json is malformed: {e}")).to_string())?;
+    let tokens: Vec<String> =
+        serde_json::from_str(&fs::read_to_string(src.join("tokens.json")).map_err(|e| {
+            tr(
+                &format!("读 tokens.json：{e}"),
+                &format!("Reading tokens.json: {e}"),
+            )
+            .to_string()
+        })?)
+        .map_err(|e| {
+            tr(
+                &format!("tokens.json 格式不对：{e}"),
+                &format!("tokens.json is malformed: {e}"),
+            )
+            .to_string()
+        })?;
     let lines: String = tokens
         .iter()
         .enumerate()
@@ -444,8 +517,13 @@ pub fn prepare_paraformer(src: &Path, dst: &Path) -> Result<(), String> {
         ("version", "1".to_string()),
     ];
     let tmp = dst.join("model.int8.onnx.tmp");
-    fs::copy(src.join("paraformer.onnx"), &tmp)
-        .map_err(|e| tr(&format!("复制模型：{e}"), &format!("Copying the model: {e}")).to_string())?;
+    fs::copy(src.join("paraformer.onnx"), &tmp).map_err(|e| {
+        tr(
+            &format!("复制模型：{e}"),
+            &format!("Copying the model: {e}"),
+        )
+        .to_string()
+    })?;
     let mut f = OpenOptions::new()
         .append(true)
         .open(&tmp)
@@ -469,7 +547,13 @@ fn join(v: &[f32]) -> String {
 fn mvn_vector(mvn: &str, tag: &str) -> Result<Vec<f32>, String> {
     let after = mvn
         .split_once(tag)
-        .ok_or_else(|| tr(&format!("am.mvn 里没有 {tag}"), &format!("{tag} not found in am.mvn")).to_string())?
+        .ok_or_else(|| {
+            tr(
+                &format!("am.mvn 里没有 {tag}"),
+                &format!("{tag} not found in am.mvn"),
+            )
+            .to_string()
+        })?
         .1;
     let body = after
         .split_once('[')
@@ -478,8 +562,13 @@ fn mvn_vector(mvn: &str, tag: &str) -> Result<Vec<f32>, String> {
         .0;
     body.split_whitespace()
         .map(|x| {
-            x.parse()
-                .map_err(|_| tr(&format!("{tag} 里有非数字：{x}"), &format!("Non-number in {tag}: {x}")).to_string())
+            x.parse().map_err(|_| {
+                tr(
+                    &format!("{tag} 里有非数字：{x}"),
+                    &format!("Non-number in {tag}: {x}"),
+                )
+                .to_string()
+            })
         })
         .collect()
 }
@@ -517,7 +606,11 @@ fn extract_punct(tar_bz2: &Path, dst: &Path) -> Result<(), String> {
     }
     fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     let f = File::open(tar_bz2).map_err(|e| {
-        tr(&format!("打开标点模型包：{e}"), &format!("Opening the punctuation model archive: {e}")).to_string()
+        tr(
+            &format!("打开标点模型包：{e}"),
+            &format!("Opening the punctuation model archive: {e}"),
+        )
+        .to_string()
     })?;
     let mut archive = tar::Archive::new(bzip2::read::BzDecoder::new(f));
     for entry in archive.entries().map_err(|e| e.to_string())? {
@@ -529,7 +622,11 @@ fn extract_punct(tar_bz2: &Path, dst: &Path) -> Result<(), String> {
             return fs::rename(&tmp, &model).map_err(|e| e.to_string());
         }
     }
-    Err(tr("标点模型包里没有 model.int8.onnx", "model.int8.onnx not found in the punctuation model archive").into())
+    Err(tr(
+        "标点模型包里没有 model.int8.onnx",
+        "model.int8.onnx not found in the punctuation model archive",
+    )
+    .into())
 }
 
 /// 解压 sherpa-onnx 的模型包：去掉最外层目录，跳过示例音频和说明。先解到临时目录，完整了再改名。
@@ -537,8 +634,13 @@ fn extract_dir(tar_bz2: &Path, dst: &Path) -> Result<(), String> {
     let tmp = dst.with_extension("tmp");
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
-    let f = File::open(tar_bz2)
-        .map_err(|e| tr(&format!("打开模型包：{e}"), &format!("Opening the model archive: {e}")).to_string())?;
+    let f = File::open(tar_bz2).map_err(|e| {
+        tr(
+            &format!("打开模型包：{e}"),
+            &format!("Opening the model archive: {e}"),
+        )
+        .to_string()
+    })?;
     let mut archive = tar::Archive::new(bzip2::read::BzDecoder::new(f));
     for entry in archive.entries().map_err(|e| e.to_string())? {
         let mut entry = entry.map_err(|e| e.to_string())?;
@@ -547,7 +649,9 @@ fn extract_dir(tar_bz2: &Path, dst: &Path) -> Result<(), String> {
         let skip = rel.as_os_str().is_empty()
             || rel.starts_with("test_wavs")
             || rel.extension().is_some_and(|e| e == "md")
-            || rel.components().any(|c| matches!(c, std::path::Component::ParentDir));
+            || rel
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir));
         if skip || !entry.header().entry_type().is_file() {
             continue;
         }

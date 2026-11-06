@@ -78,12 +78,19 @@ pub fn prompt(tr: &Transcript, lang: Lang) -> (&'static str, String) {
         Lang::Zh => (SYSTEM, PROMPT),
         Lang::En => (SYSTEM_EN, PROMPT_EN),
     };
-    let p = template.replace("{speakers}", &speakers.join("\n")).replace("{transcript}", &text);
+    let p = template
+        .replace("{speakers}", &speakers.join("\n"))
+        .replace("{transcript}", &text);
     (system, p)
 }
 
 fn clip(s: &str, n: usize) -> String {
-    s.trim().chars().take(n).collect::<String>().trim().to_string()
+    s.trim()
+        .chars()
+        .take(n)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// 解析模型的回答：容忍 ```json 包裹和前后多余的文字（取第一个 { 到最后一个 }）。
@@ -102,13 +109,19 @@ pub fn parse(text: &str, speakers: usize) -> Option<Vec<Suggestion>> {
             Value::String(x) => x.trim().parse().ok(),
             _ => None,
         };
-        let Some(index) = index.map(|i| i as usize).filter(|&i| i < speakers) else { continue };
+        let Some(index) = index.map(|i| i as usize).filter(|&i| i < speakers) else {
+            continue;
+        };
         let name = clip(s["name"].as_str().unwrap_or(""), MAX_NAME);
         if name.is_empty() || out.iter().any(|o| o.index == index) {
             continue;
         }
         let evidence = clip(s["evidence"].as_str().unwrap_or(""), 300);
-        out.push(Suggestion { index, name, evidence });
+        out.push(Suggestion {
+            index,
+            name,
+            evidence,
+        });
     }
     Some(out)
 }
@@ -125,12 +138,23 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                Suggestion { index: 1, name: "林舟".into(), evidence: "[00:30] 说话人2：林舟你说一下".into() },
-                Suggestion { index: 0, name: "王总".into(), evidence: "".into() },
+                Suggestion {
+                    index: 1,
+                    name: "林舟".into(),
+                    evidence: "[00:30] 说话人2：林舟你说一下".into()
+                },
+                Suggestion {
+                    index: 0,
+                    name: "王总".into(),
+                    evidence: "".into()
+                },
             ]
         );
         // 名字限长 20 字
-        let long = format!("{{\"suggestions\": [{{\"index\": 0, \"name\": \"{}\"}}]}}", "长".repeat(30));
+        let long = format!(
+            "{{\"suggestions\": [{{\"index\": 0, \"name\": \"{}\"}}]}}",
+            "长".repeat(30)
+        );
         assert_eq!(parse(&long, 1).unwrap()[0].name.chars().count(), 20);
         assert_eq!(parse("{\"suggestions\": []}", 2), Some(vec![]));
         assert_eq!(parse("我不知道", 2), None);
@@ -143,8 +167,18 @@ mod tests {
     fn prompt_lists_speakers_by_first_appearance() {
         let t = Transcript {
             sentences: vec![
-                Sentence { speaker: 1, start_ms: 0, end_ms: 900, text: "我是林舟。".into() },
-                Sentence { speaker: 0, start_ms: 1000, end_ms: 1900, text: "好。".into() },
+                Sentence {
+                    speaker: 1,
+                    start_ms: 0,
+                    end_ms: 900,
+                    text: "我是林舟。".into(),
+                },
+                Sentence {
+                    speaker: 0,
+                    start_ms: 1000,
+                    end_ms: 1900,
+                    text: "好。".into(),
+                },
             ],
             ..Default::default()
         };

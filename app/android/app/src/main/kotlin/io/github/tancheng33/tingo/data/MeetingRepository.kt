@@ -22,8 +22,8 @@ class MeetingRepository(
      * 单目录损坏不算失败——引擎已把它标成 `unreadable` 放进列表；
      * 只有整体扫描失败（根目录不可读等）才会抛 [io.github.tancheng33.tingo.engine.TingoFailure]。
      */
-    suspend fun load(): LibrarySnapshot = withContext(io) {
-        LibrarySnapshot(engine.scanLibrary().map { it.toCard() })
+    suspend fun load(): List<MeetingCard> = withContext(io) {
+        engine.scanLibrary().map { it.toCard() }
     }
 }
 

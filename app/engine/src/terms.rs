@@ -49,7 +49,11 @@ fn next_block(md: &str, from: usize) -> Option<(usize, &str, usize)> {
         loop {
             let line_end = md[pos..].find('\n').map(|n| pos + n).unwrap_or(md.len());
             if md[pos..line_end].trim() == "```" {
-                let end = if line_end < md.len() { line_end + 1 } else { line_end };
+                let end = if line_end < md.len() {
+                    line_end + 1
+                } else {
+                    line_end
+                };
                 return Some((i, &md[body_start..pos], end));
             }
             if line_end >= md.len() {
@@ -88,7 +92,9 @@ pub fn parse(md: &str) -> Vec<Term> {
     let mut at = 0;
     while let Some((_, body, end)) = next_block(md, at) {
         at = end;
-        let Ok(b) = serde_json::from_str::<Block>(body.trim()) else { continue };
+        let Ok(b) = serde_json::from_str::<Block>(body.trim()) else {
+            continue;
+        };
         for t in b.terms {
             let term = t.term.trim().to_string();
             if term.is_empty() {
@@ -124,7 +130,10 @@ pub fn strip_code_blocks(md: &str) -> String {
 
 /// 比较查询词用：忽略大小写、去掉空白
 fn norm(s: &str) -> String {
-    s.chars().filter(|c| !c.is_whitespace()).flat_map(char::to_lowercase).collect()
+    s.chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// 查询词扩展：q 等于某个术语或它的某个听错写法时，把这一组都加进来。没有命中时就是 [q]。
@@ -153,7 +162,9 @@ pub fn expand(q: &str, terms: &[Term]) -> Vec<String> {
 
 /// 逐字符小写，保持字符位置一一对应
 fn lower_chars(s: &str) -> Vec<char> {
-    s.chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect()
+    s.chars()
+        .map(|c| c.to_lowercase().next().unwrap_or(c))
+        .collect()
 }
 
 /// 在 text 里找命中：包含 queries 任一项（忽略大小写），或者（fuzzy 至少 3 个字时）有和 fuzzy 等长、
@@ -166,7 +177,11 @@ pub fn find_match(text: &str, queries: &[String], fuzzy: &str) -> Option<String>
             return None;
         }
         (0..=low.len() - q.len()).find_map(|i| {
-            let diff = low[i..i + q.len()].iter().zip(q).filter(|(a, b)| a != b).count();
+            let diff = low[i..i + q.len()]
+                .iter()
+                .zip(q)
+                .filter(|(a, b)| a != b)
+                .count();
             (diff <= max_diff).then(|| chars[i..i + q.len()].iter().collect())
         })
     };
@@ -205,7 +220,8 @@ pub fn search(root: &Path, q: &str, lang: Lang) -> Value {
         if results.len() >= MAX_MEETINGS {
             break;
         }
-        let minutes_hit = !minutes.is_empty() && find_match(&strip_code_blocks(minutes), &expanded, q).is_some();
+        let minutes_hit =
+            !minutes.is_empty() && find_match(&strip_code_blocks(minutes), &expanded, q).is_some();
         let mut hits = Vec::new();
         if let Some(tr) = tr {
             let tr = tr.localized(lang);
@@ -216,7 +232,11 @@ pub fn search(root: &Path, q: &str, lang: Lang) -> Value {
                     if hits.len() >= MAX_HITS {
                         break;
                     }
-                    let found = if exact { find_match(&s.text, &expanded, "") } else { find_match(&s.text, &[], q) };
+                    let found = if exact {
+                        find_match(&s.text, &expanded, "")
+                    } else {
+                        find_match(&s.text, &[], q)
+                    };
                     if let Some(found) = found {
                         if seen.insert(s.start_ms) {
                             hits.push(json!({"ms": s.start_ms, "speaker": tr.name_of(s.speaker), "text": s.text, "match": found}));
@@ -249,10 +269,16 @@ mod tests {
         // 代码块在中间：前后正文保留，中间只留一个空行
         assert_eq!(strip("a\n\n```terms\n{}\n```\n\nb\n"), "a\n\nb\n");
         // 不完整（流式输出到一半）：去到文末
-        assert_eq!(strip("# T\n\n正文\n\n```terms\n{\"terms\": [{\"te"), "# T\n\n正文");
+        assert_eq!(
+            strip("# T\n\n正文\n\n```terms\n{\"terms\": [{\"te"),
+            "# T\n\n正文"
+        );
         assert_eq!(strip("# T\n```terms"), "# T");
         // 没有 terms 块、或者只是行内提到 ```termsx：原样
-        assert_eq!(strip("# T\n\n```termsx\nx\n```\n"), "# T\n\n```termsx\nx\n```\n");
+        assert_eq!(
+            strip("# T\n\n```termsx\nx\n```\n"),
+            "# T\n\n```termsx\nx\n```\n"
+        );
         assert_eq!(strip("# T\n"), "# T\n");
     }
 
@@ -260,7 +286,13 @@ mod tests {
     fn parse_terms() {
         let t = parse(MD);
         assert_eq!(t.len(), 2);
-        assert_eq!(t[0], Term { term: "历史工单".into(), variants: vec!["历史中单".into()] });
+        assert_eq!(
+            t[0],
+            Term {
+                term: "历史工单".into(),
+                variants: vec!["历史中单".into()]
+            }
+        );
         assert!(parse("```terms\n不是 JSON\n```").is_empty());
         assert!(parse("```terms\n{\"terms\": []}\n```").is_empty());
     }
@@ -277,8 +309,14 @@ mod tests {
     #[test]
     fn fuzzy_match_one_char() {
         let q = vec!["历史工单".to_string()];
-        assert_eq!(find_match("把历史中单都导出来", &q, "历史工单").as_deref(), Some("历史中单"));
-        assert_eq!(find_match("把历史工单都导出来", &q, "历史工单").as_deref(), Some("历史工单"));
+        assert_eq!(
+            find_match("把历史中单都导出来", &q, "历史工单").as_deref(),
+            Some("历史中单")
+        );
+        assert_eq!(
+            find_match("把历史工单都导出来", &q, "历史工单").as_deref(),
+            Some("历史工单")
+        );
         // 差两个字不算
         assert_eq!(find_match("把历来中单都导出来", &q, "历史工单"), None);
         // 不到 4 个字不做模糊
@@ -286,8 +324,14 @@ mod tests {
         assert_eq!(find_match("先验证手机", &q2, "验证码"), None);
         // 忽略大小写，返回原文写法
         let k = vec!["kafka".to_string()];
-        assert_eq!(find_match("迁到 KAFKA 上", &k, "kafka").as_deref(), Some("KAFKA"));
-        assert_eq!(find_match("迁到 Kafkb 上", &k, "kafka").as_deref(), Some("Kafkb"));
+        assert_eq!(
+            find_match("迁到 KAFKA 上", &k, "kafka").as_deref(),
+            Some("KAFKA")
+        );
+        assert_eq!(
+            find_match("迁到 Kafkb 上", &k, "kafka").as_deref(),
+            Some("Kafkb")
+        );
     }
 
     #[test]
@@ -305,14 +349,32 @@ mod tests {
             duration_ms: 5000,
             speaker_names: [(0usize, "林舟".to_string())].into(),
             sentences: vec![
-                crate::transcript::Sentence { speaker: 0, start_ms: 1000, end_ms: 2000, text: "历史中单要清理".into() },
-                crate::transcript::Sentence { speaker: 1, start_ms: 3000, end_ms: 4000, text: "好的".into() },
+                crate::transcript::Sentence {
+                    speaker: 0,
+                    start_ms: 1000,
+                    end_ms: 2000,
+                    text: "历史中单要清理".into(),
+                },
+                crate::transcript::Sentence {
+                    speaker: 1,
+                    start_ms: 3000,
+                    end_ms: 4000,
+                    text: "好的".into(),
+                },
             ],
         };
         tr.save(&a.join(TRANSCRIPT_JSON)).unwrap();
         // 第二场只有纪要命中
-        std::fs::write(b.join(MINUTES), "# 复盘\n\n## 一句话总结\n历史工单清完了。\n").unwrap();
-        std::fs::write(b.join(TRANSCRIPT_JSON), serde_json::to_string(&Transcript::default()).unwrap()).unwrap();
+        std::fs::write(
+            b.join(MINUTES),
+            "# 复盘\n\n## 一句话总结\n历史工单清完了。\n",
+        )
+        .unwrap();
+        std::fs::write(
+            b.join(TRANSCRIPT_JSON),
+            serde_json::to_string(&Transcript::default()).unwrap(),
+        )
+        .unwrap();
         let r = search(&root, "历史工单", Lang::Zh);
         assert_eq!(r["expanded"], json!(["历史工单", "历史中单"]));
         let res = r["results"].as_array().unwrap();
@@ -323,7 +385,10 @@ mod tests {
         assert_eq!(res[0]["hits"], json!([]));
         // 第一场：纪要正文里没写（只在代码块里），句子命中听错的写法
         assert_eq!(res[1]["minutes_hit"], false);
-        assert_eq!(res[1]["hits"], json!([{"ms": 1000, "speaker": "林舟", "text": "历史中单要清理", "match": "历史中单"}]));
+        assert_eq!(
+            res[1]["hits"],
+            json!([{"ms": 1000, "speaker": "林舟", "text": "历史中单要清理", "match": "历史中单"}])
+        );
         let r = search(&root, "好的", Lang::En);
         assert_eq!(r["results"][0]["hits"][0]["speaker"], "Speaker 2");
         std::fs::remove_dir_all(root).ok();

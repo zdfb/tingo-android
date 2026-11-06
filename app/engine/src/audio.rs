@@ -344,8 +344,14 @@ mod tests {
         let bytes = std::fs::read(&p).unwrap();
         let data_len = (1.5 * SR as f64) as u32 * 2;
         assert_eq!(bytes.len() as u32, 44 + data_len);
-        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 36 + data_len);
-        assert_eq!(u32::from_le_bytes(bytes[40..44].try_into().unwrap()), data_len);
+        assert_eq!(
+            u32::from_le_bytes(bytes[4..8].try_into().unwrap()),
+            36 + data_len
+        );
+        assert_eq!(
+            u32::from_le_bytes(bytes[40..44].try_into().unwrap()),
+            data_len
+        );
         assert_eq!(read_wav16k(&p).unwrap().len(), (1.5 * SR as f64) as usize);
         // 已经比要截的短：不动
         assert!(!truncate_wav(&p, 10.0).unwrap());

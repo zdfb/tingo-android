@@ -43,7 +43,11 @@ impl Recorder {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| {
-                tr(&format!("启动录音组件失败：{e}"), &format!("Couldn't start the recorder: {e}")).to_string()
+                tr(
+                    &format!("启动录音组件失败：{e}"),
+                    &format!("Couldn't start the recorder: {e}"),
+                )
+                .to_string()
             })?;
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let mut line = String::new();
@@ -122,12 +126,20 @@ impl Drop for Recorder {
 /// 任意音视频 → 16 kHz 单声道样本（经录音组件里的 AVFoundation 解码）。
 /// HTML → PDF：交给录音组件用系统 WebKit 排版（A4 分页）。
 pub fn html_to_pdf(bin: &Path, html: &str, out: &Path) -> Result<(), String> {
-    let tmp = std::env::temp_dir().join(format!("tingo-pdf-{}-{}.html", std::process::id(), rand_suffix()));
+    let tmp = std::env::temp_dir().join(format!(
+        "tingo-pdf-{}-{}.html",
+        std::process::id(),
+        rand_suffix()
+    ));
     std::fs::write(&tmp, html).map_err(|e| e.to_string())?;
     let res = Command::new(bin).arg("pdf").arg(&tmp).arg(out).output();
     let _ = std::fs::remove_file(&tmp);
     let res = res.map_err(|e| {
-        tr(&format!("启动排版失败：{e}"), &format!("Couldn't start the PDF renderer: {e}")).to_string()
+        tr(
+            &format!("启动排版失败：{e}"),
+            &format!("Couldn't start the PDF renderer: {e}"),
+        )
+        .to_string()
     })?;
     if res.status.success() && out.is_file() {
         return Ok(());
@@ -143,22 +155,44 @@ pub fn html_to_pdf(bin: &Path, html: &str, out: &Path) -> Result<(), String> {
 /// 移到废纸篓（不是彻底删除）。macOS 上交给录音组件的 `trash <路径>`（FileManager.trashItem，
 /// 成功打印 OK，失败打印 ERROR: …）；其它系统有 gio 就用 `gio trash`，否则报不支持。
 pub fn trash(bin: &Path, path: &Path) -> Result<(), String> {
-    let failed = |e: &str| tr(&format!("没能移到废纸篓：{e}"), &format!("Couldn't move to the Trash: {e}")).to_string();
+    let failed = |e: &str| {
+        tr(
+            &format!("没能移到废纸篓：{e}"),
+            &format!("Couldn't move to the Trash: {e}"),
+        )
+        .to_string()
+    };
     if cfg!(target_os = "macos") || bin.is_file() {
-        let out = Command::new(bin).arg("trash").arg(path).stdin(Stdio::null()).output().map_err(|e| failed(&e.to_string()))?;
+        let out = Command::new(bin)
+            .arg("trash")
+            .arg(path)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| failed(&e.to_string()))?;
         let text = String::from_utf8_lossy(&out.stdout);
         if out.status.success() && text.lines().any(|l| l.trim() == "OK") {
             return Ok(());
         }
-        return Err(match text.lines().find_map(|l| l.trim().strip_prefix("ERROR: ")) {
-            Some(e) => e.to_string(), // 录音组件报的错已经说了是"移到废纸篓失败"
-            None => failed(String::from_utf8_lossy(&out.stderr).trim()),
-        });
+        return Err(
+            match text.lines().find_map(|l| l.trim().strip_prefix("ERROR: ")) {
+                Some(e) => e.to_string(), // 录音组件报的错已经说了是"移到废纸篓失败"
+                None => failed(String::from_utf8_lossy(&out.stderr).trim()),
+            },
+        );
     }
     let Some(gio) = find_in_path("gio") else {
-        return Err(tr("这个系统上没法移到废纸篓", "Moving to the Trash isn't supported on this system").into());
+        return Err(tr(
+            "这个系统上没法移到废纸篓",
+            "Moving to the Trash isn't supported on this system",
+        )
+        .into());
     };
-    let out = Command::new(gio).arg("trash").arg(path).stdin(Stdio::null()).output().map_err(|e| failed(&e.to_string()))?;
+    let out = Command::new(gio)
+        .arg("trash")
+        .arg(path)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| failed(&e.to_string()))?;
     if out.status.success() {
         Ok(())
     } else {
@@ -167,7 +201,9 @@ pub fn trash(bin: &Path, path: &Path) -> Result<(), String> {
 }
 
 fn find_in_path(name: &str) -> Option<PathBuf> {
-    std::env::split_paths(&std::env::var_os("PATH")?).map(|d| d.join(name)).find(|p| p.is_file())
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())
 }
 
 pub const TEXTUTIL: &str = "/usr/bin/textutil";
@@ -175,9 +211,17 @@ pub const TEXTUTIL: &str = "/usr/bin/textutil";
 /// HTML → Word：macOS 自带的 textutil。没有 textutil（非 macOS）时报错。
 pub fn html_to_docx(html: &str, out: &Path) -> Result<(), String> {
     if !Path::new(TEXTUTIL).is_file() {
-        return Err(tr("导出 Word 只支持 macOS", "Word export is only available on macOS").into());
+        return Err(tr(
+            "导出 Word 只支持 macOS",
+            "Word export is only available on macOS",
+        )
+        .into());
     }
-    let tmp = std::env::temp_dir().join(format!("tingo-docx-{}-{}.html", std::process::id(), rand_suffix()));
+    let tmp = std::env::temp_dir().join(format!(
+        "tingo-docx-{}-{}.html",
+        std::process::id(),
+        rand_suffix()
+    ));
     std::fs::write(&tmp, html).map_err(|e| e.to_string())?;
     // 不指定输入编码时，HTML 里没写 charset 的话中文会变成乱码
     let res = Command::new(TEXTUTIL)
@@ -187,19 +231,36 @@ pub fn html_to_docx(html: &str, out: &Path) -> Result<(), String> {
         .output();
     let _ = std::fs::remove_file(&tmp);
     let res = res.map_err(|e| {
-        tr(&format!("启动 textutil 失败：{e}"), &format!("Couldn't start textutil: {e}")).to_string()
+        tr(
+            &format!("启动 textutil 失败：{e}"),
+            &format!("Couldn't start textutil: {e}"),
+        )
+        .to_string()
     })?;
     if res.status.success() && out.is_file() {
         return Ok(());
     }
     let err = String::from_utf8_lossy(&res.stderr).trim().to_string();
-    Err(tr(&format!("导出 Word 失败：{err}"), &format!("Word export failed: {err}")).into())
+    Err(tr(
+        &format!("导出 Word 失败：{err}"),
+        &format!("Word export failed: {err}"),
+    )
+    .into())
 }
 
 /// 试录 `secs` 秒（录进临时目录，录完就删），返回每条音轨（system / mic）最响那段的音量（0～1）；
 /// 音轨没录出来时是 None。录音组件起不来或中途退出时返回它报的错。
-pub fn probe(bin: &Path, system: bool, mic: bool, secs: u64) -> Result<Vec<(String, Option<f32>)>, String> {
-    let dir = std::env::temp_dir().join(format!("tingo-rectest-{}-{}", std::process::id(), rand_suffix()));
+pub fn probe(
+    bin: &Path,
+    system: bool,
+    mic: bool,
+    secs: u64,
+) -> Result<Vec<(String, Option<f32>)>, String> {
+    let dir = std::env::temp_dir().join(format!(
+        "tingo-rectest-{}-{}",
+        std::process::id(),
+        rand_suffix()
+    ));
     let result = (|| {
         let mut rec = Recorder::start(bin, &dir, system, mic)?;
         let deadline = Instant::now() + Duration::from_secs(secs);
@@ -213,7 +274,12 @@ pub fn probe(bin: &Path, system: bool, mic: bool, secs: u64) -> Result<Vec<(Stri
         Ok(rec
             .sources
             .iter()
-            .map(|s| (s.clone(), crate::audio::max_level(&dir.join(format!("{s}.wav")), 0.15)))
+            .map(|s| {
+                (
+                    s.clone(),
+                    crate::audio::max_level(&dir.join(format!("{s}.wav")), 0.15),
+                )
+            })
             .collect())
     })();
     let _ = std::fs::remove_dir_all(&dir);
@@ -223,7 +289,16 @@ pub fn probe(bin: &Path, system: bool, mic: bool, secs: u64) -> Result<Vec<(Stri
 /// 录音组件报的错是不是没有权限（录屏与系统录音、麦克风）
 pub fn is_permission_error(msg: &str) -> bool {
     let m = msg.to_lowercase();
-    ["权限", "permission", "declined", "not authorized", "not permitted", "tcc"].iter().any(|k| m.contains(k))
+    [
+        "权限",
+        "permission",
+        "declined",
+        "not authorized",
+        "not permitted",
+        "tcc",
+    ]
+    .iter()
+    .any(|k| m.contains(k))
 }
 
 pub fn decode(bin: &Path, input: &Path) -> Result<Vec<f32>, String> {
@@ -245,9 +320,16 @@ pub fn decode(bin: &Path, input: &Path) -> Result<Vec<f32>, String> {
         .arg(input)
         .arg(&tmp)
         .output()
-        .map_err(|e| tr(&format!("启动解码失败：{e}"), &format!("Couldn't start the decoder: {e}")).to_string())?;
+        .map_err(|e| {
+            tr(
+                &format!("启动解码失败：{e}"),
+                &format!("Couldn't start the decoder: {e}"),
+            )
+            .to_string()
+        })?;
     let result = if out.status.success() {
-        read_wav16k(&tmp).ok_or_else(|| tr("解码结果读不出来", "Couldn't read the decoded audio").to_string())
+        read_wav16k(&tmp)
+            .ok_or_else(|| tr("解码结果读不出来", "Couldn't read the decoded audio").to_string())
     } else {
         let msg = String::from_utf8_lossy(&out.stdout);
         Err(msg
@@ -306,7 +388,13 @@ pub fn mixdown(dir: &Path, dest: &Path) -> Result<(), String> {
         .arg(&wav)
         .arg(dest)
         .output()
-        .map_err(|e| tr(&format!("压缩录音失败：{e}"), &format!("Compressing the recording failed: {e}")).to_string())?;
+        .map_err(|e| {
+            tr(
+                &format!("压缩录音失败：{e}"),
+                &format!("Compressing the recording failed: {e}"),
+            )
+            .to_string()
+        })?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(tr(

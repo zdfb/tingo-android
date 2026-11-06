@@ -260,16 +260,21 @@ fn meeting_dir(root: &Path, id: &str) -> Result<PathBuf, EngineError> {
     Ok(dir)
 }
 
+/// 读文件失败按原因分类：权限不足和内容损坏对用户是两件事。
+fn io_error(err: std::io::Error, what: &str) -> EngineError {
+    let detail = format!("{what}: {err}");
+    match err.kind() {
+        std::io::ErrorKind::PermissionDenied => EngineError::PermissionDenied { detail },
+        _ => EngineError::Malformed { detail },
+    }
+}
+
 fn read_meeting_in(dir: &Path) -> Result<MeetingDetail, EngineError> {
     let summary = to_summary(meetings::summary(dir));
     let transcript = match engine_transcript::Transcript::load(&dir.join("transcript.json")) {
         Ok(tr) => Some(to_transcript(tr)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
-        Err(err) => {
-            return Err(EngineError::Malformed {
-                detail: format!("transcript.json unreadable: {err}"),
-            })
-        }
+        Err(err) => return Err(io_error(err, "transcript.json")),
     };
     let minutes_text = std::fs::read_to_string(dir.join("纪要.md")).ok();
     let fishbone = minutes_text
@@ -347,7 +352,7 @@ fn to_transcript(tr: engine_transcript::Transcript) -> Transcript {
 }
 
 
-fn to_minutes(doc: engine_minutes::Doc) -> MinutesDoc {
+fn to_minutes(doc: engine_minutes::MinutesDoc) -> MinutesDoc {
     MinutesDoc {
         title: doc.title,
         sections: doc

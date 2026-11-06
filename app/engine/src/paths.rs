@@ -85,7 +85,9 @@ impl EnginePaths {
 
 /// 家目录；没有 HOME 时为空路径（和改造前的 `unwrap_or_default` 一致，相对路径照样能拼出来）。
 pub(crate) fn home_dir() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 /// 配置文件：`TINGO_CONFIG` 优先；改名前（jiyao）的位置存在而新位置不存在时沿用旧位置。
@@ -141,7 +143,10 @@ mod tests {
         // config.rs 记的配置文件位置与这里一致
         assert_eq!(config_file_in(&h), p.config_dir.join("config.toml"));
         assert_eq!(p.expand(" ~/会议/资料 "), h.join("会议/资料"));
-        assert_eq!(p.expand("/Volumes/会议资料"), PathBuf::from("/Volumes/会议资料"));
+        assert_eq!(
+            p.expand("/Volumes/会议资料"),
+            PathBuf::from("/Volumes/会议资料")
+        );
         std::fs::remove_dir_all(h).ok();
     }
 

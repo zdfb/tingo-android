@@ -69,7 +69,12 @@ impl Chunker {
         Some((chunk, offset))
     }
 
-    pub fn transcribe(&mut self, engine: &Engine, chunk: &[f32], offset_s: f64) -> Result<Vec<Segment>, String> {
+    pub fn transcribe(
+        &mut self,
+        engine: &Engine,
+        chunk: &[f32],
+        offset_s: f64,
+    ) -> Result<Vec<Segment>, String> {
         let segs = engine.transcribe(chunk, (offset_s * 1000.0).round() as u64)?;
         self.segments.extend(segs.iter().cloned());
         Ok(segs)
@@ -271,7 +276,11 @@ impl LiveTranscriber {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(t) = self.thread.take() {
             t.join().map_err(|_| {
-                crate::i18n::tr("边录边转线程异常退出", "The live transcription thread crashed").to_string()
+                crate::i18n::tr(
+                    "边录边转线程异常退出",
+                    "The live transcription thread crashed",
+                )
+                .to_string()
             })?;
         }
         let t = Instant::now();
@@ -301,7 +310,9 @@ impl LiveTranscriber {
 fn step(inner: &Mutex<LiveState>, engine: &Engine, last: bool) -> bool {
     let job = {
         let mut s = inner.lock().unwrap();
-        if s.error.is_some() { return false; }
+        if s.error.is_some() {
+            return false;
+        }
         s.mix_new(last);
         s.chunker.next_chunk(last)
     };
@@ -311,7 +322,13 @@ fn step(inner: &Mutex<LiveState>, engine: &Engine, last: bool) -> bool {
     // 识别时不持锁：界面取实时文字不用等
     let segs = engine.transcribe(&chunk, (offset * 1000.0).round() as u64);
     let mut s = inner.lock().unwrap();
-    let segs = match segs { Ok(s) => s, Err(e) => { s.error = Some(e); return false; } };
+    let segs = match segs {
+        Ok(s) => s,
+        Err(e) => {
+            s.error = Some(e);
+            return false;
+        }
+    };
     s.lines
         .extend(segs.iter().map(|g| (g.start_ms, g.text.clone())));
     s.chunker.segments.extend(segs);

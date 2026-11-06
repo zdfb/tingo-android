@@ -27,8 +27,3 @@ data class MeetingCard(
      */
     val unreadable: Boolean = false,
 )
-
-/** 一次扫描的结果。 */
-data class LibrarySnapshot(
-    val items: List<MeetingCard>,
-)

@@ -1,6 +1,6 @@
 //! 用当前配置的大模型给一份 transcript.json 生成纪要：cargo run --example minutes -- <transcript.json> [热词,逗号分隔]
-use tingo_engine::{config, summarize, transcript::Transcript};
 use std::io::Write;
+use tingo_engine::{config, summarize, transcript::Transcript};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();

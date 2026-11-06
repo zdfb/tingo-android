@@ -74,47 +74,65 @@ fn funasr_nano_language(lang: &str) -> Option<String> {
 
 impl Engine {
     /// `language` 是配置里的会议语言（zh | en | auto），只有 SenseVoice、Fun-ASR-Nano 用
-    pub fn load(models: &ModelPaths, kind: AsrKind, hotwords: &[String], language: &str, threads: i32) -> Result<Self, String> {
+    pub fn load(
+        models: &ModelPaths,
+        kind: AsrKind,
+        hotwords: &[String],
+        language: &str,
+        threads: i32,
+    ) -> Result<Self, String> {
         let files = models.base().into_iter().chain(models.asr_files(kind));
         if let Some(missing) = files.into_iter().find(|p| !p.is_file()) {
             let m = missing.display();
-            return Err(tr(&format!("缺少模型文件：{m}"), &format!("Missing model file: {m}")).into());
+            return Err(tr(
+                &format!("缺少模型文件：{m}"),
+                &format!("Missing model file: {m}"),
+            )
+            .into());
         }
         let mut cfg = OfflineRecognizerConfig::default();
         cfg.model_config.num_threads = threads;
-        let rec = if kind == AsrKind::AppleSpeech { None } else {
-        let [first, second, ..] = &models.asr_files(kind)[..] else { unreachable!() };
-        let dir = models.asr_dir(kind);
-        match kind {
-            AsrKind::AppleSpeech => unreachable!(),
-            AsrKind::Paraformer => {
-                cfg.model_config.paraformer.model = path_str(first);
-                cfg.model_config.tokens = path_str(second);
-            }
-            AsrKind::SenseVoice => {
-                cfg.model_config.sense_voice.model = path_str(first);
-                cfg.model_config.sense_voice.language = Some(sense_voice_language(language).into());
-                cfg.model_config.sense_voice.use_itn = true;
-                cfg.model_config.tokens = path_str(second);
-            }
-            AsrKind::FunAsrNano => {
-                let n = &mut cfg.model_config.funasr_nano;
-                n.encoder_adaptor = path_str(&dir.join("encoder_adaptor.int8.onnx"));
-                n.llm = path_str(&dir.join("llm.int8.onnx"));
-                n.embedding = path_str(&dir.join("embedding.int8.onnx"));
-                n.tokenizer = path_str(&dir.join("Qwen3-0.6B"));
-                // Rust 绑定的默认值是随机采样（temperature 1.0），改成和官方 Python 接口一样的近似贪心
-                n.max_new_tokens = 512;
-                n.temperature = 1e-6;
-                n.top_p = 0.8;
-                n.itn = 1;
-                n.language = funasr_nano_language(language);
-                if !hotwords.is_empty() {
-                    n.hotwords = Some(hotwords.join(","));
+        let rec = if kind == AsrKind::AppleSpeech {
+            None
+        } else {
+            let [first, second, ..] = &models.asr_files(kind)[..] else {
+                unreachable!()
+            };
+            let dir = models.asr_dir(kind);
+            match kind {
+                AsrKind::AppleSpeech => unreachable!(),
+                AsrKind::Paraformer => {
+                    cfg.model_config.paraformer.model = path_str(first);
+                    cfg.model_config.tokens = path_str(second);
+                }
+                AsrKind::SenseVoice => {
+                    cfg.model_config.sense_voice.model = path_str(first);
+                    cfg.model_config.sense_voice.language =
+                        Some(sense_voice_language(language).into());
+                    cfg.model_config.sense_voice.use_itn = true;
+                    cfg.model_config.tokens = path_str(second);
+                }
+                AsrKind::FunAsrNano => {
+                    let n = &mut cfg.model_config.funasr_nano;
+                    n.encoder_adaptor = path_str(&dir.join("encoder_adaptor.int8.onnx"));
+                    n.llm = path_str(&dir.join("llm.int8.onnx"));
+                    n.embedding = path_str(&dir.join("embedding.int8.onnx"));
+                    n.tokenizer = path_str(&dir.join("Qwen3-0.6B"));
+                    // Rust 绑定的默认值是随机采样（temperature 1.0），改成和官方 Python 接口一样的近似贪心
+                    n.max_new_tokens = 512;
+                    n.temperature = 1e-6;
+                    n.top_p = 0.8;
+                    n.itn = 1;
+                    n.language = funasr_nano_language(language);
+                    if !hotwords.is_empty() {
+                        n.hotwords = Some(hotwords.join(","));
+                    }
                 }
             }
-        }
-        Some(OfflineRecognizer::create(&cfg).ok_or(tr("识别模型加载失败", "Couldn't load the speech recognition model"))?)
+            Some(OfflineRecognizer::create(&cfg).ok_or(tr(
+                "识别模型加载失败",
+                "Couldn't load the speech recognition model",
+            ))?)
         };
 
         let punct = if kind.punctuates() {
@@ -128,7 +146,10 @@ impl Engine {
                         ..Default::default()
                     },
                 })
-                .ok_or(tr("标点模型加载失败", "Couldn't load the punctuation model"))?,
+                .ok_or(tr(
+                    "标点模型加载失败",
+                    "Couldn't load the punctuation model",
+                ))?,
             )
         };
 
@@ -150,8 +171,16 @@ impl Engine {
         vad.num_threads = 1;
         Ok(Self {
             kind,
-            hotwords: if kind == AsrKind::FunAsrNano { hotwords.to_vec() } else { Vec::new() },
-            language: if kind.uses_language() { language.to_string() } else { String::new() },
+            hotwords: if kind == AsrKind::FunAsrNano {
+                hotwords.to_vec()
+            } else {
+                Vec::new()
+            },
+            language: if kind.uses_language() {
+                language.to_string()
+            } else {
+                String::new()
+            },
             rec,
             apple_bin: None,
             punct,
@@ -165,7 +194,11 @@ impl Engine {
     /// 除了 Fun-ASR-Nano，识别模型都不支持热词；热词在生成纪要时作为术语表交给大模型纠正。
     pub fn with_apple_helper(mut self, bin: &Path) -> Result<Self, String> {
         let status = crate::apple_speech::status(bin, &self.language)?;
-        if !status.available || !status.ready { return Err("请先检查／安装系统语音模型 / Install the system speech model first".into()); }
+        if !status.available || !status.ready {
+            return Err(
+                "请先检查／安装系统语音模型 / Install the system speech model first".into(),
+            );
+        }
         self.apple_bin = Some(bin.to_owned());
         Ok(self)
     }
@@ -173,14 +206,27 @@ impl Engine {
     pub fn transcribe(&self, samples: &[f32], offset_ms: u64) -> Result<Vec<Segment>, String> {
         let _guard = self.lock.lock().unwrap();
         if self.kind == AsrKind::AppleSpeech {
-            let bin = self.apple_bin.as_ref().ok_or("Apple speech helper is not configured")?;
+            let bin = self
+                .apple_bin
+                .as_ref()
+                .ok_or("Apple speech helper is not configured")?;
             let spans = crate::apple_speech::transcribe(bin, &self.language, samples)?;
-            return Ok(spans.into_iter().filter(|s| !s.text.trim().is_empty()).map(|s| {
-                let a = ((s.start * SR as f64) as usize).min(samples.len());
-                let b = ((s.end * SR as f64) as usize).min(samples.len());
-                Segment { start_ms: offset_ms + (s.start * 1000.0) as u64, end_ms: offset_ms + (s.end * 1000.0) as u64,
-                    text: s.text, embeddings: windows(b-a).filter_map(|(x,y)| self.embed(&samples[a+x..a+y])).collect() }
-            }).collect());
+            return Ok(spans
+                .into_iter()
+                .filter(|s| !s.text.trim().is_empty())
+                .map(|s| {
+                    let a = ((s.start * SR as f64) as usize).min(samples.len());
+                    let b = ((s.end * SR as f64) as usize).min(samples.len());
+                    Segment {
+                        start_ms: offset_ms + (s.start * 1000.0) as u64,
+                        end_ms: offset_ms + (s.end * 1000.0) as u64,
+                        text: s.text,
+                        embeddings: windows(b - a)
+                            .filter_map(|(x, y)| self.embed(&samples[a + x..a + y]))
+                            .collect(),
+                    }
+                })
+                .collect());
         }
         let rec = self.rec.as_ref().ok_or("Speech recognizer is not loaded")?;
         let Some(vad) = VoiceActivityDetector::create(&self.vad, 120.0) else {

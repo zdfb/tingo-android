@@ -29,7 +29,7 @@
     <string name="settings_about">关于</string>
     <string name="settings_engine_version">引擎版本：%1$s</string>
     <string name="settings_data_root">会议库位置</string>
-    <string name="settings_data_root_desc">会议文件保存在应用专属目录，卸载应用不会删除已导出的内容。</string>
+    <string name="settings_data_root_desc">会议文件保存在应用专属目录（Android/data/PACKAGE/files/tingo）。卸载应用会连同该目录一起删除，需要长期保留的会议请先导出。</string>
 
     <!-- 错误 -->
     <string name="error_title">出错了</string>

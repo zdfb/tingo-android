@@ -34,7 +34,12 @@ pub struct ObsidianConfig {
 
 impl Default for ObsidianConfig {
     fn default() -> Self {
-        Self { vault: String::new(), folder: "会议纪要".into(), auto: true, transcript: true }
+        Self {
+            vault: String::new(),
+            folder: "会议纪要".into(),
+            auto: true,
+            transcript: true,
+        }
     }
 }
 
@@ -275,7 +280,11 @@ pub fn save(path: &Path, cfg: &Config) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     static NEXT_SAVE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let tmp = path.with_extension(format!("toml.{}.{}.tmp", std::process::id(), NEXT_SAVE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let tmp = path.with_extension(format!(
+        "toml.{}.{}.tmp",
+        std::process::id(),
+        NEXT_SAVE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let result = (|| {
         use std::io::Write;
         let mut options = std::fs::OpenOptions::new();
@@ -290,7 +299,9 @@ pub fn save(path: &Path, cfg: &Config) -> std::io::Result<()> {
         file.sync_all()?;
         std::fs::rename(&tmp, path)
     })();
-    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
     result?;
     Ok(())
 }
@@ -319,7 +330,12 @@ mod tests {
             hotwords: vec!["星河".into(), "Kafka".into()],
             webhook: "".into(),
             webhook_secret: "".into(),
-            obsidian: ObsidianConfig { vault: "/Users/a/笔记".into(), folder: "会议".into(), auto: false, transcript: true },
+            obsidian: ObsidianConfig {
+                vault: "/Users/a/笔记".into(),
+                folder: "会议".into(),
+                auto: false,
+                transcript: true,
+            },
             ..Default::default()
         };
         save(&p, &cfg).unwrap();
@@ -343,42 +359,90 @@ mod tests {
     fn missing_file_gives_defaults() {
         let c = load(Path::new("/nonexistent/tingo.toml"));
         assert_eq!(c.llm.base_url, "https://api.deepseek.com");
-        assert_eq!((c.ui_language.as_str(), c.minutes_language.as_str(), c.asr_language.as_str()), ("auto", "auto", "zh"));
+        assert_eq!(
+            (
+                c.ui_language.as_str(),
+                c.minutes_language.as_str(),
+                c.asr_language.as_str()
+            ),
+            ("auto", "auto", "zh")
+        );
     }
 
     #[test]
     fn language_sections_roundtrip() {
         let p = tmp("lang");
-        let cfg = Config { ui_language: "en".into(), minutes_language: "zh".into(), asr_language: "auto".into(), ..Default::default() };
+        let cfg = Config {
+            ui_language: "en".into(),
+            minutes_language: "zh".into(),
+            asr_language: "auto".into(),
+            ..Default::default()
+        };
         save(&p, &cfg).unwrap();
         let text = std::fs::read_to_string(&p).unwrap();
         // 写在 [obsidian] 之后，顺序 [ui]、[minutes]、[asr]
         let pos = |k: &str| text.find(k).unwrap();
-        assert!(pos("[obsidian]") < pos("[ui]") && pos("[ui]") < pos("[minutes]") && pos("[minutes]") < pos("[asr]"));
+        assert!(
+            pos("[obsidian]") < pos("[ui]")
+                && pos("[ui]") < pos("[minutes]")
+                && pos("[minutes]") < pos("[asr]")
+        );
         assert!(text.contains("transcript = true\n\n[ui]\nlanguage = \"en\"\n\n[minutes]\nlanguage = \"zh\"\n\n[asr]\nlanguage = \"auto\"\n\n[record]\nauto_stop_silence_min = 10\nauto_stop_app_quit = true\n"));
         let c = load(&p);
-        assert_eq!((c.ui_language.as_str(), c.minutes_language.as_str(), c.asr_language.as_str()), ("en", "zh", "auto"));
+        assert_eq!(
+            (
+                c.ui_language.as_str(),
+                c.minutes_language.as_str(),
+                c.asr_language.as_str()
+            ),
+            ("en", "zh", "auto")
+        );
         // 老配置没有这三节、或者填了不认识的值：用默认
-        std::fs::write(&p, "[llm]\nmodel = \"m\"\n\n[asr]\nlanguage = \"fr\"\n\n[minutes]\nlanguage = \"EN\"\n").unwrap();
+        std::fs::write(
+            &p,
+            "[llm]\nmodel = \"m\"\n\n[asr]\nlanguage = \"fr\"\n\n[minutes]\nlanguage = \"EN\"\n",
+        )
+        .unwrap();
         let c = load(&p);
-        assert_eq!((c.ui_language.as_str(), c.minutes_language.as_str(), c.asr_language.as_str()), ("auto", "en", "zh"));
+        assert_eq!(
+            (
+                c.ui_language.as_str(),
+                c.minutes_language.as_str(),
+                c.asr_language.as_str()
+            ),
+            ("auto", "en", "zh")
+        );
     }
 
     #[test]
     fn record_section_roundtrip() {
         let p = tmp("record");
-        let cfg = Config { auto_stop_silence_min: 0, auto_stop_app_quit: false, ..Default::default() };
+        let cfg = Config {
+            auto_stop_silence_min: 0,
+            auto_stop_app_quit: false,
+            ..Default::default()
+        };
         save(&p, &cfg).unwrap();
         let text = std::fs::read_to_string(&p).unwrap();
         // 接在 [asr] 之后，格式固定
         assert!(text.contains("[asr]\nlanguage = \"zh\"\n\n[record]\nauto_stop_silence_min = 0\nauto_stop_app_quit = false\n"));
         let c = load(&p);
         assert_eq!((c.auto_stop_silence_min, c.auto_stop_app_quit), (0, false));
-        save(&p, &Config { auto_stop_silence_min: 240, ..Default::default() }).unwrap();
+        save(
+            &p,
+            &Config {
+                auto_stop_silence_min: 240,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let c = load(&p);
         assert_eq!((c.auto_stop_silence_min, c.auto_stop_app_quit), (240, true));
         // 没有这一节、或者值不合法：用默认
-        assert_eq!(load(Path::new("/nonexistent/tingo.toml")).auto_stop_silence_min, 10);
+        assert_eq!(
+            load(Path::new("/nonexistent/tingo.toml")).auto_stop_silence_min,
+            10
+        );
         std::fs::write(&p, "[record]\nauto_stop_silence_min = 999\n").unwrap();
         let c = load(&p);
         assert_eq!((c.auto_stop_silence_min, c.auto_stop_app_quit), (10, true));

@@ -19,6 +19,10 @@ http-server = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tokio", "sherpa-a
 sherpa-asr = ["dep:sherpa-onnx", "desktop-shell"]
 desktop-shell = ["dep:libc"]
 
+[target.'cfg(target_os = "android")'.dependencies]
+# Android 也要 statvfs 判断磁盘余量；桌面侧由 desktop-shell feature 引入
+libc = "0.2.191"
+
 [dependencies]
 axum = { version = "0.8", features = ["multipart"], optional = true }
 base64 = "0.23.1"

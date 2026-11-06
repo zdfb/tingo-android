@@ -99,20 +99,38 @@ pub fn fishbone_to_text(md: &str) -> String {
         std::sync::LazyLock::new(|| regex::Regex::new(r"(?s)```fishbone\s*\n(.*?)\n```").unwrap());
     FENCE
         .replace_all(md, |c: &regex::Captures| {
-            let Ok(fb) = serde_json::from_str::<serde_json::Value>(&c[1]) else { return String::new() };
-            let problem = if en { "Root Cause Analysis" } else { "原因分析" };
+            let Ok(fb) = serde_json::from_str::<serde_json::Value>(&c[1]) else {
+                return String::new();
+            };
+            let problem = if en {
+                "Root Cause Analysis"
+            } else {
+                "原因分析"
+            };
             let mut lines = vec![format!("**{}**", fb["problem"].as_str().unwrap_or(problem))];
             for b in fb["branches"].as_array().into_iter().flatten() {
-                let refs: Vec<&str> = b["refs"].as_array().into_iter().flatten().filter_map(|r| r.as_str()).collect();
+                let refs: Vec<&str> = b["refs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|r| r.as_str())
+                    .collect();
                 let sep = if en { ": " } else { "：" };
-                let detail = b["detail"].as_str().filter(|d| !d.is_empty()).map(|d| format!("{sep}{d}")).unwrap_or_default();
+                let detail = b["detail"]
+                    .as_str()
+                    .filter(|d| !d.is_empty())
+                    .map(|d| format!("{sep}{d}"))
+                    .unwrap_or_default();
                 let src = match (refs.is_empty(), en) {
                     (true, false) => "（无原文依据）".to_string(),
                     (true, true) => " (no evidence)".to_string(),
                     (false, false) => format!("（{}）", refs.join("、")),
                     (false, true) => format!(" ({})", refs.join(", ")),
                 };
-                lines.push(format!("- {}{detail}{src}", b["title"].as_str().unwrap_or("")));
+                lines.push(format!(
+                    "- {}{detail}{src}",
+                    b["title"].as_str().unwrap_or("")
+                ));
             }
             lines.join("\n")
         })
@@ -127,7 +145,11 @@ fn truncate(text: &str, max_bytes: usize, lang: Lang) -> String {
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}\n\n{}", &text[..end], lang.pick("……（内容过长已截断）", "…(truncated)"))
+    format!(
+        "{}\n\n{}",
+        &text[..end],
+        lang.pick("……（内容过长已截断）", "…(truncated)")
+    )
 }
 
 fn title(md: &str) -> String {
@@ -219,7 +241,11 @@ pub fn send(webhook: &str, minutes: &str, secret: &str) -> Result<Platform, Stri
         .and_then(|c| c.as_i64())
         .unwrap_or(0);
     if !status.is_success() || code != 0 {
-        return Err(tr(&format!("推送失败：{status} {data}"), &format!("Push failed: {status} {data}")).into());
+        return Err(tr(
+            &format!("推送失败：{status} {data}"),
+            &format!("Push failed: {status} {data}"),
+        )
+        .into());
     }
     detect(webhook)
 }
@@ -267,7 +293,10 @@ mod tests {
     #[test]
     fn terms_block_not_pushed() {
         let md = format!("{MINUTES}\n```terms\n{{\"terms\": [{{\"term\": \"支付模块\", \"variants\": []}}]}}\n```\n");
-        for hook in ["https://open.feishu.cn/open-apis/bot/v2/hook/abc", "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k"] {
+        for hook in [
+            "https://open.feishu.cn/open-apis/bot/v2/hook/abc",
+            "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k",
+        ] {
             let (_, b) = build_request(hook, &md, "", 0.0).unwrap();
             assert!(!b.to_string().contains("terms"));
         }
@@ -311,8 +340,11 @@ mod tests {
     fn english_minutes_push_in_english() {
         let md = "# Release review\n\n## Summary\nShip next week.\n\n## Action Items\n| Item | Owner | Due | Source |\n|---|---|---|---|\n| Fix payment | Wang | Nov 15 | [00:29] |\n\n## Root Cause Analysis\n```fishbone\n{\"problem\": \"Why slow?\", \"branches\": [{\"title\": \"Big page\", \"detail\": \"6 s\", \"refs\": [\"01:06\", \"01:10\"]}, {\"title\": \"Guess\", \"refs\": []}]}\n```\n";
         let out = fishbone_to_text(md);
-        assert!(out.contains("**Why slow?**\n- Big page: 6 s (01:06, 01:10)\n- Guess (no evidence)"));
-        assert!(tables_to_lists(md).contains("- Fix payment (Owner: Wang, Due: Nov 15, Source: [00:29])"));
+        assert!(
+            out.contains("**Why slow?**\n- Big page: 6 s (01:06, 01:10)\n- Guess (no evidence)")
+        );
+        assert!(tables_to_lists(md)
+            .contains("- Fix payment (Owner: Wang, Due: Nov 15, Source: [00:29])"));
         assert_eq!(title("## Summary\nx"), "Meeting Minutes");
         assert_eq!(title("## 一句话总结\nx"), "会议纪要");
         let (_, b) = build_request(

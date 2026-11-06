@@ -36,7 +36,7 @@ app/
 ├── engine-ffi/       # 新 crate：UniFFI 接口定义 + cdylib
 └── android/          # 新 Gradle 工程（Kotlin + Compose）
     ├── app/          # :app 模块，jniLibs 由 cargo-ndk 产物填充
-    └── bridge/       # UniFFI 生成的 Kotlin 绑定（生成目录，不入库）
+    └── app/build/generated/uniffi/   # UniFFI 生成的 Kotlin 绑定（构建产物，不入库）
 ```
 
 替代方案：复制一份 `engine-android`（拒绝——两套逻辑必然漂移，与"开源干净"直接冲突）；WebView + 本地 HTTP（拒绝——与 Q5 决策相反，移动端生命周期管理代价高）。
@@ -54,13 +54,13 @@ app/
 
 ### D3. 路径注入取代 `HOME` 推导
 
-引入 `EnginePaths { meetings_root, config_dir, cache_dir }` 与 `Platform` 枚举（`Desktop` / `Android`）。凡当前依赖 `HOME`/`config.rs` 默认值/`statvfs` 的代码改为接受注入值；桌面侧在 `main` 处按旧逻辑填充，行为不变。磁盘余量探测抽象为 trait，桌面用 `statvfs`，Android 用 `StatFs`（Kotlin 侧传入或 Rust 侧 `cfg` 实现）。
+引入 `EnginePaths { meetings_root, config_dir, cache_dir }` 与 `Platform` 枚举（`Desktop` / `Android`）。凡当前依赖 `HOME`/`config.rs` 默认值/`statvfs` 的代码改为接受注入值；桌面侧在 `main` 处按旧逻辑填充，行为不变。磁盘余量探测抽象为 trait；桌面与 Android 都走 `statvfs`（Android 侧由 `cfg(target_os = "android")` 的实现提供，不依赖 `desktop-shell` feature），调用方只认 trait。
 
 替代方案：保留 `HOME` 且在 Android 上伪造 `HOME` 环境变量（拒绝——`std::env::set_var` 是进程级全局副作用，且与 Android 沙箱语义不符）。
 
 ### D4. UniFFI 用 proc-macro 模式，接口只暴露"领域类型 + 一组用例函数"
 
-- 接口面：`engine_version()`、`capabilities()`、`EngineEnv(paths)`、`scan_library()`、`read_meeting(id)`、`parse_minutes(text)`、`parse_fishbone(text)`。
+- 接口面：`engine_version()`、`capabilities()`、`TingoEngine(data_root)`、`scan_library()`、`read_meeting(id)`、`parse_minutes(text)`、`parse_fishbone(text)`；Kotlin 侧由 `TingoEnginePort` 接口包一层，便于在 JVM 单测里替身化。
 - 数据类型：`MeetingSummary`、`MeetingDetail`、`Transcript`、`Sentence`、`MinutesDoc`、`Fishbone` 直接镜像 Rust 结构，不经过 JSON 字符串。
 - 错误：`#[derive(thiserror::Error)] enum EngineError` 映射到 Kotlin sealed class，类别为输入非法/资源缺失/格式损坏/权限不足/内部错误。
 - 异步：这次只暴露同步函数；长任务与取消在引入 ASR 的变更里再用 UniFFI `async` 补。
@@ -87,9 +87,9 @@ app/
 ### D8. 构建管线：Gradle 任务调用 cargo-ndk，产物落 `jniLibs`
 
 - `:app/build.gradle.kts` 注册 `cargoNdkBuild` 任务，`preBuild` 依赖它；`cargo ndk -t arm64-v8a -t x86_64 -o app/src/main/jniLibs build --release --no-default-features`
-- 模拟器用 `x86_64`（Apple Silicon 上 API 36 的 x86_64 镜像可用性待验证，备选 `arm64-v8a` 镜像）
+- 模拟器在 Apple Silicon 上直接跑 `arm64-v8a` 的 API 36 镜像（已验证）；CI 的 x86 机器跑 `x86_64`
 - UniFFI 绑定生成任务 `generateUniffiBindings` 依赖 `cargo build`（host 构建 `engine-ffi` 的 uniffi-bindgen）
-- 版本矩阵（待构建时锁定并写入 `libs.versions.toml`）：AGP 8.x 稳定版、Gradle 8.1x、Kotlin 2.x、Compose BOM 对应版本、JDK 21（`openjdk@21`）
+- 版本矩阵（构建时锁定，见 `libs.versions.toml`）：AGP 9.5.1（自带 Kotlin 支持，不再需要 `kotlin-android` 插件）、Gradle 9.6.0、Kotlin 2.4.21、Compose BOM 2026.09.00、JDK 21（`openjdk@21`）
 - 镜像：`~/.cargo/config.toml` 用 rsproxy；Gradle 用腾讯/阿里 Maven 镜像（`settings.gradle.kts` 的 `repositories`）
 
 ### D9. 测试策略（对应 TDD 的 seam）
@@ -111,7 +111,7 @@ app/
 - **[AGP/Kotlin/Compose 版本矩阵]** → 首次构建用 `libs.versions.toml` 集中管理，版本以"能构建通过"为准并写入文档。
 - **[网络不稳导致依赖拉取失败]** → 全部走国内镜像；NDK/AGP 首次下载记录到 README，避免重复踩坑。
 - **[模拟器无法验证音频链路]** → 本变更不涉及音频；录音与内录的验证留到对应变更，并明确要求真机冒烟。
-- **[双 ABI 增加构建时间]** → 日常只构建 `x86_64`（模拟器），打包用 `arm64-v8a`；由 Gradle 属性切换。
+- **[双 ABI 增加构建时间]** → 由 Gradle 属性 `tingoRustAbis` 切换：日常开发只构一个 ABI，发版前构两个；同一份清单注入 `BuildConfig.SUPPORTED_ABIS`，ABI 前置校验不再另写一份。
 - **[会议目录跨设备兼容性]** → 以桌面 v0.5.2 的真实产出作为夹具（fixtures）纳入测试，而非人工构造。
 
 ## Migration Plan
@@ -120,5 +120,18 @@ app/
 
 ## Open Questions
 
-- 模拟器镜像选择：API 36 的 `x86_64` 镜像在 Apple Silicon 上是否可用；不可用则改用 `arm64-v8a` 镜像（不影响规格与任务拆解，构建时验证）
+- 模拟器镜像选择：Apple Silicon 上用 API 36 `arm64-v8a` 镜像（已验证）。注意 Compose UI 测试在 API 37 上会因 `InputManager.getInstance` 被移除而崩溃，设备级测试固定用 API 36
 - UniFFI 版本与 Kotlin 协程支持程度：本变更只用同步接口，版本以能生成为准
+
+## 本变更未覆盖的部分（双轴审查后按实际情况记录）
+
+地基落地后按"规格 vs 代码"复核，以下几项规格要求本次没有真正满足，留给后续变更：
+
+1. **长任务的取消**（`engine-bridge`）。规格要求落地为长任务的调用可取消且在 1 秒内返回；当前桥接全是同步短调用（扫描 2 个目录、解析一份纪要都在毫秒级），没有取消机制。真正需要取消的是将来的录音转写与批量导出，届时为 FFI 增加 `async`/取消令牌。
+2. **时间戳定位播放**（`meeting-library-read`）。播放器随录音链路一起接入，现在点击时间戳没有可跳转的目标，回调已预留但实现为空。
+3. **引擎初始化失败的可关闭提示**。目前降级为"浏览不可用 + 重试"，没有列出受影响功能清单，也不可关闭。
+4. **参会人与目录大小未在界面展示**。`speakers` / `size_bytes` 已在契约里，界面尚未使用。
+5. **会议库根目录改选**（原任务 5.4 的后半段，已拆为 `5.4b`）。SAF 返回 `content://` URI，需先给引擎加一层存储抽象。
+
+同时，本变更相对初稿有两处主动调整：`compileSdk/targetSdk` 从 36 提到 37（AGP 9 的硬性要求），会议列表增加了搜索与"只看归档"（任务 5.1 提到的"筛选条件"需要一个真实入口）。
+

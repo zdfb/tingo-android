@@ -110,14 +110,21 @@ pub fn resolve(setting: &str, text: &str) -> Lang {
 /// 读请求头 X-Tingo-Lang，更新界面语言
 #[cfg(feature = "http-server")]
 pub fn remember(headers: &axum::http::HeaderMap) {
-    if let Some(lang) = headers.get(HEADER).and_then(|v| v.to_str().ok()).and_then(Lang::parse) {
+    if let Some(lang) = headers
+        .get(HEADER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(Lang::parse)
+    {
         set_ui(lang);
     }
 }
 
 /// axum 中间件：每个请求都过一遍 [`remember`]
 #[cfg(feature = "http-server")]
-pub async fn layer(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+pub async fn layer(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
     remember(req.headers());
     next.run(req).await
 }
@@ -142,8 +149,14 @@ mod tests {
         assert_eq!(Lang::parse(" zh "), Some(Lang::Zh));
         assert_eq!(Lang::parse("fr"), None);
         assert_eq!(detect("大家好，今天讨论 Kafka 迁移和 API 网关"), Lang::Zh);
-        assert_eq!(detect("Let's review the release plan for next week."), Lang::En);
-        assert_eq!(detect("We agreed: 上线 next Monday, then rollback plan"), Lang::En);
+        assert_eq!(
+            detect("Let's review the release plan for next week."),
+            Lang::En
+        );
+        assert_eq!(
+            detect("We agreed: 上线 next Monday, then rollback plan"),
+            Lang::En
+        );
         assert_eq!(detect(""), Lang::Zh);
         assert_eq!(resolve("en", "全是中文"), Lang::En);
         assert_eq!(resolve("zh", "all english"), Lang::Zh);
@@ -156,7 +169,10 @@ mod tests {
     #[test]
     fn header_switches_ui_language() {
         let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(header_switch_checks());
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(header_switch_checks());
     }
 
     #[cfg(feature = "http-server")]
@@ -171,7 +187,10 @@ mod tests {
                 if let Some(l) = lang {
                     req = req.header("X-Tingo-Lang", l);
                 }
-                let resp = app.oneshot(req.body(axum::body::Body::empty()).unwrap()).await.unwrap();
+                let resp = app
+                    .oneshot(req.body(axum::body::Body::empty()).unwrap())
+                    .await
+                    .unwrap();
                 let body = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
                 String::from_utf8(body.to_vec()).unwrap()
             }

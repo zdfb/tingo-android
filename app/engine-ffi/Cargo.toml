@@ -21,4 +21,3 @@ uniffi = { version = "0.32", features = ["cli"] }
 
 [dev-dependencies]
 tempfile = "3"
-tingo-engine = { path = "../engine", default-features = false }

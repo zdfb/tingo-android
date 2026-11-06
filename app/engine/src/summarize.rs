@@ -79,7 +79,8 @@ const REDUCE_PROMPT: &str = "下面是一场长会议按时间顺序分段提炼
 {notes}
 ";
 
-const SYSTEM_EN: &str = "You are a meticulous meeting secretary who turns colloquial meeting transcripts, \
+const SYSTEM_EN: &str =
+    "You are a meticulous meeting secretary who turns colloquial meeting transcripts, \
 speech-recognition errors and all, into clear, professional meeting minutes.";
 
 const MINUTES_PROMPT_EN: &str = "Below is the speech-recognition transcript of a meeting, one line per turn in the form \"[timestamp] Speaker: content\". Meeting date: {meeting_date}
@@ -257,7 +258,11 @@ fn calendar_hint_en(d: NaiveDate) -> String {
             md_en(d + Days::days(2))
         ),
     ];
-    for (name, offset) in [("This week", 0), ("Next week", 7), ("The week after next", 14)] {
+    for (name, offset) in [
+        ("This week", 0),
+        ("Next week", 7),
+        ("The week after next", 14),
+    ] {
         let days: Vec<String> = (0..7)
             .map(|i| {
                 let x = monday + Days::days(offset + i);
@@ -496,7 +501,10 @@ pub fn chat(
             continue;
         };
         let d = &v["choices"][0]["delta"];
-        if let Some(r) = d["reasoning_content"].as_str().or_else(|| d["reasoning"].as_str()) {
+        if let Some(r) = d["reasoning_content"]
+            .as_str()
+            .or_else(|| d["reasoning"].as_str())
+        {
             if !r.is_empty() {
                 thought += r.chars().count();
                 on_think(thought);
@@ -541,14 +549,29 @@ pub enum AnthropicEvent {
 }
 
 pub fn parse_anthropic_event(data: &str) -> AnthropicEvent {
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else { return AnthropicEvent::Other };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
+        return AnthropicEvent::Other;
+    };
     match v["type"].as_str() {
         Some("content_block_delta") => match v["delta"]["type"].as_str() {
-            Some("text_delta") => AnthropicEvent::Text(v["delta"]["text"].as_str().unwrap_or("").to_string()),
-            Some("thinking_delta") => AnthropicEvent::Thinking(v["delta"]["thinking"].as_str().unwrap_or("").chars().count()),
+            Some("text_delta") => {
+                AnthropicEvent::Text(v["delta"]["text"].as_str().unwrap_or("").to_string())
+            }
+            Some("thinking_delta") => AnthropicEvent::Thinking(
+                v["delta"]["thinking"]
+                    .as_str()
+                    .unwrap_or("")
+                    .chars()
+                    .count(),
+            ),
             _ => AnthropicEvent::Other,
         },
-        Some("error") => AnthropicEvent::Error(v["error"]["message"].as_str().unwrap_or("unknown error").to_string()),
+        Some("error") => AnthropicEvent::Error(
+            v["error"]["message"]
+                .as_str()
+                .unwrap_or("unknown error")
+                .to_string(),
+        ),
         Some("message_stop") => AnthropicEvent::Stop,
         _ => AnthropicEvent::Other,
     }
@@ -616,7 +639,9 @@ fn chat_anthropic(
             )
             .to_string()
         })?;
-        let Some(data) = line.strip_prefix("data:").map(str::trim) else { continue };
+        let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+            continue;
+        };
         match parse_anthropic_event(data) {
             AnthropicEvent::Text(t) if !t.is_empty() => {
                 raw.push_str(&t);
@@ -631,7 +656,11 @@ fn chat_anthropic(
                 on_think(thought);
             }
             AnthropicEvent::Error(m) => {
-                return Err(tr(&format!("大模型返回错误：{m}"), &format!("The language model returned an error: {m}")).into())
+                return Err(tr(
+                    &format!("大模型返回错误：{m}"),
+                    &format!("The language model returned an error: {m}"),
+                )
+                .into())
             }
             AnthropicEvent::Stop => break,
             _ => {}
@@ -674,7 +703,11 @@ pub fn minutes_lang(setting: &str, tr: &Transcript) -> Lang {
 
 /// 只看说的话，不看说话人名（"说话人1"会把英文会议算成中文）
 fn transcript_words(tr: &Transcript) -> String {
-    tr.sentences.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("\n")
+    tr.sentences
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// `lang_setting` 是配置里的纪要语言（auto | zh | en）。
@@ -731,7 +764,10 @@ pub fn summarize(
                 Lang::Zh => format!("### 第 {k} 段"),
                 Lang::En => format!("### Part {k}"),
             };
-            notes.push(format!("{head}\n{}", chat(cfg, pr.system, &p, false, |_| {}, |_| {})?));
+            notes.push(format!(
+                "{head}\n{}",
+                chat(cfg, pr.system, &p, false, |_| {}, |_| {})?
+            ));
         }
         (hooks.on_stage)(i18n::tr("合并成纪要", "Merging into minutes"));
         let instructions = minutes_prompt
@@ -750,7 +786,11 @@ pub fn summarize(
 
 /// 长会议的进度文字（界面靠它认出分段进度）：分段提炼 2/5 / Summarizing part 2/5
 fn tr_stage(i: usize, n: usize) -> String {
-    tr(&format!("分段提炼 {i}/{n}"), &format!("Summarizing part {i}/{n}")).to_string()
+    tr(
+        &format!("分段提炼 {i}/{n}"),
+        &format!("Summarizing part {i}/{n}"),
+    )
+    .to_string()
 }
 
 /// 会议时间、时长、参会人由程序填，不让模型猜。
@@ -767,8 +807,14 @@ fn with_meta(body: &str, tr: &Transcript, day: &str, lang: Lang) -> String {
         names.join(lang.pick("、", ", "))
     };
     let meta = match lang {
-        Lang::Zh => format!("- 日期：{day}\n- 时长：{}\n- 参会人：{names}", fmt_ts(tr.duration_ms)),
-        Lang::En => format!("- Date: {day}\n- Duration: {}\n- Participants: {names}", fmt_ts(tr.duration_ms)),
+        Lang::Zh => format!(
+            "- 日期：{day}\n- 时长：{}\n- 参会人：{names}",
+            fmt_ts(tr.duration_ms)
+        ),
+        Lang::En => format!(
+            "- Date: {day}\n- Duration: {}\n- Participants: {names}",
+            fmt_ts(tr.duration_ms)
+        ),
     };
     let (first, rest) = body.split_once('\n').unwrap_or((&body, ""));
     let (title, rest) = if first.starts_with("# ") {
@@ -799,22 +845,40 @@ mod tests {
 
     #[test]
     fn anthropic_url_and_events() {
-        assert_eq!(anthropic_v1("https://api.anthropic.com"), "https://api.anthropic.com/v1");
-        assert_eq!(anthropic_v1("https://api.anthropic.com/v1/"), "https://api.anthropic.com/v1");
         assert_eq!(
-            parse_anthropic_event(r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"你好"}}"#),
+            anthropic_v1("https://api.anthropic.com"),
+            "https://api.anthropic.com/v1"
+        );
+        assert_eq!(
+            anthropic_v1("https://api.anthropic.com/v1/"),
+            "https://api.anthropic.com/v1"
+        );
+        assert_eq!(
+            parse_anthropic_event(
+                r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"你好"}}"#
+            ),
             AnthropicEvent::Text("你好".into())
         );
         assert_eq!(
-            parse_anthropic_event(r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"想一想"}}"#),
+            parse_anthropic_event(
+                r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"想一想"}}"#
+            ),
             AnthropicEvent::Thinking(3)
         );
         assert_eq!(
-            parse_anthropic_event(r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#),
+            parse_anthropic_event(
+                r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#
+            ),
             AnthropicEvent::Error("Overloaded".into())
         );
-        assert_eq!(parse_anthropic_event(r#"{"type":"message_stop"}"#), AnthropicEvent::Stop);
-        assert_eq!(parse_anthropic_event(r#"{"type":"ping"}"#), AnthropicEvent::Other);
+        assert_eq!(
+            parse_anthropic_event(r#"{"type":"message_stop"}"#),
+            AnthropicEvent::Stop
+        );
+        assert_eq!(
+            parse_anthropic_event(r#"{"type":"ping"}"#),
+            AnthropicEvent::Other
+        );
     }
     use crate::transcript::Sentence;
 
@@ -924,7 +988,12 @@ mod tests {
         // 结构与中文模板一一对应
         let heads = |t: &str| t.lines().filter(|l| l.starts_with('#')).count();
         assert_eq!(heads(MINUTES_PROMPT_EN), heads(MINUTES_PROMPT));
-        for t in [MINUTES_PROMPT, MINUTES_PROMPT_EN, CHUNK_PROMPT, CHUNK_PROMPT_EN] {
+        for t in [
+            MINUTES_PROMPT,
+            MINUTES_PROMPT_EN,
+            CHUNK_PROMPT,
+            CHUNK_PROMPT_EN,
+        ] {
             assert!(t.contains("{glossary}{translate}") && t.contains("{transcript}"));
         }
         // 术语表放在全文最后（鱼骨图之后），合并长会议时的格式要求里也有
@@ -937,39 +1006,77 @@ mod tests {
         }
         assert!(glossary(&["青鸾".into()]).starts_with("\n9. "));
         // 合并时截取格式要求的分隔只出现一次
-        assert_eq!(MINUTES_PROMPT_EN.matches(prompts(Lang::En).transcript_marker).count(), 1);
-        assert_eq!(MINUTES_PROMPT.matches(prompts(Lang::Zh).transcript_marker).count(), 1);
-        assert!(glossary_in(&["Kafka".into(), "Atlas".into()], Lang::En).contains(": Kafka, Atlas."));
+        assert_eq!(
+            MINUTES_PROMPT_EN
+                .matches(prompts(Lang::En).transcript_marker)
+                .count(),
+            1
+        );
+        assert_eq!(
+            MINUTES_PROMPT
+                .matches(prompts(Lang::Zh).transcript_marker)
+                .count(),
+            1
+        );
+        assert!(
+            glossary_in(&["Kafka".into(), "Atlas".into()], Lang::En).contains(": Kafka, Atlas.")
+        );
         assert_eq!(translate_note(Lang::Zh, Lang::Zh), "");
         assert_eq!(translate_note(Lang::En, Lang::En), "");
-        assert!(translate_note(Lang::En, Lang::Zh).contains("write the minutes in English, translating as needed"));
+        assert!(translate_note(Lang::En, Lang::Zh)
+            .contains("write the minutes in English, translating as needed"));
         assert!(translate_note(Lang::Zh, Lang::En).contains("纪要一律用中文撰写"));
     }
 
     #[test]
     fn english_dates_and_meta() {
-        assert_eq!(day_line(d(2026, 10, 28), Lang::En), "2026-10-28 (Wednesday)");
+        assert_eq!(
+            day_line(d(2026, 10, 28), Lang::En),
+            "2026-10-28 (Wednesday)"
+        );
         assert_eq!(day_line(d(2026, 10, 28), Lang::Zh), "2026-10-28（星期三）");
         let cal = calendar_hint_in(d(2026, 11, 2), Lang::En);
         assert!(cal.contains("- Today is Nov 2 (Monday); tomorrow is Nov 3"));
         assert!(cal.contains("- Next week: Mon Nov 9, Tue Nov 10"));
-        assert_eq!(calendar_hint_in(d(2026, 11, 2), Lang::Zh), calendar_hint(d(2026, 11, 2)));
+        assert_eq!(
+            calendar_hint_in(d(2026, 11, 2), Lang::Zh),
+            calendar_hint(d(2026, 11, 2))
+        );
         let mut tr = Transcript {
             source: "m.wav".into(),
             duration_ms: 7_200_000 - 1000 * 3600,
             speaker_names: Default::default(),
             sentences: vec![
-                Sentence { speaker: 0, start_ms: 0, end_ms: 900, text: "Let's ship it.".into() },
-                Sentence { speaker: 1, start_ms: 1000, end_ms: 1900, text: "OK.".into() },
+                Sentence {
+                    speaker: 0,
+                    start_ms: 0,
+                    end_ms: 900,
+                    text: "Let's ship it.".into(),
+                },
+                Sentence {
+                    speaker: 1,
+                    start_ms: 1000,
+                    end_ms: 1900,
+                    text: "OK.".into(),
+                },
             ],
         };
         tr.rename(&["Lin Zhou".into()]);
         let tr = tr.localized(Lang::En);
-        let out = with_meta("# Weekly sync\n\n## Summary\nShip it.", &tr, "2026-10-28 (Wednesday)", Lang::En);
+        let out = with_meta(
+            "# Weekly sync\n\n## Summary\nShip it.",
+            &tr,
+            "2026-10-28 (Wednesday)",
+            Lang::En,
+        );
         assert!(out.starts_with(
             "# Weekly sync\n\n- Date: 2026-10-28 (Wednesday)\n- Duration: 1:00:00\n- Participants: Lin Zhou, Speaker 2\n\n## Summary"
         ));
-        assert!(with_meta("no title", &Transcript::default(), "x", Lang::En).starts_with("# Meeting Minutes\n\n- Date: x\n- Duration: 00:00\n- Participants: None"));
+        assert!(
+            with_meta("no title", &Transcript::default(), "x", Lang::En).starts_with(
+                "# Meeting Minutes\n\n- Date: x\n- Duration: 00:00\n- Participants: None"
+            )
+        );
     }
 
     #[test]
@@ -978,12 +1085,20 @@ mod tests {
             sentences: texts
                 .iter()
                 .enumerate()
-                .map(|(i, t)| Sentence { speaker: i % 2, start_ms: i as u64 * 1000, end_ms: i as u64 * 1000 + 900, text: t.to_string() })
+                .map(|(i, t)| Sentence {
+                    speaker: i % 2,
+                    start_ms: i as u64 * 1000,
+                    end_ms: i as u64 * 1000 + 900,
+                    text: t.to_string(),
+                })
                 .collect(),
             ..Default::default()
         };
         let zh = mk(&["下周五交付 API 网关。", "好，Kafka 那边我来跟。"]);
-        let en = mk(&["We will ship the gateway next Friday.", "Sounds good, I'll own Kafka."]);
+        let en = mk(&[
+            "We will ship the gateway next Friday.",
+            "Sounds good, I'll own Kafka.",
+        ]);
         assert_eq!(minutes_lang("auto", &zh), Lang::Zh);
         assert_eq!(minutes_lang("auto", &en), Lang::En); // 默认名"说话人1"不算进去
         assert_eq!(minutes_lang("en", &zh), Lang::En);

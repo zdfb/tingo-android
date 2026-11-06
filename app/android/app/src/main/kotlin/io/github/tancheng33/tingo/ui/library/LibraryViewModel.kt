@@ -2,7 +2,6 @@ package io.github.tancheng33.tingo.ui.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.tancheng33.tingo.data.LibrarySnapshot
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.engine.FailureKind
@@ -51,7 +50,7 @@ class LibraryViewModel(
     val state: StateFlow<LibraryUiState> = _state.asStateFlow()
 
     /** 上一次成功的快照，用于刷新失败时保留界面内容。 */
-    private var lastSnapshot: LibrarySnapshot? = null
+    private var lastSnapshot: List<MeetingCard>? = null
     private var query: String = ""
     private var archivedOnly: Boolean = false
 
@@ -83,8 +82,8 @@ class LibraryViewModel(
         lastSnapshot?.let { _state.value = render(it) }
     }
 
-    private fun render(snapshot: LibrarySnapshot): LibraryUiState {
-        val all = snapshot.items
+    private fun render(snapshot: List<MeetingCard>): LibraryUiState {
+        val all = snapshot
         if (all.isEmpty()) return LibraryUiState.Empty
 
         val visible = all.filter { card ->

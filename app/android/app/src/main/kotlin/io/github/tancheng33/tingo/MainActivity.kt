@@ -46,7 +46,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             // calculateWindowSizeClass 是 @Composable，必须在组合内计算
-            val wide = calculateWindowSizeClass(this@MainActivity).widthSizeClass != WindowWidthSizeClass.Compact
+            // 规格：小于 840dp 单栏，840dp 起双栏——正好是 Expanded 的下界，所以只认 Expanded。
+            val wide = calculateWindowSizeClass(this@MainActivity).widthSizeClass == WindowWidthSizeClass.Expanded
             TingoTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     if (!AbiCheck.isSupported()) {

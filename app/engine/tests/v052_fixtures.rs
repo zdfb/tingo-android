@@ -5,7 +5,10 @@
 
 use std::path::{Path, PathBuf};
 
-use tingo_engine::{fishbone, meetings, transcript::{fmt_ts, Transcript}};
+use tingo_engine::{
+    fishbone, meetings,
+    transcript::{fmt_ts, Transcript},
+};
 
 const CHINESE_ID: &str = "2026-10-28_1430_官网注册转化复盘";
 const ENGLISH_ID: &str = "2026-10-27_0930_Website_registration_post-mortem";
@@ -35,10 +38,14 @@ fn chinese_meeting_keeps_desktop_fields() {
     assert_eq!(m.duration, "02:00");
     assert_eq!(m.speakers, vec!["林舟", "陈默", "苏晴", "周远"]);
     assert_eq!(m.tags, vec!["转化", "项目A"]);
-    assert_eq!((m.has_minutes, m.has_transcript, m.has_audio, m.archived), (true, true, true, false));
+    assert_eq!(
+        (m.has_minutes, m.has_transcript, m.has_audio, m.archived),
+        (true, true, true, false)
+    );
     assert!(m.size_bytes > 0);
     // 目录里的 录音.m4a 被认成这场会议的录音
-    let audio = meetings::find_audio(&meeting(CHINESE_ID)).and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+    let audio = meetings::find_audio(&meeting(CHINESE_ID))
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
     assert_eq!(audio.as_deref(), Some(meetings::AUDIO));
 }
 
@@ -46,10 +53,18 @@ fn chinese_meeting_keeps_desktop_fields() {
 #[test]
 fn english_meeting_without_audio() {
     let m = meetings::summary(&meeting(ENGLISH_ID));
-    assert_eq!(m.title, "Post-mortem on the Website Registration Conversion Drop"); // 没有 meta.json 时取纪要第一行
+    assert_eq!(
+        m.title,
+        "Post-mortem on the Website Registration Conversion Drop"
+    ); // 没有 meta.json 时取纪要第一行
     assert_eq!((m.date.as_str(), m.time.as_str()), ("2026-10-27", "09:30"));
-    assert!(m.summary.starts_with("The team reviewed the decline in website registration conversion"));
-    assert_eq!((m.has_minutes, m.has_transcript, m.has_audio), (true, true, false));
+    assert!(m
+        .summary
+        .starts_with("The team reviewed the decline in website registration conversion"));
+    assert_eq!(
+        (m.has_minutes, m.has_transcript, m.has_audio),
+        (true, true, false)
+    );
     assert!(meetings::find_audio(&meeting(ENGLISH_ID)).is_none());
 }
 
@@ -61,13 +76,22 @@ fn transcript_json_round_trips() {
     assert_eq!(tr.sentences.len(), 21);
     assert_eq!(fmt_ts(tr.duration_ms), "02:00");
     assert_eq!(tr.speakers_in_order(), vec![0, 1, 2, 3]);
-    assert_eq!((tr.name_of(0).as_str(), tr.name_of(1).as_str()), ("林舟", "陈默"));
+    assert_eq!(
+        (tr.name_of(0).as_str(), tr.name_of(1).as_str()),
+        ("林舟", "陈默")
+    );
     assert!(tr.sentences[0].text.contains("官网注册转化"));
 
-    let copy = std::env::temp_dir().join(format!("tingo-fixture-{}-transcript.json", std::process::id()));
+    let copy = std::env::temp_dir().join(format!(
+        "tingo-fixture-{}-transcript.json",
+        std::process::id()
+    ));
     tr.save(&copy).unwrap();
     let reloaded = Transcript::load(&copy).unwrap();
-    assert_eq!(serde_json::to_value(&reloaded).unwrap(), serde_json::to_value(&tr).unwrap());
+    assert_eq!(
+        serde_json::to_value(&reloaded).unwrap(),
+        serde_json::to_value(&tr).unwrap()
+    );
     std::fs::remove_file(copy).ok();
 }
 

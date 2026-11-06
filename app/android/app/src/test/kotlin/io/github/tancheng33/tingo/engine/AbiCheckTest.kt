@@ -1,19 +1,30 @@
 package io.github.tancheng33.tingo.engine
 
+import io.github.tancheng33.tingo.BuildConfig
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * ABI 前置校验。
+ *
+ * 期望值取自构建期注入的 `SUPPORTED_ABIS`，而不是写死："这个构建打了哪些 ABI"
+ * 是 Gradle 的属性（`-PtingoRustAbis`），测试跟着它走才不会在单 ABI 构建里假失败。
+ */
 class AbiCheckTest {
 
     @Test
-    fun arm64DeviceIsSupported() {
-        assertTrue(AbiCheck.isSupported(listOf("arm64-v8a", "armeabi-v7a", "armeabi")))
+    fun everyPackagedAbiIsSupported() {
+        assertTrue(AbiCheck.supportedAbis.isNotEmpty())
+        for (abi in BuildConfig.SUPPORTED_ABIS.split(",")) {
+            assertTrue("packaged abi $abi should be supported", AbiCheck.isSupported(listOf(abi)))
+        }
     }
 
     @Test
-    fun emulatorX8664IsSupported() {
-        assertTrue(AbiCheck.isSupported(listOf("x86_64", "x86")))
+    fun deviceAbiListOrderDoesNotMatter() {
+        val packaged = BuildConfig.SUPPORTED_ABIS.split(",").first()
+        assertTrue(AbiCheck.isSupported(listOf("armeabi-v7a", packaged, "armeabi")))
     }
 
     @Test
@@ -23,7 +34,7 @@ class AbiCheckTest {
     }
 
     @Test
-    fun arm64PreferredOrderDoesNotMatter() {
-        assertTrue(AbiCheck.isSupported(listOf("x86", "armeabi-v7a", "arm64-v8a")))
+    fun unknownAbiIsUnsupported() {
+        assertFalse(AbiCheck.isSupported(listOf("riscv64")))
     }
 }

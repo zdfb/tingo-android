@@ -19,7 +19,7 @@ pub enum SectionKind {
 
 impl SectionKind {
     /// 章节标题（去掉两侧空白、不含 `## `）→ 种类；不认识的就是 [`SectionKind::Other`]。
-    pub fn of(heading: &str) -> SectionKind {
+    pub fn from_heading(heading: &str) -> SectionKind {
         match heading.trim() {
             "一句话总结" | "Summary" => SectionKind::OneLiner,
             "议题与讨论" | "Discussion" => SectionKind::Discussion,
@@ -33,7 +33,7 @@ impl SectionKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Section {
+pub struct MinutesSection {
     pub kind: SectionKind,
     /// 原文标题，去掉两侧空白
     pub heading: String,
@@ -42,16 +42,16 @@ pub struct Section {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Doc {
+pub struct MinutesDoc {
     /// H1 标题；纪要没有 H1 时为空串
     pub title: String,
-    pub sections: Vec<Section>,
+    pub sections: Vec<MinutesSection>,
 }
 
 /// 解析纪要。纯函数，不读写文件。
-pub fn parse(md: &str) -> Doc {
+pub fn parse(md: &str) -> MinutesDoc {
     let mut title = String::new();
-    let mut sections: Vec<Section> = Vec::new();
+    let mut sections: Vec<MinutesSection> = Vec::new();
     let mut current: Option<(String, Vec<&str>)> = None;
 
     for line in md.lines() {
@@ -72,12 +72,16 @@ pub fn parse(md: &str) -> Doc {
     if let Some((heading, body)) = current {
         sections.push(section(heading, &body));
     }
-    Doc { title, sections }
+    MinutesDoc { title, sections }
 }
 
-fn section(heading: String, lines: &[&str]) -> Section {
+fn section(heading: String, lines: &[&str]) -> MinutesSection {
     let body = lines.join("\n").trim_matches('\n').trim_end().to_string();
-    Section { kind: SectionKind::of(&heading), heading, body }
+    MinutesSection {
+        kind: SectionKind::from_heading(&heading),
+        heading,
+        body,
+    }
 }
 
 #[cfg(test)]
@@ -167,21 +171,38 @@ Conversion fell from 12% to 8.5%.
             ]
         );
         let headings: Vec<&str> = doc.sections.iter().map(|s| s.heading.as_str()).collect();
-        assert_eq!(headings, vec!["一句话总结", "议题与讨论", "决议", "待办", "待定问题与风险", "原因分析"]);
+        assert_eq!(
+            headings,
+            vec![
+                "一句话总结",
+                "议题与讨论",
+                "决议",
+                "待办",
+                "待定问题与风险",
+                "原因分析"
+            ]
+        );
         // H1 与列表之间那几行元信息不属于任何 `##` 章节
         assert!(!doc.sections[0].body.contains("日期"));
         assert_eq!(doc.sections[0].body, "上个月转化率从12%降至8.5%。");
         // `###` 子标题与列表原样留在正文里
-        assert!(doc.sections[1].body.starts_with("### 1. 转化率下降的数据表现\n- 注册转化率从12%降至8.5%（[00:11]）"));
+        assert!(doc.sections[1]
+            .body
+            .starts_with("### 1. 转化率下降的数据表现\n- 注册转化率从12%降至8.5%（[00:11]）"));
         assert!(doc.sections[1].body.contains("\n\n### 2. 注册页改版"));
         // 表格原样保留
-        assert!(doc.sections[3].body.starts_with("| 事项 | 负责人 | 截止时间 | 出处 |"));
+        assert!(doc.sections[3]
+            .body
+            .starts_with("| 事项 | 负责人 | 截止时间 | 出处 |"));
     }
 
     #[test]
     fn english_minutes_map_to_the_same_kinds() {
         let doc = parse(ENGLISH);
-        assert_eq!(doc.title, "Post-mortem on the Website Registration Conversion Drop");
+        assert_eq!(
+            doc.title,
+            "Post-mortem on the Website Registration Conversion Drop"
+        );
         let kinds: Vec<SectionKind> = doc.sections.iter().map(|s| s.kind.clone()).collect();
         assert_eq!(
             kinds,
@@ -202,7 +223,11 @@ Conversion fell from 12% to 8.5%.
     #[test]
     fn code_blocks_stay_in_root_cause_body() {
         let doc = parse(CHINESE);
-        let root = doc.sections.iter().find(|s| s.kind == SectionKind::RootCause).unwrap();
+        let root = doc
+            .sections
+            .iter()
+            .find(|s| s.kind == SectionKind::RootCause)
+            .unwrap();
         assert!(root.body.starts_with("```fishbone"));
         assert!(root.body.contains("```terms"));
         assert!(root.body.ends_with("```"));
@@ -242,16 +267,35 @@ Conversion fell from 12% to 8.5%.
 
     #[test]
     fn empty_input_gives_empty_doc() {
-        assert_eq!(parse(""), Doc { title: String::new(), sections: Vec::new() });
-        assert_eq!(parse("\n\n   \n"), Doc { title: String::new(), sections: Vec::new() });
+        assert_eq!(
+            parse(""),
+            MinutesDoc {
+                title: String::new(),
+                sections: Vec::new()
+            }
+        );
+        assert_eq!(
+            parse("\n\n   \n"),
+            MinutesDoc {
+                title: String::new(),
+                sections: Vec::new()
+            }
+        );
         // 只有 H1 的纪要
-        assert_eq!(parse("# 只有标题\n"), Doc { title: "只有标题".into(), sections: Vec::new() });
+        assert_eq!(
+            parse("# 只有标题\n"),
+            MinutesDoc {
+                title: "只有标题".into(),
+                sections: Vec::new()
+            }
+        );
     }
 
     /// 标题两侧的空格不影响识别（手工编辑很容易带出来）
     #[test]
     fn headings_tolerate_surrounding_spaces() {
-        let md = "#   周会  \n\n##   一句话总结   \n  定了上线时间。  \n\n##   Action Items  \n| a |\n";
+        let md =
+            "#   周会  \n\n##   一句话总结   \n  定了上线时间。  \n\n##   Action Items  \n| a |\n";
         let doc = parse(md);
         assert_eq!(doc.title, "周会");
         assert_eq!(doc.sections[0].heading, "一句话总结");
@@ -265,12 +309,20 @@ Conversion fell from 12% to 8.5%.
     #[test]
     fn parses_v052_fixture_minutes() {
         let zh = include_str!("../tests/fixtures/2026-10-28_1430_官网注册转化复盘/纪要.md");
-        let en = include_str!("../tests/fixtures/2026-10-27_0930_Website_registration_post-mortem/纪要.md");
+        let en = include_str!(
+            "../tests/fixtures/2026-10-27_0930_Website_registration_post-mortem/纪要.md"
+        );
         assert_eq!(parse(zh).title, "官网注册转化率下降复盘会");
         let doc = parse(en);
-        assert_eq!(doc.title, "Post-mortem on the Website Registration Conversion Drop");
+        assert_eq!(
+            doc.title,
+            "Post-mortem on the Website Registration Conversion Drop"
+        );
         assert!(doc.sections.iter().any(|s| s.kind == SectionKind::OneLiner));
         assert!(doc.sections.iter().any(|s| s.kind == SectionKind::Actions));
-        assert!(doc.sections.iter().any(|s| s.kind == SectionKind::RootCause));
+        assert!(doc
+            .sections
+            .iter()
+            .any(|s| s.kind == SectionKind::RootCause));
     }
 }

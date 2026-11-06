@@ -10,7 +10,7 @@ Android 平台的约束与桌面根本不同（无法录制第三方 App 的 VoI
 
 ## What Changes
 
-- 新增 `app/android/` Gradle 工程：Kotlin + Jetpack Compose + Material 3，`minSdk 26`、仅 `arm64-v8a`、`compileSdk 36` / `targetSdk 36`
+- 新增 `app/android/` Gradle 工程：Kotlin + Jetpack Compose + Material 3，`minSdk 26`、`compileSdk 37` / `targetSdk 37`、打包 `arm64-v8a`（真机）与 `x86_64`（模拟器）两个 ABI
 - 新增 `app/engine-ffi/` crate：UniFFI 边界层，**BREAKING**（对 Rust workspace 而言）地把 `tingo-engine` 拆成"可移植核心"与"桌面专属"两部分，通过 cargo feature 隔离：
   - `http-server`（axum，桌面专用）、`sherpa-asr`（sherpa-onnx，桌面专用）、`desktop-shell`（子进程/`/usr/bin/open`/statvfs 等）
   - Android 侧只启用空 feature 集，得到纯逻辑库

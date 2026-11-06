@@ -34,7 +34,7 @@ class MeetingRepositoryTest {
                 )
             },
         )
-        val cards = MeetingRepository(engine, dispatcher).load().items
+        val cards = MeetingRepository(engine, dispatcher).load()
 
         assertEquals(1, cards.size)
         val card = cards.single()
@@ -59,7 +59,7 @@ class MeetingRepositoryTest {
                 )
             },
         )
-        val ids = MeetingRepository(engine, dispatcher).load().items.map { it.id }
+        val ids = MeetingRepository(engine, dispatcher).load().map { it.id }
         assertEquals(listOf("b", "a"), ids)
     }
 
@@ -73,7 +73,7 @@ class MeetingRepositoryTest {
                 )
             },
         )
-        val cards = MeetingRepository(engine, dispatcher).load().items
+        val cards = MeetingRepository(engine, dispatcher).load()
 
         assertEquals(2, cards.size)
         assertTrue(cards.single { it.id == "broken" }.unreadable)

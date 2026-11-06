@@ -161,6 +161,12 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    defaultConfig {
+        // 把打包的 ABI 清单注入代码：AbiCheck 因此不需要自己再写一份
+        buildConfigField("String", "SUPPORTED_ABIS", "\"${rustAbis.joinToString(",")}\"")
     }
 
     sourceSets {

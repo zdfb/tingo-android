@@ -26,11 +26,11 @@ use crate::config::{self, Config};
 use crate::disk::DiskSpace;
 use crate::i18n::{self, tr, Lang};
 use crate::meetings::{self, AUDIO, MINUTES, TRANSCRIPT_JSON};
-use crate::{fishbone, obsidian};
 use crate::record::{self, Recorder};
 use crate::summarize::{self, Hooks};
 use crate::transcript::{fmt_ts, Transcript};
 use crate::{audio, autostop, models, push, speakers, terms, update};
+use crate::{fishbone, obsidian};
 
 pub struct Options {
     pub root: PathBuf,
@@ -67,7 +67,10 @@ impl Job {
     fn new(kind: &str, meeting: &str, state: &str) -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Self {
-            id: format!("j{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
+            id: format!(
+                "j{}",
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ),
             kind: kind.into(),
             meeting: meeting.into(),
             state: state.into(),
@@ -137,11 +140,17 @@ fn server_error(msg: impl Into<String>) -> ApiError {
 
 /// 会议有进行中的任务（录音、转写、生成纪要……）时的提示
 fn busy_msg() -> &'static str {
-    tr("这场会议正在处理，等它完成", "This meeting is being processed. Wait for it to finish")
+    tr(
+        "这场会议正在处理，等它完成",
+        "This meeting is being processed. Wait for it to finish",
+    )
 }
 
 fn not_found() -> ApiError {
-    ApiError(StatusCode::NOT_FOUND, tr("找不到这场会议", "Meeting not found").into())
+    ApiError(
+        StatusCode::NOT_FOUND,
+        tr("找不到这场会议", "Meeting not found").into(),
+    )
 }
 
 impl AppState {
@@ -160,9 +169,13 @@ impl AppState {
     }
 
     /// Keep requests from starting new work between the idle check and application restart.
-    pub fn prepare_app_update(self: &Arc<Self>) -> Result<tokio::sync::OwnedRwLockWriteGuard<()>, String> {
-        let guard = self.storage_gate.clone().try_write_owned()
-            .map_err(|_| "正在处理请求或切换目录，请稍后再更新 / Work is in progress; try again shortly".to_string())?;
+    pub fn prepare_app_update(
+        self: &Arc<Self>,
+    ) -> Result<tokio::sync::OwnedRwLockWriteGuard<()>, String> {
+        let guard = self.storage_gate.clone().try_write_owned().map_err(|_| {
+            "正在处理请求或切换目录，请稍后再更新 / Work is in progress; try again shortly"
+                .to_string()
+        })?;
         if self.jobs.lock().unwrap().iter().any(Job::busy) {
             return Err("请先结束录音，并等待转写、纪要及下载任务完成 / Finish recording and wait for active tasks before updating".into());
         }
@@ -187,8 +200,16 @@ impl AppState {
         let kind = paths.active();
         let cfg = self.config();
         // Fun-ASR-Nano 在加载时就要拿到热词；SenseVoice、Fun-ASR-Nano 加载时定下会议语言
-        let hot = if kind == AsrKind::FunAsrNano { cfg.hotwords } else { Vec::new() };
-        let lang = if kind.uses_language() { cfg.asr_language } else { String::new() };
+        let hot = if kind == AsrKind::FunAsrNano {
+            cfg.hotwords
+        } else {
+            Vec::new()
+        };
+        let lang = if kind.uses_language() {
+            cfg.asr_language
+        } else {
+            String::new()
+        };
         let current = || {
             self.engine
                 .lock()
@@ -215,7 +236,11 @@ impl AppState {
             .unwrap_or(4);
         *self.engine.lock().unwrap() = None; // 先放掉旧模型的内存
         let e = Engine::load(&paths, kind, &hot, &lang, threads)?;
-        let e = Arc::new(if kind == AsrKind::AppleSpeech { e.with_apple_helper(&self.opt.recorder_bin)? } else { e });
+        let e = Arc::new(if kind == AsrKind::AppleSpeech {
+            e.with_apple_helper(&self.opt.recorder_bin)?
+        } else {
+            e
+        });
         *self.engine.lock().unwrap() = Some(e.clone());
         Ok(e)
     }
@@ -235,7 +260,11 @@ impl AppState {
 
     /// 这场会议有没有进行中的任务（模型下载不算，它的 meeting 字段是模型编号）
     fn meeting_busy(&self, id: &str) -> bool {
-        self.jobs.lock().unwrap().iter().any(|j| j.busy() && j.kind != "models" && j.meeting == id)
+        self.jobs
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|j| j.busy() && j.kind != "models" && j.meeting == id)
     }
 
     /// 会议文件夹，且这场会议没有进行中的任务（否则 409）
@@ -273,7 +302,10 @@ impl AppState {
         let files = meetings::audio_files(&dir);
         if files.is_empty() {
             if required {
-                return Err(bad(tr("这场会议没有录音文件", "This meeting has no recording")));
+                return Err(bad(tr(
+                    "这场会议没有录音文件",
+                    "This meeting has no recording",
+                )));
             }
             return Ok(0);
         }
@@ -283,7 +315,9 @@ impl AppState {
     /// 改 meta.json：只改请求体里给了的字段（title 为 null 或空串 = 恢复默认标题），返回更新后的列表项
     fn update_meta(&self, id: &str, body: &Value) -> ApiResult<Value> {
         let dir = self.folder(id)?;
-        let obj = body.as_object().ok_or_else(|| bad(tr("请求格式不对", "Invalid request")))?;
+        let obj = body
+            .as_object()
+            .ok_or_else(|| bad(tr("请求格式不对", "Invalid request")))?;
         let mut meta = meetings::read_meta(&dir);
         if let Some(t) = obj.get("title") {
             meta.title = match t {
@@ -293,12 +327,20 @@ impl AppState {
             };
         }
         if let Some(t) = obj.get("tags") {
-            let tags: Option<Vec<&str>> = t.as_array().and_then(|a| a.iter().map(Value::as_str).collect());
-            let tags = tags.ok_or_else(|| bad(tr("标签要是文字列表", "Tags must be a list of text")))?;
+            let tags: Option<Vec<&str>> = t
+                .as_array()
+                .and_then(|a| a.iter().map(Value::as_str).collect());
+            let tags =
+                tags.ok_or_else(|| bad(tr("标签要是文字列表", "Tags must be a list of text")))?;
             meta.tags = meetings::normalize_tags(&tags);
         }
         if let Some(a) = obj.get("archived") {
-            meta.archived = a.as_bool().ok_or_else(|| bad(tr("archived 要是 true 或 false", "archived must be true or false")))?;
+            meta.archived = a.as_bool().ok_or_else(|| {
+                bad(tr(
+                    "archived 要是 true 或 false",
+                    "archived must be true or false",
+                ))
+            })?;
         }
         meetings::write_meta(&dir, &meta).map_err(|e| server_error(e.to_string()))?;
         Ok(serde_json::to_value(meetings::summary(&dir)).unwrap())
@@ -316,8 +358,14 @@ impl AppState {
             return Err(bad(tr("没有选中会议", "No meetings selected")));
         }
         let action = r.action.as_str();
-        if !matches!(action, "archive" | "unarchive" | "tag_add" | "tag_remove" | "delete" | "delete_audio") {
-            return Err(bad(tr(&format!("不认识的操作：{action}"), &format!("Unknown action: {action}"))));
+        if !matches!(
+            action,
+            "archive" | "unarchive" | "tag_add" | "tag_remove" | "delete" | "delete_audio"
+        ) {
+            return Err(bad(tr(
+                &format!("不认识的操作：{action}"),
+                &format!("Unknown action: {action}"),
+            )));
         }
         let tag = meetings::normalize_tag(r.tag.as_deref().unwrap_or(""));
         if action.starts_with("tag_") && tag.is_empty() {
@@ -391,11 +439,19 @@ impl AppState {
                     .get("older_than_days")
                     .and_then(Value::as_u64)
                     .filter(|d| *d <= 3650)
-                    .ok_or_else(|| bad(tr("天数要是 0–3650 的整数", "Days must be a whole number from 0 to 3650")))?;
+                    .ok_or_else(|| {
+                        bad(tr(
+                            "天数要是 0–3650 的整数",
+                            "Days must be a whole number from 0 to 3650",
+                        ))
+                    })?;
                 let archived_only = match r.get("archived_only") {
                     None | Some(Value::Null) => false,
                     Some(v) => v.as_bool().ok_or_else(|| {
-                        bad(tr("archived_only 要是 true 或 false", "archived_only must be true or false"))
+                        bad(tr(
+                            "archived_only 要是 true 或 false",
+                            "archived_only must be true or false",
+                        ))
                     })?,
                 };
                 let cutoff = chrono::Local::now().date_naive() - chrono::Days::new(days);
@@ -411,7 +467,12 @@ impl AppState {
                     }
                 }
             }
-            _ => return Err(bad(tr(&format!("不认识的清理项：{what}"), &format!("Unknown cleanup type: {what}")))),
+            _ => {
+                return Err(bad(tr(
+                    &format!("不认识的清理项：{what}"),
+                    &format!("Unknown cleanup type: {what}"),
+                )))
+            }
         }
         // 一个都没移走（比如这个系统不支持废纸篓）时报错，别让人以为清理过了
         if let (0, Some(e)) = (count, error) {
@@ -426,12 +487,25 @@ impl AppState {
         let mut jobs = self.jobs.lock().unwrap();
         let conflict = jobs.iter().filter(|j| j.busy()).find_map(|j| {
             if job.kind == "record" && j.state == "recording" {
-                Some(tr("已经在录音了，先结束这一场", "Already recording. Stop the current one first"))
+                Some(tr(
+                    "已经在录音了，先结束这一场",
+                    "Already recording. Stop the current one first",
+                ))
             } else if job.kind == "models" && j.kind == "models" {
-                Some(tr("已经在下载模型了，等它下完", "A model is already downloading. Wait for it to finish"))
+                Some(tr(
+                    "已经在下载模型了，等它下完",
+                    "A model is already downloading. Wait for it to finish",
+                ))
             } else if job.kind == "update" && j.kind == "update" {
-                Some(tr("已经在下载新版了，等它下完", "The update is already downloading. Wait for it to finish"))
-            } else if !job.meeting.is_empty() && job.kind != "models" && j.kind != "models" && j.meeting == job.meeting {
+                Some(tr(
+                    "已经在下载新版了，等它下完",
+                    "The update is already downloading. Wait for it to finish",
+                ))
+            } else if !job.meeting.is_empty()
+                && job.kind != "models"
+                && j.kind != "models"
+                && j.meeting == job.meeting
+            {
                 Some(busy_msg())
             } else {
                 None
@@ -441,7 +515,11 @@ impl AppState {
             return Err(ApiError(StatusCode::CONFLICT, msg.into()));
         }
         // 结束了的任务只留最近几个，给界面显示结果
-        let finished: Vec<String> = jobs.iter().filter(|j| !j.busy()).map(|j| j.id.clone()).collect();
+        let finished: Vec<String> = jobs
+            .iter()
+            .filter(|j| !j.busy())
+            .map(|j| j.id.clone())
+            .collect();
         if finished.len() >= 6 {
             let drop = &finished[..finished.len() - 5];
             jobs.retain(|j| !drop.contains(&j.id));
@@ -467,7 +545,13 @@ impl AppState {
     }
 
     /// 生成纪要：流式写进 job.minutes，写完存到会议文件夹。`extra` 是这场会议额外填的热词。
-    fn run_summarize(&self, id: &str, tr: &Transcript, dir: &Path, extra: &[String]) -> Result<(), String> {
+    fn run_summarize(
+        &self,
+        id: &str,
+        tr: &Transcript,
+        dir: &Path,
+        extra: &[String],
+    ) -> Result<(), String> {
         let cfg = self.config();
         let mut hotwords = cfg.hotwords.clone();
         hotwords.extend(
@@ -502,8 +586,14 @@ impl AppState {
             // 自动存进 Obsidian；失败不影响纪要本身，只提示一下
             // 界面认"没能" / "Couldn't"开头的提示为出错
             let notice = match obsidian::export(&cfg.obsidian, dir) {
-                Ok(_) => i18n::tr("纪要已同步到 Obsidian", "Minutes synced to Obsidian").to_string(),
-                Err(e) => i18n::tr(&format!("没能同步到 Obsidian：{e}"), &format!("Couldn't sync to Obsidian: {e}")).to_string(),
+                Ok(_) => {
+                    i18n::tr("纪要已同步到 Obsidian", "Minutes synced to Obsidian").to_string()
+                }
+                Err(e) => i18n::tr(
+                    &format!("没能同步到 Obsidian：{e}"),
+                    &format!("Couldn't sync to Obsidian: {e}"),
+                )
+                .to_string(),
             };
             // 自动结束录音的提示也留着
             self.update(id, |j| {
@@ -518,7 +608,13 @@ impl AppState {
     }
 
     /// 处理录音文件：解码 → 分段转写 → 存转写 → 生成纪要。
-    fn run_process(&self, id: &str, audio_path: &Path, dir: &Path, extra: &[String]) -> Result<(), String> {
+    fn run_process(
+        &self,
+        id: &str,
+        audio_path: &Path,
+        dir: &Path,
+        extra: &[String],
+    ) -> Result<(), String> {
         self.update(id, |j| j.state = "loading".into());
         let engine = self.engine()?;
         self.update(id, |j| j.state = "transcribing".into());
@@ -535,7 +631,11 @@ impl AppState {
     }
 }
 
-fn spawn_job(state: &Shared, id: &str, work: impl FnOnce(&AppState, &str) -> Result<(), String> + Send + 'static) {
+fn spawn_job(
+    state: &Shared,
+    id: &str,
+    work: impl FnOnce(&AppState, &str) -> Result<(), String> + Send + 'static,
+) {
     let s = state.clone();
     let id = id.to_string();
     std::thread::spawn(move || match work(&s, &id) {
@@ -682,8 +782,14 @@ async fn put_config(State(s): State<Shared>, Json(r): Json<ConfigReq>) -> ApiRes
     c.llm.base_url = r.base_url.trim().into();
     c.llm.model = r.model.trim().into();
     if let Some(a) = &r.api {
-        if !matches!(a.trim().to_ascii_lowercase().as_str(), "openai" | "anthropic") {
-            return Err(bad(tr(&format!("不认识的接口协议：{a}"), &format!("Unknown API protocol: {a}"))));
+        if !matches!(
+            a.trim().to_ascii_lowercase().as_str(),
+            "openai" | "anthropic"
+        ) {
+            return Err(bad(tr(
+                &format!("不认识的接口协议：{a}"),
+                &format!("Unknown API protocol: {a}"),
+            )));
         }
         c.llm.api = config::normalize_api(Some(a));
     }
@@ -748,7 +854,11 @@ impl LlmReq {
             Some(a) => config::normalize_api(Some(a)),
             None => {
                 let c = s.config().llm;
-                if c.base_url.trim_end_matches('/') == self.base_url.trim_end_matches('/') { c.api } else { "openai".into() }
+                if c.base_url.trim_end_matches('/') == self.base_url.trim_end_matches('/') {
+                    c.api
+                } else {
+                    "openai".into()
+                }
             }
         }
     }
@@ -756,12 +866,19 @@ impl LlmReq {
 
 fn list_models(base_url: &str, key: &str, api: &str) -> Option<Vec<String>> {
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(if api == "anthropic" { 10 } else { 3 }))
+        .timeout(std::time::Duration::from_secs(if api == "anthropic" {
+            10
+        } else {
+            3
+        }))
         .build()
         .ok()?;
     let req = if api == "anthropic" {
         client
-            .get(format!("{}/models?limit=1000", summarize::anthropic_v1(base_url))) // 默认一页只有 20 个
+            .get(format!(
+                "{}/models?limit=1000",
+                summarize::anthropic_v1(base_url)
+            )) // 默认一页只有 20 个
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
     } else {
@@ -792,7 +909,9 @@ async fn test_llm(State(s): State<Shared>, Json(r): Json<LlmReq>) -> Json<Value>
         .ok()
         .flatten();
     Json(match ids {
-        None => json!({"ok": false, "message": tr("连不上：接口地址或 API Key 不对", "Couldn't connect: check the API URL or API key")}),
+        None => {
+            json!({"ok": false, "message": tr("连不上：接口地址或 API Key 不对", "Couldn't connect: check the API URL or API key")})
+        }
         // Ollama 列出的模型名带 :latest
         Some(ids)
             if !ids.is_empty()
@@ -802,7 +921,10 @@ async fn test_llm(State(s): State<Shared>, Json(r): Json<LlmReq>) -> Json<Value>
             let some: Vec<&str> = ids.iter().take(8).map(String::as_str).collect();
             let message = tr(
                 &format!("连上了，但没有模型 {model}。可用：{}", some.join("、")),
-                &format!("Connected, but there is no model {model}. Available: {}", some.join(", ")),
+                &format!(
+                    "Connected, but there is no model {model}. Available: {}",
+                    some.join(", ")
+                ),
             )
             .to_string();
             json!({"ok": false, "message": message})
@@ -829,11 +951,11 @@ fn local_providers() -> Vec<Value> {
                "recommended": "deepseek/deepseek-v4-flash",
                "hint": tr("Magpie 没有在运行：打开 Magpie 应用后再试", "Magpie isn't running: open the Magpie app and try again")}),
         json!({"id": "ccswitch", "name": "CC Switch", "base_url": "http://127.0.0.1:15721/v1", "api_key": "cc-switch",
-               "recommended": "",
-               "hint": tr(
-                   "CC Switch 的本地代理没有打开：在 CC Switch 设置里开启「本地代理」（默认端口 15721）",
-                   "CC Switch's local proxy is off: turn on \"Local Proxy\" in CC Switch settings (default port 15721)",
-               )}),
+        "recommended": "",
+        "hint": tr(
+            "CC Switch 的本地代理没有打开：在 CC Switch 设置里开启「本地代理」（默认端口 15721）",
+            "CC Switch's local proxy is off: turn on \"Local Proxy\" in CC Switch settings (default port 15721)",
+        )}),
         json!({"id": "ollama", "name": tr("本地 Ollama", "Local Ollama"), "base_url": "http://localhost:11434/v1", "api_key": "",
                "recommended": "",
                "hint": tr("Ollama 没有在运行，或者还没有下载模型", "Ollama isn't running, or no model has been pulled yet")}),
@@ -915,7 +1037,10 @@ async fn get_meeting(
 }
 
 /// 整场会议移到废纸篓
-async fn delete_meeting(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn delete_meeting(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     tokio::task::spawn_blocking(move || s.delete_meeting(&id))
         .await
         .map_err(|e| server_error(e.to_string()))??;
@@ -923,7 +1048,10 @@ async fn delete_meeting(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -
 }
 
 /// 只把录音移到废纸篓
-async fn delete_audio(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn delete_audio(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let freed = tokio::task::spawn_blocking(move || s.delete_audio(&id, true))
         .await
         .map_err(|e| server_error(e.to_string()))??;
@@ -956,15 +1084,33 @@ async fn post_batch(State(s): State<Shared>, Json(r): Json<BatchReq>) -> ApiResu
 
 // Serialize library switches against requests, including requests that start background jobs.
 // The exclusive guard moves into the copy worker so disconnecting cannot unlock it early.
-async fn storage_gate(State(s): State<Shared>, req: Request, next: axum::middleware::Next) -> Response {
+async fn storage_gate(
+    State(s): State<Shared>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Response {
     let path = req.uri().path();
     if matches!(path, "/api/storage/directory" | "/api/storage/progress") {
         return next.run(req).await;
     }
     let _guard = s.storage_gate.read().await;
-    if !s.config().storage_root.is_empty() && !s.root().is_dir()
-        && !matches!(path, "/api/storage" | "/api/storage/choose" | "/api/env" | "/api/config" | "/api/jobs" | "/api/job") {
-        return bad(tr("存储目录不可用，请连接磁盘或在设置中选择其他目录", "Storage folder unavailable. Connect the disk or choose another folder in Settings")).into_response();
+    if !s.config().storage_root.is_empty()
+        && !s.root().is_dir()
+        && !matches!(
+            path,
+            "/api/storage"
+                | "/api/storage/choose"
+                | "/api/env"
+                | "/api/config"
+                | "/api/jobs"
+                | "/api/job"
+        )
+    {
+        return bad(tr(
+            "存储目录不可用，请连接磁盘或在设置中选择其他目录",
+            "Storage folder unavailable. Connect the disk or choose another folder in Settings",
+        ))
+        .into_response();
     }
     next.run(req).await
 }
@@ -978,10 +1124,17 @@ struct StorageDirectoryReq {
 async fn choose_storage(State(s): State<Shared>) -> ApiResult<Json<Value>> {
     let value = tokio::task::spawn_blocking(move || {
         let output = std::process::Command::new(&s.opt.recorder_bin)
-            .arg("choose-directory").arg(s.root()).output().map_err(|e| bad(e.to_string()))?;
-        if !output.status.success() { return Err(bad(String::from_utf8_lossy(&output.stderr).to_string())); }
+            .arg("choose-directory")
+            .arg(s.root())
+            .output()
+            .map_err(|e| bad(e.to_string()))?;
+        if !output.status.success() {
+            return Err(bad(String::from_utf8_lossy(&output.stderr).to_string()));
+        }
         serde_json::from_slice::<Value>(&output.stdout).map_err(|e| bad(e.to_string()))
-    }).await.map_err(|e| server_error(e.to_string()))??;
+    })
+    .await
+    .map_err(|e| server_error(e.to_string()))??;
     Ok(Json(value))
 }
 
@@ -989,10 +1142,16 @@ async fn storage_progress(State(s): State<Shared>) -> Json<crate::storage::Progr
     Json(s.storage_progress.lock().unwrap().clone())
 }
 
-async fn change_storage(State(s): State<Shared>, Json(r): Json<StorageDirectoryReq>) -> ApiResult<Json<Value>> {
+async fn change_storage(
+    State(s): State<Shared>,
+    Json(r): Json<StorageDirectoryReq>,
+) -> ApiResult<Json<Value>> {
     let guard = s.storage_gate.clone().write_owned().await;
     if config::env_var("ROOT").is_some() {
-        return Err(bad(tr("存储目录由启动环境变量指定，无法在界面修改", "The storage folder is set by an environment variable")));
+        return Err(bad(tr(
+            "存储目录由启动环境变量指定，无法在界面修改",
+            "The storage folder is set by an environment variable",
+        )));
     }
     if s.jobs.lock().unwrap().iter().any(Job::busy) {
         return Err(ApiError(StatusCode::CONFLICT, tr("有任务正在进行，请完成录音、转写或纪要生成后再切换目录", "Wait for recording, transcription and other tasks to finish before switching folders").into()));
@@ -1000,19 +1159,35 @@ async fn change_storage(State(s): State<Shared>, Json(r): Json<StorageDirectoryR
     tokio::task::spawn_blocking(move || {
         let _guard = guard;
         let source = s.root();
-        let target = crate::storage::destination(&source, &r.path, &crate::paths::EnginePaths::desktop()).map_err(bad)?;
-        if source.canonicalize().ok().as_ref() == Some(&target) { return Ok(Json(json!({"root": target}))); }
-        *s.storage_progress.lock().unwrap() = crate::storage::Progress { active: true, ..Default::default() };
+        let target =
+            crate::storage::destination(&source, &r.path, &crate::paths::EnginePaths::desktop())
+                .map_err(bad)?;
+        if source.canonicalize().ok().as_ref() == Some(&target) {
+            return Ok(Json(json!({"root": target})));
+        }
+        *s.storage_progress.lock().unwrap() = crate::storage::Progress {
+            active: true,
+            ..Default::default()
+        };
         let result = (|| {
             if r.copy_existing {
-                crate::storage::copy_library(&source, &target, &crate::disk::Statvfs, |copied, total| {
-                    let mut p = s.storage_progress.lock().unwrap();
-                    p.copied_bytes = copied;
-                    p.total_bytes = total;
-                }).map_err(bad)?;
+                crate::storage::copy_library(
+                    &source,
+                    &target,
+                    &crate::disk::Statvfs,
+                    |copied, total| {
+                        let mut p = s.storage_progress.lock().unwrap();
+                        p.copied_bytes = copied;
+                        p.total_bytes = total;
+                    },
+                )
+                .map_err(bad)?;
             }
             let mut cfg = s.config();
-            cfg.storage_root = target.to_str().ok_or_else(|| bad("Invalid folder name"))?.to_string();
+            cfg.storage_root = target
+                .to_str()
+                .ok_or_else(|| bad("Invalid folder name"))?
+                .to_string();
             config::save(&s.opt.config_path, &cfg).map_err(|e| bad(e.to_string()))?;
             *s.root.lock().unwrap() = target.clone();
             // Finished jobs belong to the previous library and may reuse IDs in the new one.
@@ -1021,7 +1196,9 @@ async fn change_storage(State(s): State<Shared>, Json(r): Json<StorageDirectoryR
         })();
         s.storage_progress.lock().unwrap().active = false;
         result
-    }).await.map_err(|e| server_error(e.to_string()))?
+    })
+    .await
+    .map_err(|e| server_error(e.to_string()))?
 }
 
 async fn get_storage(State(s): State<Shared>) -> ApiResult<Json<Value>> {
@@ -1058,8 +1235,12 @@ async fn get_audio(
     UrlPath(id): UrlPath<String>,
     req: Request,
 ) -> ApiResult<Response> {
-    let audio = meetings::find_audio(&s.folder(&id)?)
-        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, tr("没有录音文件", "No recording file").into()))?;
+    let audio = meetings::find_audio(&s.folder(&id)?).ok_or_else(|| {
+        ApiError(
+            StatusCode::NOT_FOUND,
+            tr("没有录音文件", "No recording file").into(),
+        )
+    })?;
     let mime = audio_mime(&audio);
     // ServeFile 支持 Range 请求：播放器拖动进度条时只取需要的那段
     let mut resp = ServeFile::new(audio)
@@ -1068,7 +1249,10 @@ async fn get_audio(
         .map(IntoResponse::into_response)
         .unwrap_or_else(|e| match e {});
     if let Some(m) = mime {
-        resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static(m));
+        resp.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static(m),
+        );
     }
     Ok(resp)
 }
@@ -1084,7 +1268,8 @@ async fn put_speakers(
     Json(r): Json<SpeakersReq>,
 ) -> ApiResult<Json<Value>> {
     let dir = s.folder(&id)?;
-    let mut tr = Transcript::load(&dir.join(TRANSCRIPT_JSON)).map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
+    let mut tr = Transcript::load(&dir.join(TRANSCRIPT_JSON))
+        .map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
     tr.speaker_names = tr
         .speakers_in_order()
         .into_iter()
@@ -1112,11 +1297,17 @@ async fn put_minutes(
     Ok(Json(json!({"ok": true})))
 }
 
-async fn get_minutes_history(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn get_minutes_history(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let versions = crate::minutes_history::list(&s.folder(&id)?).map_err(|e| bad(e.to_string()))?;
     Ok(Json(json!({"versions": versions})))
 }
-async fn delete_minutes_history(State(s): State<Shared>, UrlPath((id, version)): UrlPath<(String, String)>) -> ApiResult<Json<Value>> {
+async fn delete_minutes_history(
+    State(s): State<Shared>,
+    UrlPath((id, version)): UrlPath<(String, String)>,
+) -> ApiResult<Json<Value>> {
     crate::minutes_history::delete(&s.folder(&id)?, &version).map_err(|e| bad(e.to_string()))?;
     Ok(Json(json!({"ok": true})))
 }
@@ -1126,11 +1317,17 @@ async fn post_summarize(
     UrlPath(id): UrlPath<String>,
 ) -> ApiResult<Json<Job>> {
     let dir = s.folder(&id)?;
-    let tr = Transcript::load(&dir.join(TRANSCRIPT_JSON))
-        .map_err(|_| bad(tr("还没有转写，不能生成纪要", "No transcript yet, so minutes can't be generated")))?;
+    let tr = Transcript::load(&dir.join(TRANSCRIPT_JSON)).map_err(|_| {
+        bad(tr(
+            "还没有转写，不能生成纪要",
+            "No transcript yet, so minutes can't be generated",
+        ))
+    })?;
     let job = Job::new("summarize", &id, "summarizing");
     s.start_job(job.clone())?;
-    spawn_job(&s, &job.id, move |st, id| st.run_summarize(id, &tr, &dir, &[]));
+    spawn_job(&s, &job.id, move |st, id| {
+        st.run_summarize(id, &tr, &dir, &[])
+    });
     Ok(Json(job))
 }
 
@@ -1139,24 +1336,35 @@ async fn post_process(
     UrlPath(id): UrlPath<String>,
 ) -> ApiResult<Json<Job>> {
     let dir = s.folder(&id)?;
-    let audio = meetings::find_audio(&dir).ok_or_else(|| bad(tr("没有录音文件", "No recording file")))?;
+    let audio =
+        meetings::find_audio(&dir).ok_or_else(|| bad(tr("没有录音文件", "No recording file")))?;
     let job = Job::new("process", &id, "loading");
     s.start_job(job.clone())?;
-    spawn_job(&s, &job.id, move |st, id| st.run_process(id, &audio, &dir, &[]));
+    spawn_job(&s, &job.id, move |st, id| {
+        st.run_process(id, &audio, &dir, &[])
+    });
     Ok(Json(job))
 }
 
 #[derive(Deserialize, Default)]
-struct VersionQuery { version: Option<String> }
+struct VersionQuery {
+    version: Option<String>,
+}
 impl VersionQuery {
     fn minutes(&self, dir: &Path) -> ApiResult<String> {
         match &self.version {
-            Some(id) => crate::minutes_history::read(dir, id).map(|v| v.text)
+            Some(id) => crate::minutes_history::read(dir, id)
+                .map(|v| v.text)
                 .map_err(|e| ApiError(StatusCode::NOT_FOUND, e.to_string())),
             None => std::fs::read_to_string(dir.join(MINUTES)).map_err(|_| bad(no_minutes())),
         }
     }
-    fn suffix(&self) -> String { self.version.as_ref().map(|v| format!("-history-{v}")).unwrap_or_default() }
+    fn suffix(&self) -> String {
+        self.version
+            .as_ref()
+            .map(|v| format!("-history-{v}"))
+            .unwrap_or_default()
+    }
 }
 
 async fn post_push(
@@ -1180,12 +1388,19 @@ async fn post_push(
     .map_err(|e| bad(e.to_string()))?
     .map_err(|e| ApiError(StatusCode::BAD_GATEWAY, e))?;
     let name = platform.name();
-    let message = tr(&format!("已推送到{name}群"), &format!("Pushed to the {name} group")).to_string();
+    let message = tr(
+        &format!("已推送到{name}群"),
+        &format!("Pushed to the {name} group"),
+    )
+    .to_string();
     Ok(Json(json!({"ok": true, "message": message})))
 }
 
 async fn obsidian_vaults() -> Json<Value> {
-    let v: Vec<Value> = obsidian::vaults().into_iter().map(|(name, path)| json!({"name": name, "path": path})).collect();
+    let v: Vec<Value> = obsidian::vaults()
+        .into_iter()
+        .map(|(name, path)| json!({"name": name, "path": path}))
+        .collect();
     Json(json!(v))
 }
 
@@ -1205,40 +1420,68 @@ async fn post_obsidian(
     let dir = s.folder(&id)?;
     version.minutes(&dir)?;
     let cfg = s.config().obsidian;
-    let out = tokio::task::spawn_blocking(move || obsidian::export_version(&cfg, &dir, version.version.as_deref()))
-        .await
-        .map_err(|e| bad(e.to_string()))?
-        .map_err(bad)?;
+    let out = tokio::task::spawn_blocking(move || {
+        obsidian::export_version(&cfg, &dir, version.version.as_deref())
+    })
+    .await
+    .map_err(|e| bad(e.to_string()))?
+    .map_err(bad)?;
     let uri = obsidian::uri(&out.note);
     if body.is_some_and(|b| b.open) {
-        let _ = std::process::Command::new("/usr/bin/open").arg(&uri).spawn();
+        let _ = std::process::Command::new("/usr/bin/open")
+            .arg(&uri)
+            .spawn();
     }
-    Ok(Json(json!({"ok": true, "path": out.note, "uri": uri, "drawings": out.drawings.len()})))
+    Ok(Json(
+        json!({"ok": true, "path": out.note, "uri": uri, "drawings": out.drawings.len()}),
+    ))
 }
 
 /// 把纪要里的鱼骨图导出成 .excalidraw 文件（放在会议文件夹里），并在访达里选中，
 /// 可以拖进 excalidraw.com 或用 Obsidian 的 Excalidraw 插件继续改。
-async fn post_excalidraw(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn post_excalidraw(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let dir = s.folder(&id)?;
     let minutes = std::fs::read_to_string(dir.join(MINUTES)).map_err(|_| bad(no_minutes()))?;
     // 画板上的文字、文件名跟纪要的语言走
     let lang = i18n::doc_lang(&minutes);
-    let transcript = Transcript::load(&dir.join(TRANSCRIPT_JSON)).ok().map(|t| t.localized(lang));
+    let transcript = Transcript::load(&dir.join(TRANSCRIPT_JSON))
+        .ok()
+        .map(|t| t.localized(lang));
     let turns = transcript.as_ref().map(|t| t.turns()).unwrap_or_default();
-    let duration = transcript.as_ref().map(|t| t.duration_ms).unwrap_or(u64::MAX);
-    let specs: Vec<_> = fishbone::blocks(&minutes).into_iter().filter_map(|(_, s)| s).collect();
+    let duration = transcript
+        .as_ref()
+        .map(|t| t.duration_ms)
+        .unwrap_or(u64::MAX);
+    let specs: Vec<_> = fishbone::blocks(&minutes)
+        .into_iter()
+        .filter_map(|(_, s)| s)
+        .collect();
     if specs.is_empty() {
-        return Err(bad(tr("这份纪要里没有鱼骨图", "These minutes have no fishbone diagram")));
+        return Err(bad(tr(
+            "这份纪要里没有鱼骨图",
+            "These minutes have no fishbone diagram",
+        )));
     }
     let mut paths = Vec::new();
     for (k, spec) in specs.iter().enumerate() {
-        let grounds: Vec<_> = spec.branches.iter().map(|b| fishbone::ground(b, &turns, duration)).collect();
+        let grounds: Vec<_> = spec
+            .branches
+            .iter()
+            .map(|b| fishbone::ground(b, &turns, duration))
+            .collect();
         let p = dir.join(excalidraw_name(k, lang));
-        let text = serde_json::to_string_pretty(&fishbone::excalidraw(spec, &grounds, lang)).unwrap();
+        let text =
+            serde_json::to_string_pretty(&fishbone::excalidraw(spec, &grounds, lang)).unwrap();
         std::fs::write(&p, text).map_err(|e| bad(e.to_string()))?;
         paths.push(p);
     }
-    let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&paths[0]).spawn();
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(&paths[0])
+        .spawn();
     Ok(Json(json!({"ok": true, "paths": paths})))
 }
 
@@ -1270,15 +1513,23 @@ async fn post_pdf(
 ) -> ApiResult<Json<Value>> {
     let dir = s.folder(&id)?;
     let minutes = version.minutes(&dir)?;
-    let title = meetings::minutes_title(&minutes).unwrap_or_else(|| id.splitn(3, '_').nth(2).unwrap_or(&id).to_string());
-    let out = dir.join(format!("{}{}.pdf", obsidian::safe_name(&title), version.suffix()));
+    let title = meetings::minutes_title(&minutes)
+        .unwrap_or_else(|| id.splitn(3, '_').nth(2).unwrap_or(&id).to_string());
+    let out = dir.join(format!(
+        "{}{}.pdf",
+        obsidian::safe_name(&title),
+        version.suffix()
+    ));
     let bin = s.opt.recorder_bin.clone();
     let target = out.clone();
     tokio::task::spawn_blocking(move || record::html_to_pdf(&bin, &r.html, &target))
         .await
         .map_err(|e| bad(e.to_string()))?
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&out).spawn();
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(&out)
+        .spawn();
     Ok(Json(json!({"ok": true, "path": out})))
 }
 
@@ -1286,7 +1537,9 @@ async fn post_pdf(
 fn export_stem(dir: &Path, id: &str) -> String {
     let minutes = std::fs::read_to_string(dir.join(MINUTES)).unwrap_or_default();
     let topic = id.splitn(3, '_').nth(2).unwrap_or(id);
-    let name = obsidian::safe_name(&meetings::minutes_title(&minutes).unwrap_or_else(|| topic.to_string()));
+    let name = obsidian::safe_name(
+        &meetings::minutes_title(&minutes).unwrap_or_else(|| topic.to_string()),
+    );
     if name.is_empty() {
         obsidian::safe_name(topic)
     } else {
@@ -1297,10 +1550,15 @@ fn export_stem(dir: &Path, id: &str) -> String {
 /// 导出 SRT 字幕（按句，说话人名跟界面语言），存进会议文件夹并在访达里选中
 async fn post_srt(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
     let dir = s.folder(&id)?;
-    let t = Transcript::load(&dir.join(TRANSCRIPT_JSON)).map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
+    let t = Transcript::load(&dir.join(TRANSCRIPT_JSON))
+        .map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
     let out = dir.join(format!("{}.srt", export_stem(&dir, &id)));
-    std::fs::write(&out, t.to_srt(i18n::ui())).map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&out).spawn();
+    std::fs::write(&out, t.to_srt(i18n::ui()))
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(&out)
+        .spawn();
     Ok(Json(json!({"ok": true, "path": out})))
 }
 
@@ -1315,21 +1573,30 @@ async fn post_docx(
     let stem = if version.version.is_some() {
         let minutes = version.minutes(&dir)?;
         obsidian::safe_name(&meetings::minutes_title(&minutes).unwrap_or_else(|| id.clone()))
-    } else { export_stem(&dir, &id) };
+    } else {
+        export_stem(&dir, &id)
+    };
     let out = dir.join(format!("{}{}.docx", stem, version.suffix()));
     let target = out.clone();
     tokio::task::spawn_blocking(move || record::html_to_docx(&r.html, &target))
         .await
         .map_err(|e| bad(e.to_string()))?
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&out).spawn();
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(&out)
+        .spawn();
     Ok(Json(json!({"ok": true, "path": out})))
 }
 
 /// 让大模型根据自我介绍、点名等明确线索猜说话人的名字
-async fn guess_speakers(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn guess_speakers(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let dir = s.folder(&id)?;
-    let t = Transcript::load(&dir.join(TRANSCRIPT_JSON)).map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
+    let t = Transcript::load(&dir.join(TRANSCRIPT_JSON))
+        .map_err(|_| bad(tr("还没有转写", "No transcript yet")))?;
     let cfg = s.config().llm;
     let lang = i18n::ui();
     let list = tokio::task::spawn_blocking(move || {
@@ -1345,7 +1612,11 @@ async fn guess_speakers(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -
         speakers::parse(&text, t.speakers_in_order().len()).ok_or_else(|| {
             ApiError(
                 StatusCode::BAD_GATEWAY,
-                tr("大模型没有给出可用的结果", "The model didn't return a usable result").into(),
+                tr(
+                    "大模型没有给出可用的结果",
+                    "The model didn't return a usable result",
+                )
+                .into(),
             )
         })
     })
@@ -1375,7 +1646,11 @@ async fn search(State(s): State<Shared>, Query(p): Query<SearchQuery>) -> ApiRes
 
 /// 示例会议的文件夹名：示例素材是 2026-10-28 14:00 的会
 fn demo_folder(en: bool) -> String {
-    let title = if en { "Sample · Signup conversion review" } else { "示例·注册转化复盘" };
+    let title = if en {
+        "Sample · Signup conversion review"
+    } else {
+        "示例·注册转化复盘"
+    };
     format!("2026-10-28_1400_{}", meetings::folder_title(title))
 }
 
@@ -1392,7 +1667,11 @@ async fn post_demo(State(s): State<Shared>) -> ApiResult<Json<Value>> {
     if !src.join(TRANSCRIPT_JSON).is_file() || !minutes.is_file() {
         return Err(ApiError(
             StatusCode::INTERNAL_SERVER_ERROR,
-            tr("找不到示例会议的素材", "The sample meeting files are missing").into(),
+            tr(
+                "找不到示例会议的素材",
+                "The sample meeting files are missing",
+            )
+            .into(),
         ));
     }
     let copy = || -> std::io::Result<()> {
@@ -1486,14 +1765,17 @@ fn spawn_watcher(s: &Shared, id: String, dir: PathBuf, sources: Vec<String>) {
             std::thread::sleep(Duration::from_secs(autostop::CHECK_S));
             let cfg = s.config();
             let window = autostop::CHECK_S as f64;
-            let loud = sources
-                .iter()
-                .any(|src| audio::track_level(&wav_path(&dir, src), window) >= autostop::VOICE_LEVEL);
-            let apps_quit =
-                cfg.auto_stop_app_quit && !apps.is_empty() && autostop::running_meeting_apps().is_disjoint(&apps);
+            let loud = sources.iter().any(|src| {
+                audio::track_level(&wav_path(&dir, src), window) >= autostop::VOICE_LEVEL
+            });
+            let apps_quit = cfg.auto_stop_app_quit
+                && !apps.is_empty()
+                && autostop::running_meeting_apps().is_disjoint(&apps);
             let stop = {
                 let mut rec = s.recording.lock().unwrap();
-                let Some(live) = rec.as_mut().filter(|l| l.job == id) else { return };
+                let Some(live) = rec.as_mut().filter(|l| l.job == id) else {
+                    return;
+                };
                 let lines = live.live.as_ref().map_or(0, |l| l.line_count());
                 let now = live.recorder.elapsed();
                 if loud || lines > lines_seen {
@@ -1535,16 +1817,30 @@ async fn record_stop(State(s): State<Shared>) -> ApiResult<Json<Job>> {
 
 /// 结束录音：界面点「结束录音」和自动结束都走这里。`only` 有值时只结束这个任务的录音；
 /// `notice` 是给任务的提示；`keep_s` 有值时先把原始音轨截到前这么多秒（没人说话自动结束时去掉末尾的静音）。
-fn stop_recording(s: &Shared, only: Option<&str>, notice: Option<String>, keep_s: Option<f64>) -> ApiResult<Job> {
+fn stop_recording(
+    s: &Shared,
+    only: Option<&str>,
+    notice: Option<String>,
+    keep_s: Option<f64>,
+) -> ApiResult<Job> {
     let nothing = || bad(tr("没有正在进行的录音", "Nothing is being recorded"));
     let mut live = {
         let mut rec = s.recording.lock().unwrap();
-        if rec.as_ref().is_none_or(|l| only.is_some_and(|id| l.job != id)) {
+        if rec
+            .as_ref()
+            .is_none_or(|l| only.is_some_and(|id| l.job != id))
+        {
             return Err(nothing());
         }
         rec.take().ok_or_else(nothing)?
     };
-    let job = s.jobs.lock().unwrap().iter().find(|j| j.id == live.job).cloned();
+    let job = s
+        .jobs
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|j| j.id == live.job)
+        .cloned();
     let Some(job) = job else {
         return Err(nothing());
     };
@@ -1582,9 +1878,9 @@ fn stop_recording(s: &Shared, only: Option<&str>, notice: Option<String>, keep_s
                 let mixer =
                     std::thread::spawn(move || record::mixdown(&mix_dir, &mix_dir.join(AUDIO)));
                 let summary = st.run_summarize(id, &tr, &dir, &live.hotwords);
-                let mixed = mixer
-                    .join()
-                    .map_err(|_| i18n::tr("合成录音线程异常", "The audio mixing thread crashed").to_string())?;
+                let mixed = mixer.join().map_err(|_| {
+                    i18n::tr("合成录音线程异常", "The audio mixing thread crashed").to_string()
+                })?;
                 summary?;
                 mixed.map_err(|e| {
                     i18n::tr(
@@ -1618,11 +1914,23 @@ fn three() -> u64 {
 
 /// 录音测试：系统声音 + 麦克风试录几秒（1–10），看有没有权限、有没有声音。
 /// 第一次调用会触发 macOS 的权限弹窗，新手引导里用。
-async fn record_test(State(s): State<Shared>, body: Option<Json<RecordTestReq>>) -> ApiResult<Json<Value>> {
-    if s.jobs.lock().unwrap().iter().any(|j| j.state == "recording") {
+async fn record_test(
+    State(s): State<Shared>,
+    body: Option<Json<RecordTestReq>>,
+) -> ApiResult<Json<Value>> {
+    if s.jobs
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|j| j.state == "recording")
+    {
         return Err(ApiError(
             StatusCode::CONFLICT,
-            tr("正在录音，结束后再测试", "A recording is in progress. Test after it ends").into(),
+            tr(
+                "正在录音，结束后再测试",
+                "A recording is in progress. Test after it ends",
+            )
+            .into(),
         ));
     }
     let secs = body.map_or(3, |b| b.seconds).clamp(1, 10);
@@ -1636,10 +1944,19 @@ async fn record_test(State(s): State<Shared>, body: Option<Json<RecordTestReq>>)
 fn record_test_run(bin: &Path, secs: u64) -> Value {
     let system_ok = system_audio_supported(bin);
     let mut status: BTreeMap<String, &str> = BTreeMap::from([
-        ("system".to_string(), if system_ok { "error" } else { "unsupported" }),
+        (
+            "system".to_string(),
+            if system_ok { "error" } else { "unsupported" },
+        ),
         ("mic".to_string(), "error"),
     ]);
-    let failed = |e: &str| if record::is_permission_error(e) { "denied" } else { "error" };
+    let failed = |e: &str| {
+        if record::is_permission_error(e) {
+            "denied"
+        } else {
+            "error"
+        }
+    };
     let fill = |levels: Vec<(String, Option<f32>)>, status: &mut BTreeMap<String, &str>| {
         for (src, level) in levels {
             let st = match level {
@@ -1718,7 +2035,10 @@ async fn import_file(State(s): State<Shared>, mut form: Multipart) -> ApiResult<
         .unwrap_or("")
         .to_lowercase();
     if !meetings::AUDIO_EXTS.contains(&ext.as_str()) {
-        return Err(bad(tr(&format!("不支持的文件类型：.{ext}"), &format!("Unsupported file type: .{ext}"))));
+        return Err(bad(tr(
+            &format!("不支持的文件类型：.{ext}"),
+            &format!("Unsupported file type: .{ext}"),
+        )));
     }
     let when = if modified > 0.0 {
         chrono::DateTime::from_timestamp_millis(modified as i64)
@@ -1743,7 +2063,9 @@ async fn import_file(State(s): State<Shared>, mut form: Multipart) -> ApiResult<
     std::fs::create_dir_all(&dir).map_err(|e| bad(e.to_string()))?;
     let audio = dir.join(format!("录音.{ext}"));
     std::fs::write(&audio, &data).map_err(|e| bad(e.to_string()))?;
-    spawn_job(&s, &job.id, move |st, id| st.run_process(id, &audio, &dir, &[]));
+    spawn_job(&s, &job.id, move |st, id| {
+        st.run_process(id, &audio, &dir, &[])
+    });
     Ok(Json(job))
 }
 
@@ -1771,7 +2093,11 @@ async fn get_job(State(s): State<Shared>) -> Json<Value> {
 fn job_json(s: &AppState, job: &Job) -> Value {
     let job = job.clone();
     let mut data = serde_json::to_value(&job).unwrap();
-    let end = if job.finished_at > 0.0 { job.finished_at } else { now() };
+    let end = if job.finished_at > 0.0 {
+        job.finished_at
+    } else {
+        now()
+    };
     data["elapsed"] = (end - job.started_at).into();
     data["model_loaded"] = s.engine_loaded().into();
     if job.state == "recording" {
@@ -1807,7 +2133,11 @@ fn job_json(s: &AppState, job: &Job) -> Value {
                 data["auto_stop_s"] = (live.silence_min as u64 * 60).saturating_sub(silent).into();
             }
             if let Some(err) = live.recorder.exited() {
-                data["error"] = tr(&format!("录音中断：{err}"), &format!("Recording stopped: {err}")).into();
+                data["error"] = tr(
+                    &format!("录音中断：{err}"),
+                    &format!("Recording stopped: {err}"),
+                )
+                .into();
             }
         }
     }
@@ -1832,7 +2162,11 @@ fn model_kind(id: &str) -> ApiResult<AsrKind> {
     AsrKind::from_id(id).ok_or_else(|| {
         ApiError(
             StatusCode::NOT_FOUND,
-            tr(&format!("没有这个识别模型：{id}"), &format!("No such speech recognition model: {id}")).into(),
+            tr(
+                &format!("没有这个识别模型：{id}"),
+                &format!("No such speech recognition model: {id}"),
+            )
+            .into(),
         )
     })
 }
@@ -1844,8 +2178,10 @@ async fn list_asr_models(State(s): State<Shared>) -> Json<Value> {
     let language = s.config().asr_language;
     let english_meetings = language == "en";
     let bin = s.opt.recorder_bin.clone();
-    let apple = tokio::task::spawn_blocking(move || crate::apple_speech::status(&bin, &language)).await
-        .map_err(|e| e.to_string()).and_then(|r| r);
+    let apple = tokio::task::spawn_blocking(move || crate::apple_speech::status(&bin, &language))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
     let list: Vec<Value> = models::catalog()
         .iter()
         .map(|m| {
@@ -1860,8 +2196,15 @@ async fn list_asr_models(State(s): State<Shared>) -> Json<Value> {
             if m.kind == AsrKind::AppleSpeech {
                 v["system"] = true.into();
                 match &apple {
-                    Ok(status) => { v["available"] = status.available.into(); v["ready"] = (status.ready && paths.base_ready()).into(); }
-                    Err(e) => { v["available"] = false.into(); v["ready"] = false.into(); v["warning"] = e.clone().into(); }
+                    Ok(status) => {
+                        v["available"] = status.available.into();
+                        v["ready"] = (status.ready && paths.base_ready()).into();
+                    }
+                    Err(e) => {
+                        v["available"] = false.into();
+                        v["ready"] = false.into();
+                        v["warning"] = e.clone().into();
+                    }
                 }
             }
             if m.kind == AsrKind::Paraformer && english_meetings {
@@ -1882,19 +2225,36 @@ fn paraformer_warning() -> &'static str {
 }
 
 /// 下载一个识别模型，下好了直接切过去
-async fn download_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Job>> {
+async fn download_model(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Job>> {
     let kind = model_kind(&id)?;
     let paths = s.model_paths();
     if kind != AsrKind::AppleSpeech && paths.base_ready() && paths.asr_ready(kind) {
-        return Err(bad(tr("这个模型已经下载好了", "This model is already downloaded")));
+        return Err(bad(tr(
+            "这个模型已经下载好了",
+            "This model is already downloaded",
+        )));
     }
     let job = Job::new("models", kind.id(), "downloading");
     s.start_job(job.clone())?;
     spawn_job(&s, &job.id, move |st, id| {
         let paths = st.model_paths();
         if kind == AsrKind::AppleSpeech {
-            st.update(id, |j| j.stage = tr("正在检查／安装系统语音模型…", "Checking/installing system speech assets…").into());
-            crate::apple_speech::run(&st.opt.recorder_bin, "speech-install", &st.config().asr_language, None)?;
+            st.update(id, |j| {
+                j.stage = tr(
+                    "正在检查／安装系统语音模型…",
+                    "Checking/installing system speech assets…",
+                )
+                .into()
+            });
+            crate::apple_speech::run(
+                &st.opt.recorder_bin,
+                "speech-install",
+                &st.config().asr_language,
+                None,
+            )?;
         }
         models::ensure_model(&paths, kind, |done, total| {
             st.update(id, |j| {
@@ -1907,26 +2267,47 @@ async fn download_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -
     Ok(Json(job))
 }
 
-async fn use_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn use_model(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let kind = model_kind(&id)?;
     let paths = s.model_paths();
     if !paths.asr_ready(kind) {
-        return Err(bad(tr("这个模型还没有下载", "This model isn't downloaded yet")));
+        return Err(bad(tr(
+            "这个模型还没有下载",
+            "This model isn't downloaded yet",
+        )));
     }
     if kind == AsrKind::AppleSpeech {
-        let bin = s.opt.recorder_bin.clone(); let lang = s.config().asr_language;
-        let status = tokio::task::spawn_blocking(move || crate::apple_speech::status(&bin, &lang)).await.map_err(|e| bad(e.to_string()))?.map_err(bad)?;
-        if !status.available || !status.ready || !paths.base_ready() { return Err(bad("请先检查／安装模型 / Check and install models first")); }
+        let bin = s.opt.recorder_bin.clone();
+        let lang = s.config().asr_language;
+        let status = tokio::task::spawn_blocking(move || crate::apple_speech::status(&bin, &lang))
+            .await
+            .map_err(|e| bad(e.to_string()))?
+            .map_err(bad)?;
+        if !status.available || !status.ready || !paths.base_ready() {
+            return Err(bad("请先检查／安装模型 / Check and install models first"));
+        }
     }
     paths.set_active(kind).map_err(|e| bad(e.to_string()))?;
     // 下次转写时按新模型加载；正在进行的转写用的还是旧引擎，不受影响
-    if !s.engine.lock().unwrap().as_ref().is_some_and(|e| e.kind == kind) {
+    if !s
+        .engine
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|e| e.kind == kind)
+    {
         *s.engine.lock().unwrap() = None;
     }
     Ok(Json(json!({"ok": true, "active": kind.id()})))
 }
 
-async fn delete_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
+async fn delete_model(
+    State(s): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> ApiResult<Json<Value>> {
     let kind = model_kind(&id)?;
     let paths = s.model_paths();
     if paths.active() == kind {
@@ -1935,7 +2316,12 @@ async fn delete_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> 
             "This model is in use. Switch to another model before deleting it",
         )));
     }
-    if s.jobs.lock().unwrap().iter().any(|j| j.busy() && j.kind == "models" && j.meeting == kind.id()) {
+    if s.jobs
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|j| j.busy() && j.kind == "models" && j.meeting == kind.id())
+    {
         return Err(bad(tr("这个模型正在下载", "This model is downloading")));
     }
     models::remove_model(&paths, kind).map_err(bad)?;
@@ -1944,7 +2330,10 @@ async fn delete_model(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> 
 
 async fn download_models(State(s): State<Shared>) -> ApiResult<Json<Job>> {
     if s.model_paths().ready() {
-        return Err(bad(tr("模型已经下载好了", "The models are already downloaded")));
+        return Err(bad(tr(
+            "模型已经下载好了",
+            "The models are already downloaded",
+        )));
     }
     let job = Job::new("models", "", "downloading");
     s.start_job(job.clone())?;
@@ -1968,7 +2357,11 @@ fn latest_release(s: &AppState, force: bool) -> Result<update::Release, String> 
     latest_release_with(s, force, || update::fetch_latest(&s.opt.version))
 }
 
-fn latest_release_with(s: &AppState, force: bool, fetch: impl FnOnce() -> Result<update::Release, String>) -> Result<update::Release, String> {
+fn latest_release_with(
+    s: &AppState,
+    force: bool,
+    fetch: impl FnOnce() -> Result<update::Release, String>,
+) -> Result<update::Release, String> {
     if let Some((at, r)) = s.update.lock().unwrap().as_ref() {
         if !force && at.elapsed() < UPDATE_TTL {
             return Ok(r.clone());
@@ -2005,7 +2398,10 @@ async fn download_update(State(s): State<Shared>) -> ApiResult<Json<Job>> {
         .await
         .map_err(|e| bad(e.to_string()))?
         .map_err(|e| ApiError(StatusCode::BAD_GATEWAY, e))?;
-    let name = Path::new(&r.dmg_name).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = Path::new(&r.dmg_name)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let url = match &r.dmg {
         Some(u) if r.newer_than(&s.opt.version) && !name.is_empty() => u.clone(),
         _ => return Err(bad(tr("没有可用的更新", "No update available"))),
@@ -2020,7 +2416,9 @@ async fn download_update(State(s): State<Shared>) -> ApiResult<Json<Job>> {
         let client = update::client(&st.opt.version, None)?;
         let total = r.size as f64 / 1e6;
         models::fetch(&client, &url, &dest, |n| {
-            st.update(id, |j| j.stage = format!("{:.0} / {:.0} MB", n as f64 / 1e6, total))
+            st.update(id, |j| {
+                j.stage = format!("{:.0} / {:.0} MB", n as f64 / 1e6, total)
+            })
         })?;
         if let Some(want) = &r.sha256 {
             if crate::storage::sha256_file(&dest).ok().as_deref() != Some(want.as_str()) {
@@ -2032,7 +2430,9 @@ async fn download_update(State(s): State<Shared>) -> ApiResult<Json<Job>> {
                 .into());
             }
         }
-        let _ = std::process::Command::new("/usr/bin/open").arg(&dest).spawn();
+        let _ = std::process::Command::new("/usr/bin/open")
+            .arg(&dest)
+            .spawn();
         st.update(id, |j| {
             j.notice = i18n::tr(
                 "新版已下载并校验，把 Tingo 拖进「应用程序」替换即可",
@@ -2070,8 +2470,14 @@ pub fn router(state: Shared) -> Router {
         .route("/api/llm/models", post(llm_models))
         .route("/api/meetings", get(list_meetings))
         .route("/api/meetings/batch", post(post_batch))
-        .route("/api/meetings/{id}", get(get_meeting).delete(delete_meeting))
-        .route("/api/meetings/{id}/audio", get(get_audio).delete(delete_audio))
+        .route(
+            "/api/meetings/{id}",
+            get(get_meeting).delete(delete_meeting),
+        )
+        .route(
+            "/api/meetings/{id}/audio",
+            get(get_audio).delete(delete_audio),
+        )
         .route("/api/meetings/{id}/meta", put(put_meta))
         .route("/api/storage", get(get_storage))
         .route("/api/storage/choose", post(choose_storage))
@@ -2080,8 +2486,14 @@ pub fn router(state: Shared) -> Router {
         .route("/api/storage/cleanup", post(post_cleanup))
         .route("/api/meetings/{id}/speakers", put(put_speakers))
         .route("/api/meetings/{id}/minutes", put(put_minutes))
-        .route("/api/meetings/{id}/minutes/history", get(get_minutes_history))
-        .route("/api/meetings/{id}/minutes/history/{version}", delete(delete_minutes_history))
+        .route(
+            "/api/meetings/{id}/minutes/history",
+            get(get_minutes_history),
+        )
+        .route(
+            "/api/meetings/{id}/minutes/history/{version}",
+            delete(delete_minutes_history),
+        )
         .route("/api/meetings/{id}/summarize", post(post_summarize))
         .route("/api/meetings/{id}/process", post(post_process))
         .route("/api/meetings/{id}/push", post(post_push))
@@ -2110,7 +2522,10 @@ pub fn router(state: Shared) -> Router {
         .route("/api/models/{id}/download", post(download_model))
         .route("/api/models/{id}/use", post(use_model))
         .route("/api/models/{id}", delete(delete_model))
-        .layer(axum::middleware::from_fn_with_state(state.clone(), storage_gate))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            storage_gate,
+        ))
         .layer(axum::extract::DefaultBodyLimit::max(4 << 30)) // 导入的录屏可能有几个 GB
         .layer(axum::middleware::from_fn(i18n::layer)) // 每个请求都记下界面语言
         .layer(cors)
@@ -2196,12 +2611,27 @@ mod tests {
     #[test]
     fn manual_update_check_bypasses_backend_cache() {
         let (s, root, _) = test_state("update-cache");
-        let old = update::Release { latest: "0.5.0".into(), ..Default::default() };
+        let old = update::Release {
+            latest: "0.5.0".into(),
+            ..Default::default()
+        };
         *s.update.lock().unwrap() = Some((Instant::now(), old.clone()));
-        assert_eq!(latest_release_with(&s, false, || panic!("automatic checks should use cache")).unwrap(), old);
-        let new = update::Release { latest: "0.5.1".into(), ..Default::default() };
-        assert_eq!(latest_release_with(&s, true, || Ok(new.clone())).unwrap(), new);
-        assert_eq!(latest_release_with(&s, false, || panic!("fresh result should be cached")).unwrap(), new);
+        assert_eq!(
+            latest_release_with(&s, false, || panic!("automatic checks should use cache")).unwrap(),
+            old
+        );
+        let new = update::Release {
+            latest: "0.5.1".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            latest_release_with(&s, true, || Ok(new.clone())).unwrap(),
+            new
+        );
+        assert_eq!(
+            latest_release_with(&s, false, || panic!("fresh result should be cached")).unwrap(),
+            new
+        );
         assert!(latest_release_with(&s, true, || Err("offline".into())).is_err());
         std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
@@ -2211,13 +2641,28 @@ mod tests {
         let (s, root, _) = test_state("directory-switch");
         let target = root.parent().unwrap().join("新目录");
         std::fs::create_dir(&target).unwrap();
-        let dir = meeting(&root, "2026-10-01_0900_a", &[("录音.m4a", 123), (MINUTES, 20)]);
+        let dir = meeting(
+            &root,
+            "2026-10-01_0900_a",
+            &[("录音.m4a", 123), (MINUTES, 20)],
+        );
         std::fs::create_dir(dir.join("minutes-history")).unwrap();
         std::fs::write(dir.join("minutes-history/123.json"), "history").unwrap();
-        let modified = std::fs::metadata(dir.join(MINUTES)).unwrap().modified().unwrap();
-        let request = || Json(StorageDirectoryReq { path: target.to_string_lossy().into(), copy_existing: true });
+        let modified = std::fs::metadata(dir.join(MINUTES))
+            .unwrap()
+            .modified()
+            .unwrap();
+        let request = || {
+            Json(StorageDirectoryReq {
+                path: target.to_string_lossy().into(),
+                copy_existing: true,
+            })
+        };
         mark_busy(&s, "2026-10-01_0900_a");
-        assert_eq!(status(change_storage(State(s.clone()), request()).await), StatusCode::CONFLICT);
+        assert_eq!(
+            status(change_storage(State(s.clone()), request()).await),
+            StatusCode::CONFLICT
+        );
         assert_eq!(s.root(), root);
         assert!(std::fs::read_dir(&target).unwrap().next().is_none());
         s.jobs.lock().unwrap().clear();
@@ -2225,12 +2670,29 @@ mod tests {
         assert_eq!(s.root(), target.canonicalize().unwrap());
         assert_eq!(PathBuf::from(s.config().storage_root), s.root());
         let copied = target.join("2026-10-01_0900_a");
-        assert_eq!(std::fs::read(copied.join("minutes-history/123.json")).unwrap(), b"history");
-        assert_eq!(std::fs::metadata(copied.join(MINUTES)).unwrap().modified().unwrap(), modified);
+        assert_eq!(
+            std::fs::read(copied.join("minutes-history/123.json")).unwrap(),
+            b"history"
+        );
+        assert_eq!(
+            std::fs::metadata(copied.join(MINUTES))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            modified
+        );
         assert!(dir.join("录音.m4a").exists());
         assert!(!s.storage_progress.lock().unwrap().active);
         // Switching back without copying restores the original library immediately.
-        let _ = change_storage(State(s.clone()), Json(StorageDirectoryReq { path: root.to_string_lossy().into(), copy_existing: false })).await.unwrap();
+        let _ = change_storage(
+            State(s.clone()),
+            Json(StorageDirectoryReq {
+                path: root.to_string_lossy().into(),
+                copy_existing: false,
+            }),
+        )
+        .await
+        .unwrap();
         assert_eq!(s.root(), root.canonicalize().unwrap());
         std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
@@ -2241,16 +2703,29 @@ mod tests {
         let target = root.parent().unwrap().join("target");
         std::fs::create_dir(&target).unwrap();
         std::fs::write(target.join("keep.txt"), "keep").unwrap();
-        let request = || Json(StorageDirectoryReq { path: target.to_string_lossy().into(), copy_existing: true });
+        let request = || {
+            Json(StorageDirectoryReq {
+                path: target.to_string_lossy().into(),
+                copy_existing: true,
+            })
+        };
         assert!(change_storage(State(s.clone()), request()).await.is_err());
-        assert_eq!(std::fs::read_to_string(target.join("keep.txt")).unwrap(), "keep");
+        assert_eq!(
+            std::fs::read_to_string(target.join("keep.txt")).unwrap(),
+            "keep"
+        );
         assert_eq!(s.root(), root);
         std::fs::remove_file(target.join("keep.txt")).unwrap();
         let nested = root.join("nested");
         std::fs::create_dir(&nested).unwrap();
         let paths = crate::paths::EnginePaths::desktop();
         assert!(crate::storage::destination(&root, nested.to_str().unwrap(), &paths).is_err());
-        assert!(crate::storage::destination(&root, root.parent().unwrap().to_str().unwrap(), &paths).is_err());
+        assert!(crate::storage::destination(
+            &root,
+            root.parent().unwrap().to_str().unwrap(),
+            &paths
+        )
+        .is_err());
         std::os::unix::fs::symlink(&target, root.join("link")).unwrap();
         assert!(change_storage(State(s.clone()), request()).await.is_err());
         assert_eq!(s.root(), root);
@@ -2265,7 +2740,15 @@ mod tests {
         let target = root.parent().unwrap().join("target");
         std::fs::create_dir(&target).unwrap();
         std::fs::create_dir(&s.opt.config_path).unwrap(); // cannot replace a directory with a config file
-        assert!(change_storage(State(s.clone()), Json(StorageDirectoryReq { path: target.to_string_lossy().into(), copy_existing: false })).await.is_err());
+        assert!(change_storage(
+            State(s.clone()),
+            Json(StorageDirectoryReq {
+                path: target.to_string_lossy().into(),
+                copy_existing: false
+            })
+        )
+        .await
+        .is_err());
         assert_eq!(s.root(), root);
         std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
@@ -2274,25 +2757,57 @@ mod tests {
     async fn apple_model_status_switch_and_unavailable() {
         let (s, root, _) = test_state("apple-models");
         let paths = s.model_paths();
-        for p in paths.base().into_iter().chain(paths.asr_files(AsrKind::Paraformer)) {
+        for p in paths
+            .base()
+            .into_iter()
+            .chain(paths.asr_files(AsrKind::Paraformer))
+        {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, "test").unwrap();
         }
-        std::fs::write(&s.opt.recorder_bin, "#!/bin/sh\necho '{\"available\":true,\"ready\":true}'\n").unwrap();
+        std::fs::write(
+            &s.opt.recorder_bin,
+            "#!/bin/sh\necho '{\"available\":true,\"ready\":true}'\n",
+        )
+        .unwrap();
         let list = list_asr_models(State(s.clone())).await.0;
-        let apple = list["models"].as_array().unwrap().iter().find(|m| m["id"] == "apple-speech").unwrap();
+        let apple = list["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == "apple-speech")
+            .unwrap();
         assert_eq!(apple["ready"], true);
         assert_eq!(apple["system"], true);
-        assert!(use_model(State(s.clone()), UrlPath("apple-speech".into())).await.is_ok());
+        assert!(use_model(State(s.clone()), UrlPath("apple-speech".into()))
+            .await
+            .is_ok());
         assert_eq!(paths.active(), AsrKind::AppleSpeech);
-        assert!(use_model(State(s.clone()), UrlPath("paraformer".into())).await.is_ok());
+        assert!(use_model(State(s.clone()), UrlPath("paraformer".into()))
+            .await
+            .is_ok());
         assert_eq!(paths.active(), AsrKind::Paraformer);
-        assert!(delete_model(State(s.clone()), UrlPath("apple-speech".into())).await.is_err());
-        std::fs::write(&s.opt.recorder_bin, "#!/bin/sh\necho 'ERROR: requires macOS 26'; exit 1\n").unwrap();
-        assert!(use_model(State(s.clone()), UrlPath("apple-speech".into())).await.is_err());
+        assert!(
+            delete_model(State(s.clone()), UrlPath("apple-speech".into()))
+                .await
+                .is_err()
+        );
+        std::fs::write(
+            &s.opt.recorder_bin,
+            "#!/bin/sh\necho 'ERROR: requires macOS 26'; exit 1\n",
+        )
+        .unwrap();
+        assert!(use_model(State(s.clone()), UrlPath("apple-speech".into()))
+            .await
+            .is_err());
         assert_eq!(paths.active(), AsrKind::Paraformer);
         let list = list_asr_models(State(s.clone())).await.0;
-        let apple = list["models"].as_array().unwrap().iter().find(|m| m["id"] == "apple-speech").unwrap();
+        let apple = list["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == "apple-speech")
+            .unwrap();
         assert_eq!(apple["available"], false);
         std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
@@ -2300,7 +2815,11 @@ mod tests {
     fn meeting(root: &Path, id: &str, files: &[(&str, usize)]) -> PathBuf {
         let d = root.join(id);
         std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(d.join(TRANSCRIPT_JSON), serde_json::to_string(&Transcript::default()).unwrap()).unwrap();
+        std::fs::write(
+            d.join(TRANSCRIPT_JSON),
+            serde_json::to_string(&Transcript::default()).unwrap(),
+        )
+        .unwrap();
         for (f, n) in files {
             std::fs::write(d.join(f), vec![0u8; *n]).unwrap();
         }
@@ -2308,7 +2827,10 @@ mod tests {
     }
 
     fn mark_busy(s: &AppState, id: &str) {
-        s.jobs.lock().unwrap().push(Job::new("process", id, "transcribing"));
+        s.jobs
+            .lock()
+            .unwrap()
+            .push(Job::new("process", id, "transcribing"));
     }
 
     fn status(r: ApiResult<impl std::fmt::Debug>) -> StatusCode {
@@ -2330,23 +2852,60 @@ mod tests {
         let (s, root, _) = test_state("meta");
         let a = meeting(&root, "2026-10-01_0900_周会", &[]);
         std::fs::write(a.join(MINUTES), "# 纪要标题\n").unwrap();
-        let v = s.update_meta("2026-10-01_0900_周会", &json!({"title": " 新标题 ", "tags": ["项目A", "项目A", " "]})).unwrap();
-        assert_eq!((v["title"].clone(), v["tags"].clone(), v["archived"].clone()), (json!("新标题"), json!(["项目A"]), json!(false)));
-        let v = s.update_meta("2026-10-01_0900_周会", &json!({"archived": true})).unwrap();
-        assert_eq!((v["title"].clone(), v["tags"].clone(), v["archived"].clone()), (json!("新标题"), json!(["项目A"]), json!(true)));
+        let v = s
+            .update_meta(
+                "2026-10-01_0900_周会",
+                &json!({"title": " 新标题 ", "tags": ["项目A", "项目A", " "]}),
+            )
+            .unwrap();
+        assert_eq!(
+            (v["title"].clone(), v["tags"].clone(), v["archived"].clone()),
+            (json!("新标题"), json!(["项目A"]), json!(false))
+        );
+        let v = s
+            .update_meta("2026-10-01_0900_周会", &json!({"archived": true}))
+            .unwrap();
+        assert_eq!(
+            (v["title"].clone(), v["tags"].clone(), v["archived"].clone()),
+            (json!("新标题"), json!(["项目A"]), json!(true))
+        );
         // null / 空串恢复默认标题，meta.json 里不留 title
-        let v = s.update_meta("2026-10-01_0900_周会", &json!({"title": null})).unwrap();
+        let v = s
+            .update_meta("2026-10-01_0900_周会", &json!({"title": null}))
+            .unwrap();
         assert_eq!(v["title"], "纪要标题");
-        assert!(!std::fs::read_to_string(a.join(meetings::META)).unwrap().contains("title"));
-        s.update_meta("2026-10-01_0900_周会", &json!({"title": "x"})).unwrap();
-        assert_eq!(s.update_meta("2026-10-01_0900_周会", &json!({"title": ""})).unwrap()["title"], "纪要标题");
-        assert_eq!(status(s.update_meta("2026-10-01_0900_周会", &json!({"tags": "a"}))), StatusCode::BAD_REQUEST);
-        assert_eq!(status(s.update_meta("2026-10-01_0900_周会", &json!({"archived": 1}))), StatusCode::BAD_REQUEST);
-        assert_eq!(status(s.update_meta("nope", &json!({}))), StatusCode::NOT_FOUND);
-        assert_eq!(status(s.update_meta("../root", &json!({}))), StatusCode::NOT_FOUND);
+        assert!(!std::fs::read_to_string(a.join(meetings::META))
+            .unwrap()
+            .contains("title"));
+        s.update_meta("2026-10-01_0900_周会", &json!({"title": "x"}))
+            .unwrap();
+        assert_eq!(
+            s.update_meta("2026-10-01_0900_周会", &json!({"title": ""}))
+                .unwrap()["title"],
+            "纪要标题"
+        );
+        assert_eq!(
+            status(s.update_meta("2026-10-01_0900_周会", &json!({"tags": "a"}))),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(s.update_meta("2026-10-01_0900_周会", &json!({"archived": 1}))),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(s.update_meta("nope", &json!({}))),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            status(s.update_meta("../root", &json!({}))),
+            StatusCode::NOT_FOUND
+        );
         // 详情也带 tags、archived、size_bytes
         let d = meeting_json(&a);
-        assert_eq!((d["tags"].clone(), d["archived"].clone()), (json!(["项目A"]), json!(true)));
+        assert_eq!(
+            (d["tags"].clone(), d["archived"].clone()),
+            (json!(["项目A"]), json!(true))
+        );
         assert!(d["size_bytes"].as_u64().unwrap() > 0);
         std::fs::remove_dir_all(root.parent().unwrap()).ok();
     }
@@ -2354,32 +2913,63 @@ mod tests {
     #[test]
     fn delete_meeting_and_audio() {
         let (s, root, trash) = test_state("delete");
-        let a = meeting(&root, "2026-10-01_0900_a", &[("录音.m4a", 100), ("system.wav", 30), ("mic.wav", 20), (MINUTES, 5), ("a.pdf", 5)]);
+        let a = meeting(
+            &root,
+            "2026-10-01_0900_a",
+            &[
+                ("录音.m4a", 100),
+                ("system.wav", 30),
+                ("mic.wav", 20),
+                (MINUTES, 5),
+                ("a.pdf", 5),
+            ],
+        );
         let freed = s.delete_audio("2026-10-01_0900_a", true).unwrap();
         assert_eq!(freed, 150);
-        let mut left: Vec<String> =
-            std::fs::read_dir(&a).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let mut left: Vec<String> = std::fs::read_dir(&a)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
         left.sort();
         assert_eq!(left, vec!["a.pdf", TRANSCRIPT_JSON, MINUTES]);
         assert_eq!(std::fs::read_dir(&trash).unwrap().count(), 3); // 进了废纸篓，不是删掉
-        // 没有录音：单个删报 400
-        assert_eq!(status(s.delete_audio("2026-10-01_0900_a", true)), StatusCode::BAD_REQUEST);
+                                                                   // 没有录音：单个删报 400
+        assert_eq!(
+            status(s.delete_audio("2026-10-01_0900_a", true)),
+            StatusCode::BAD_REQUEST
+        );
         // 正在处理：409
         meeting(&root, "2026-10-02_0900_b", &[("录音.m4a", 10)]);
         mark_busy(&s, "2026-10-02_0900_b");
-        assert_eq!(status(s.delete_meeting("2026-10-02_0900_b")), StatusCode::CONFLICT);
-        assert_eq!(status(s.delete_audio("2026-10-02_0900_b", true)), StatusCode::CONFLICT);
+        assert_eq!(
+            status(s.delete_meeting("2026-10-02_0900_b")),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            status(s.delete_audio("2026-10-02_0900_b", true)),
+            StatusCode::CONFLICT
+        );
         // 模型下载任务不算占用会议
         meeting(&root, "2026-10-03_0900_c", &[("录音.m4a", 10)]);
-        s.jobs.lock().unwrap().push(Job::new("models", "2026-10-03_0900_c", "downloading"));
+        s.jobs
+            .lock()
+            .unwrap()
+            .push(Job::new("models", "2026-10-03_0900_c", "downloading"));
         s.delete_meeting("2026-10-03_0900_c").unwrap();
         assert!(!root.join("2026-10-03_0900_c").exists());
         s.delete_meeting("2026-10-01_0900_a").unwrap();
         assert!(!a.exists());
-        assert_eq!(status(s.delete_meeting("2026-10-01_0900_a")), StatusCode::NOT_FOUND);
+        assert_eq!(
+            status(s.delete_meeting("2026-10-01_0900_a")),
+            StatusCode::NOT_FOUND
+        );
         // 废纸篓失败：500，文件还在
         let f = meeting(&root, "2026-10-04_0900_FAIL", &[("录音.m4a", 10)]);
-        assert_eq!(status(s.delete_meeting("2026-10-04_0900_FAIL")), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            status(s.delete_meeting("2026-10-04_0900_FAIL")),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
         assert!(f.exists());
         std::fs::remove_dir_all(root.parent().unwrap()).ok();
     }
@@ -2387,7 +2977,11 @@ mod tests {
     #[test]
     fn batch_actions() {
         let (s, root, _) = test_state("batch");
-        let ids = ["2026-10-01_0900_a", "2026-10-02_0900_b", "2026-10-03_0900_c"];
+        let ids = [
+            "2026-10-01_0900_a",
+            "2026-10-02_0900_b",
+            "2026-10-03_0900_c",
+        ];
         meeting(&root, ids[0], &[("录音.m4a", 100)]);
         meeting(&root, ids[1], &[]);
         meeting(&root, ids[2], &[("录音.wav", 50), ("mic.wav", 5)]);
@@ -2397,37 +2991,73 @@ mod tests {
             tag: tag.map(String::from),
         };
         // 校验
-        assert_eq!(status(s.batch(&req(&[], "archive", None))), StatusCode::BAD_REQUEST);
-        assert_eq!(status(s.batch(&req(&ids, "explode", None))), StatusCode::BAD_REQUEST);
-        assert_eq!(status(s.batch(&req(&ids, "tag_add", None))), StatusCode::BAD_REQUEST);
-        assert_eq!(status(s.batch(&req(&ids, "tag_add", Some("  ")))), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            status(s.batch(&req(&[], "archive", None))),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(s.batch(&req(&ids, "explode", None))),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(s.batch(&req(&ids, "tag_add", None))),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status(s.batch(&req(&ids, "tag_add", Some("  ")))),
+            StatusCode::BAD_REQUEST
+        );
         // 归档：不存在的那个进 failed，其他照样成功；重复的 id 只算一次
-        let v = s.batch(&req(&[ids[0], "nope", ids[1], ids[0]], "archive", None)).unwrap();
+        let v = s
+            .batch(&req(&[ids[0], "nope", ids[1], ids[0]], "archive", None))
+            .unwrap();
         assert_eq!(v["ok"], 2);
         assert_eq!(v["failed"].as_array().unwrap().len(), 1);
         assert_eq!(v["failed"][0]["id"], "nope");
-        assert!(meetings::read_meta(&root.join(ids[0])).archived && meetings::read_meta(&root.join(ids[1])).archived);
+        assert!(
+            meetings::read_meta(&root.join(ids[0])).archived
+                && meetings::read_meta(&root.join(ids[1])).archived
+        );
         s.batch(&req(&[ids[1]], "unarchive", None)).unwrap();
         assert!(!meetings::read_meta(&root.join(ids[1])).archived);
         // 标签
         s.batch(&req(&ids, "tag_add", Some(" 周会 "))).unwrap();
         s.batch(&req(&ids[..2], "tag_add", Some("项目A"))).unwrap();
         s.batch(&req(&ids, "tag_add", Some("周会"))).unwrap(); // 已经有了不重复加
-        assert_eq!(meetings::read_meta(&root.join(ids[0])).tags, vec!["周会", "项目A"]);
+        assert_eq!(
+            meetings::read_meta(&root.join(ids[0])).tags,
+            vec!["周会", "项目A"]
+        );
         s.batch(&req(&ids, "tag_remove", Some("周会"))).unwrap();
         assert_eq!(meetings::read_meta(&root.join(ids[0])).tags, vec!["项目A"]);
         assert!(meetings::read_meta(&root.join(ids[2])).tags.is_empty());
         // 只删录音：没录音的算成功、freed 0；正在处理的进 failed
         mark_busy(&s, ids[0]);
         let v = s.batch(&req(&ids, "delete_audio", None)).unwrap();
-        assert_eq!((v["ok"].clone(), v["freed_bytes"].clone()), (json!(2), json!(55)));
+        assert_eq!(
+            (v["ok"].clone(), v["freed_bytes"].clone()),
+            (json!(2), json!(55))
+        );
         assert_eq!(v["failed"], json!([{"id": ids[0], "error": busy_msg()}]));
         assert!(root.join(ids[0]).join("录音.m4a").exists());
-        assert!(!root.join(ids[2]).join("录音.wav").exists() && root.join(ids[2]).join(TRANSCRIPT_JSON).exists());
+        assert!(
+            !root.join(ids[2]).join("录音.wav").exists()
+                && root.join(ids[2]).join(TRANSCRIPT_JSON).exists()
+        );
         // 删除整场：正在处理的、不存在的进 failed
-        let v = s.batch(&req(&[ids[0], ids[1], "nope"], "delete", None)).unwrap();
+        let v = s
+            .batch(&req(&[ids[0], ids[1], "nope"], "delete", None))
+            .unwrap();
         assert_eq!(v["ok"], 1);
-        assert_eq!(v["failed"].as_array().unwrap().iter().map(|f| f["id"].as_str().unwrap()).collect::<Vec<_>>(), vec![ids[0], "nope"]);
+        assert_eq!(
+            v["failed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| f["id"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec![ids[0], "nope"]
+        );
         assert!(v["freed_bytes"].as_u64().unwrap() > 0);
         assert!(root.join(ids[0]).exists() && !root.join(ids[1]).exists());
         std::fs::remove_dir_all(root.parent().unwrap()).ok();
@@ -2436,10 +3066,17 @@ mod tests {
     #[test]
     fn storage_endpoint() {
         let (s, root, _) = test_state("storage");
-        meeting(&root, "2026-10-01_0900_a", &[("录音.m4a", 100), ("system.wav", 30)]);
+        meeting(
+            &root,
+            "2026-10-01_0900_a",
+            &[("录音.m4a", 100), ("system.wav", 30)],
+        );
         let v = s.storage();
         assert_eq!(v["count"], 1);
-        assert_eq!((v["audio_bytes"].clone(), v["leftover_bytes"].clone()), (json!(130), json!(30)));
+        assert_eq!(
+            (v["audio_bytes"].clone(), v["leftover_bytes"].clone()),
+            (json!(130), json!(30))
+        );
         assert_eq!(v["models_bytes"], 123);
         assert!(v["free_bytes"].as_u64().is_some_and(|n| n > 0));
         assert_eq!(v["root"], json!(root));
@@ -2462,28 +3099,55 @@ mod tests {
             assert_eq!(status(s.cleanup(&body)), StatusCode::BAD_REQUEST, "{body}");
         }
         let today = chrono::Local::now().date_naive();
-        let id = |days: u64, name: &str| format!("{}_0900_{name}", (today - chrono::Days::new(days)).format("%Y-%m-%d"));
-        let (old, old_arch, recent, busy) = (id(40, "old"), id(50, "arch"), id(5, "recent"), id(60, "busy"));
-        meeting(&root, &old, &[("录音.m4a", 100), ("system.wav", 10), ("x.part", 1)]);
+        let id = |days: u64, name: &str| {
+            format!(
+                "{}_0900_{name}",
+                (today - chrono::Days::new(days)).format("%Y-%m-%d")
+            )
+        };
+        let (old, old_arch, recent, busy) = (
+            id(40, "old"),
+            id(50, "arch"),
+            id(5, "recent"),
+            id(60, "busy"),
+        );
+        meeting(
+            &root,
+            &old,
+            &[("录音.m4a", 100), ("system.wav", 10), ("x.part", 1)],
+        );
         meeting(&root, &old_arch, &[("录音.m4a", 200)]);
         meeting(&root, &recent, &[("录音.m4a", 300), ("mic.wav", 20)]);
         meeting(&root, &busy, &[("录音.m4a", 400), ("mic.wav", 40)]);
-        s.update_meta(&old_arch, &json!({"archived": true})).unwrap();
+        s.update_meta(&old_arch, &json!({"archived": true}))
+            .unwrap();
         mark_busy(&s, &busy);
         // 残留：old 的 system.wav + x.part、recent 的 mic.wav；busy 的跳过
         let v = s.cleanup(&json!({"what": "leftovers"})).unwrap();
         assert_eq!(v, json!({"ok": true, "count": 3, "freed_bytes": 31}));
-        assert!(root.join(&old).join("录音.m4a").exists() && !root.join(&old).join("system.wav").exists());
+        assert!(
+            root.join(&old).join("录音.m4a").exists()
+                && !root.join(&old).join("system.wav").exists()
+        );
         assert!(root.join(&busy).join("mic.wav").exists());
         // 30 天前、只归档的
-        let v = s.cleanup(&json!({"what": "audio", "older_than_days": 30, "archived_only": true})).unwrap();
+        let v = s
+            .cleanup(&json!({"what": "audio", "older_than_days": 30, "archived_only": true}))
+            .unwrap();
         assert_eq!(v, json!({"ok": true, "count": 1, "freed_bytes": 200}));
         // 30 天前的全部（busy 跳过）
-        let v = s.cleanup(&json!({"what": "audio", "older_than_days": 30})).unwrap();
+        let v = s
+            .cleanup(&json!({"what": "audio", "older_than_days": 30}))
+            .unwrap();
         assert_eq!(v, json!({"ok": true, "count": 1, "freed_bytes": 100}));
-        assert!(root.join(&recent).join("录音.m4a").exists() && root.join(&old).join(TRANSCRIPT_JSON).exists());
+        assert!(
+            root.join(&recent).join("录音.m4a").exists()
+                && root.join(&old).join(TRANSCRIPT_JSON).exists()
+        );
         // 0 = 全部
-        let v = s.cleanup(&json!({"what": "audio", "older_than_days": 0, "archived_only": false})).unwrap();
+        let v = s
+            .cleanup(&json!({"what": "audio", "older_than_days": 0, "archived_only": false}))
+            .unwrap();
         assert_eq!(v, json!({"ok": true, "count": 1, "freed_bytes": 300}));
         assert!(root.join(&busy).join("录音.m4a").exists());
         std::fs::remove_dir_all(root.parent().unwrap()).ok();
@@ -2492,6 +3156,9 @@ mod tests {
     #[test]
     fn demo_folder_names() {
         assert_eq!(demo_folder(false), "2026-10-28_1400_示例·注册转化复盘");
-        assert_eq!(demo_folder(true), "2026-10-28_1400_Sample_·_Signup_conversion_review");
+        assert_eq!(
+            demo_folder(true),
+            "2026-10-28_1400_Sample_·_Signup_conversion_review"
+        );
     }
 }

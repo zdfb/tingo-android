@@ -13,16 +13,20 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -93,6 +97,22 @@ fun TingoRoot(
     /** 宽屏时右侧详情显示哪一场；窄屏走导航压栈。 */
     var selectedMeetingId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    /** 点了"不可读"标记时告诉用户具体是哪个目录（排查只能靠路径）。 */
+    var unreadablePath by rememberSaveable { mutableStateOf<String?>(null) }
+
+    if (unreadablePath != null) {
+        AlertDialog(
+            onDismissRequest = { unreadablePath = null },
+            title = { Text(stringResource(R.string.library_unreadable)) },
+            text = { Text(unreadablePath.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { unreadablePath = null }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
+
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             TopDestination.entries.forEach { destination ->
@@ -131,6 +151,9 @@ fun TingoRoot(
                         onRefresh = libraryViewModel::refresh,
                         onQueryChange = libraryViewModel::onQueryChange,
                         onArchivedOnlyChange = libraryViewModel::onArchivedOnlyChange,
+                        onUnreadableClick = { card ->
+                            unreadablePath = "${container.dataRoot.absolutePath}/meetings/${card.id}"
+                        },
                     )
                 }
                 if (wide) {
@@ -175,6 +198,8 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // 能力矩阵由引擎给出：没有纪要解析能力就不展示纪要栏
+    val showMinutesTab = remember(container) { container.engine.capabilities().minutesParse }
 
     Column(Modifier.fillMaxSize()) {
         if (!wide) {
@@ -193,6 +218,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             // 播放器随录音链路一起接入：现在点击时间戳没有可跳转的目标，
             // 与其做一个按下去毫无反应的按钮，不如先留空回调。
             onSentenceClick = { },
+            showMinutesTab = showMinutesTab,
         )
     }
 }

@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use crate::minutes::SectionKind;
 use crate::transcript::{fmt_ts, Transcript};
 
 pub const AUDIO: &str = "录音.m4a";
@@ -107,10 +108,17 @@ pub fn minutes_title(text: &str) -> Option<String> {
 }
 
 /// 纪要里"一句话总结"（英文纪要是 Summary）下面的那句。
+///
+/// 标题词表由 [`crate::minutes::SectionKind`] 单一持有：解析与取摘要如果各写一份，
+/// 以后加一种语言就会出现"列表有总结、详情没总结"。
 pub fn one_liner(text: &str) -> String {
     let mut lines = text.lines();
     while let Some(l) = lines.next() {
-        if matches!(l.trim(), "## 一句话总结" | "## Summary") {
+        let is_one_liner = l
+            .trim()
+            .strip_prefix("## ")
+            .is_some_and(|h| SectionKind::from_heading(h) == SectionKind::OneLiner);
+        if is_one_liner {
             return lines
                 .find(|n| !n.trim().is_empty())
                 .map(|n| n.trim().to_string())
@@ -136,7 +144,12 @@ pub fn normalize_title(t: Option<&str>) -> Option<String> {
 
 /// 一个标签：去首尾空白，最长 20 个字符
 pub fn normalize_tag(t: &str) -> String {
-    t.trim().chars().take(MAX_TAG_CHARS).collect::<String>().trim_end().to_string()
+    t.trim()
+        .chars()
+        .take(MAX_TAG_CHARS)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 /// 标签：去首尾空白、空的丢掉、每个最长 20 个字符、去重（保持顺序）、最多 10 个
@@ -201,8 +214,14 @@ pub fn leftover_files(dir: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = files
         .into_iter()
         .filter(|p| {
-            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-            (has_recording && matches!(file_name(p), "system.wav" | "mic.wav")) || ext == "part" || ext == "tmp"
+            let ext = p
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            (has_recording && matches!(file_name(p), "system.wav" | "mic.wav"))
+                || ext == "part"
+                || ext == "tmp"
         })
         .collect();
     out.sort();
@@ -219,7 +238,9 @@ fn file_name(p: &Path) -> &str {
 }
 
 fn is_recording(p: &Path) -> bool {
-    file_name(p).strip_prefix("录音.").is_some_and(|ext| !ext.is_empty())
+    file_name(p)
+        .strip_prefix("录音.")
+        .is_some_and(|ext| !ext.is_empty())
 }
 
 /// 文件夹里直接放着的文件（不进子文件夹）
@@ -236,7 +257,9 @@ fn top_files(dir: &Path) -> Vec<PathBuf> {
 
 /// 文件（夹）的大小：文件夹按里面所有文件算，符号链接不跟进去
 pub fn size_of(path: &Path) -> u64 {
-    let Ok(md) = std::fs::symlink_metadata(path) else { return 0 };
+    let Ok(md) = std::fs::symlink_metadata(path) else {
+        return 0;
+    };
     if !md.is_dir() {
         return md.len();
     }
@@ -293,7 +316,10 @@ pub fn summary(dir: &Path) -> Summary {
     let meta = read_meta(dir);
     Summary {
         // 标题：用户改的 → 纪要第一行 # 标题 → 文件夹名里的会议名
-        title: meta.title.or_else(|| minutes_title(&minutes)).unwrap_or(fallback),
+        title: meta
+            .title
+            .or_else(|| minutes_title(&minutes))
+            .unwrap_or(fallback),
         date: meeting_date(dir).format("%Y-%m-%d").to_string(),
         time,
         summary: one_liner(&crate::terms::strip(&minutes)),
@@ -321,6 +347,13 @@ pub fn summary(dir: &Path) -> Summary {
     }
 }
 
+/// 会议目录的判定：有转写、有录音、或者只有纪要，都算。
+///
+/// 只认转写和录音会把"用户手工整理过、删掉录音只留纪要"的目录从列表里抹掉。
+fn is_meeting_dir(dir: &Path) -> bool {
+    dir.join(TRANSCRIPT_JSON).is_file() || find_audio(dir).is_some() || dir.join(MINUTES).is_file()
+}
+
 pub fn list(root: &Path) -> Vec<Summary> {
     let Ok(rd) = std::fs::read_dir(root) else {
         return Vec::new();
@@ -328,7 +361,7 @@ pub fn list(root: &Path) -> Vec<Summary> {
     let mut items: Vec<Summary> = rd
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_dir() && (p.join(TRANSCRIPT_JSON).is_file() || find_audio(p).is_some()))
+        .filter(|p| p.is_dir() && is_meeting_dir(p))
         .map(|p| summary(&p))
         .collect();
     items.sort_by(|a, b| (&b.date, &b.time, &b.id).cmp(&(&a.date, &a.time, &a.id)));
@@ -416,13 +449,19 @@ mod tests {
     fn tags_normalize() {
         let long = "一".repeat(25);
         let tags = normalize_tags(&[" 项目A ", "", "  ", "周会", "项目A", &long, "周会 "]);
-        assert_eq!(tags, vec!["项目A".to_string(), "周会".into(), "一".repeat(20)]);
+        assert_eq!(
+            tags,
+            vec!["项目A".to_string(), "周会".into(), "一".repeat(20)]
+        );
         let many: Vec<String> = (0..15).map(|i| format!("t{i}")).collect();
         let tags = normalize_tags(&many);
         assert_eq!(tags.len(), 10);
         assert_eq!((tags[0].as_str(), tags[9].as_str()), ("t0", "t9"));
         // 截到 20 个字符后末尾的空白也去掉
-        assert_eq!(normalize_tag(&format!("{} x", "a".repeat(19))), "a".repeat(19));
+        assert_eq!(
+            normalize_tag(&format!("{} x", "a".repeat(19))),
+            "a".repeat(19)
+        );
         assert_eq!(normalize_title(Some("  ")), None);
         assert_eq!(normalize_title(Some(" 新标题 ")).as_deref(), Some("新标题"));
     }
@@ -431,17 +470,50 @@ mod tests {
     fn meta_read_write() {
         let dir = temp_root("meta");
         assert_eq!(read_meta(&dir), Meta::default());
-        let meta = Meta { title: Some(" 周会 ".into()), tags: vec!["项目A".into(), "项目A".into(), " 周会".into()], archived: true };
+        let meta = Meta {
+            title: Some(" 周会 ".into()),
+            tags: vec!["项目A".into(), "项目A".into(), " 周会".into()],
+            archived: true,
+        };
         write_meta(&dir, &meta).unwrap();
         let text = std::fs::read_to_string(dir.join(META)).unwrap();
         assert_eq!(text, "{\n  \"title\": \"周会\",\n  \"tags\": [\n    \"项目A\",\n    \"周会\"\n  ],\n  \"archived\": true\n}");
-        assert_eq!(read_meta(&dir), Meta { title: Some("周会".into()), tags: vec!["项目A".into(), "周会".into()], archived: true });
+        assert_eq!(
+            read_meta(&dir),
+            Meta {
+                title: Some("周会".into()),
+                tags: vec!["项目A".into(), "周会".into()],
+                archived: true
+            }
+        );
         // 空标题不写这个键
-        write_meta(&dir, &Meta { title: Some("".into()), tags: vec![], archived: false }).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join(META)).unwrap(), "{\n  \"tags\": [],\n  \"archived\": false\n}");
+        write_meta(
+            &dir,
+            &Meta {
+                title: Some("".into()),
+                tags: vec![],
+                archived: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join(META)).unwrap(),
+            "{\n  \"tags\": [],\n  \"archived\": false\n}"
+        );
         // 手改坏的、类型不对的字段按默认值；读的时候也整理标签
-        std::fs::write(dir.join(META), "{\"title\": 3, \"tags\": [\" a \", 1, \"a\"], \"archived\": \"yes\"}").unwrap();
-        assert_eq!(read_meta(&dir), Meta { title: None, tags: vec!["a".into()], archived: false });
+        std::fs::write(
+            dir.join(META),
+            "{\"title\": 3, \"tags\": [\" a \", 1, \"a\"], \"archived\": \"yes\"}",
+        )
+        .unwrap();
+        assert_eq!(
+            read_meta(&dir),
+            Meta {
+                title: None,
+                tags: vec!["a".into()],
+                archived: false
+            }
+        );
         std::fs::write(dir.join(META), "not json").unwrap();
         assert_eq!(read_meta(&dir), Meta::default());
         std::fs::remove_dir_all(dir).ok();
@@ -455,18 +527,41 @@ mod tests {
         std::fs::write(a.join("录音.mp3"), vec![0u8; 100]).unwrap();
         let items = list(&root);
         assert_eq!(items[0].title, "文件夹标题");
-        assert_eq!((items[0].tags.len(), items[0].archived, items[0].has_audio, items[0].size_bytes), (0, false, true, 100));
+        assert_eq!(
+            (
+                items[0].tags.len(),
+                items[0].archived,
+                items[0].has_audio,
+                items[0].size_bytes
+            ),
+            (0, false, true, 100)
+        );
         std::fs::write(a.join(MINUTES), "# 纪要标题\n").unwrap();
         assert_eq!(summary(&a).title, "纪要标题");
-        write_meta(&a, &Meta { title: Some("我改的".into()), tags: vec!["周会".into()], archived: true }).unwrap();
+        write_meta(
+            &a,
+            &Meta {
+                title: Some("我改的".into()),
+                tags: vec!["周会".into()],
+                archived: true,
+            },
+        )
+        .unwrap();
         let m = summary(&a);
-        assert_eq!((m.title.as_str(), m.tags.clone(), m.archived), ("我改的", vec!["周会".to_string()], true));
+        assert_eq!(
+            (m.title.as_str(), m.tags.clone(), m.archived),
+            ("我改的", vec!["周会".to_string()], true)
+        );
         assert_eq!(m.size_bytes, size_of(&a));
         assert!(m.size_bytes > 100);
         // 只有原始音轨（不是 录音.*）时 has_audio 为 false
         let b = root.join("2026-10-02_0900_b");
         std::fs::create_dir_all(&b).unwrap();
-        std::fs::write(b.join(TRANSCRIPT_JSON), serde_json::to_string(&Transcript::default()).unwrap()).unwrap();
+        std::fs::write(
+            b.join(TRANSCRIPT_JSON),
+            serde_json::to_string(&Transcript::default()).unwrap(),
+        )
+        .unwrap();
         std::fs::write(b.join("system.wav"), b"x").unwrap();
         assert!(!summary(&b).has_audio);
         let v = serde_json::to_value(summary(&b)).unwrap();
@@ -478,6 +573,21 @@ mod tests {
 
     /// 规格 meeting-library-read：transcript.json 坏了目录还在，要标记不可读而不是悄悄当成「没转写」
     #[test]
+    fn directory_with_only_minutes_still_lists() {
+        // 用户可能手工整理过：删掉录音、只留纪要。这种目录不能从列表里消失。
+        let root = temp_root("minutes-only");
+        let dir = root.join("2026-11-02_1430_手工整理");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(MINUTES), "# 手工整理\n\n## 一句话总结\n只有纪要。\n").unwrap();
+
+        let items = list(&root);
+        assert_eq!(items.len(), 1);
+        assert!(items[0].has_minutes);
+        assert!(!items[0].has_audio);
+        assert!(!items[0].unreadable);
+    }
+
+    #[test]
     fn corrupted_transcript_is_marked_unreadable() {
         let root = temp_root("unreadable");
         let broken = root.join("2026-10-05_0900_损坏");
@@ -488,7 +598,7 @@ mod tests {
         assert!(m.unreadable);
         assert!(!m.has_transcript);
         assert_eq!(m.title, "损坏会议"); // 其它字段照旧，坏的不影响展示
-        // 只有 纪要.md、没有 transcript.json：只是没转写，不算损坏
+                                         // 只有 纪要.md、没有 transcript.json：只是没转写，不算损坏
         let plain = root.join("2026-10-06_0900_没有转写");
         std::fs::create_dir_all(&plain).unwrap();
         std::fs::write(plain.join(MINUTES), "# 没转写\n").unwrap();
@@ -504,17 +614,34 @@ mod tests {
     #[test]
     fn audio_and_leftover_files() {
         let dir = temp_root("leftovers");
-        for f in ["system.wav", "mic.wav", "mixed.wav", "转写.md", "x.part", "y.TMP"] {
+        for f in [
+            "system.wav",
+            "mic.wav",
+            "mixed.wav",
+            "转写.md",
+            "x.part",
+            "y.TMP",
+        ] {
             std::fs::write(dir.join(f), b"x").unwrap();
         }
-        let names = |v: Vec<PathBuf>| v.iter().map(|p| file_name(p).to_string()).collect::<Vec<_>>();
+        let names = |v: Vec<PathBuf>| {
+            v.iter()
+                .map(|p| file_name(p).to_string())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(audio_files(&dir)), vec!["mic.wav", "system.wav"]);
         // 还没有 录音.*：原始音轨不算残留（可能正在录、或者合成没做）
         assert_eq!(names(leftover_files(&dir)), vec!["x.part", "y.TMP"]);
         std::fs::write(dir.join("录音.m4a"), b"x").unwrap();
         std::fs::write(dir.join("录音.wav"), b"x").unwrap();
-        assert_eq!(names(audio_files(&dir)), vec!["mic.wav", "system.wav", "录音.m4a", "录音.wav"]);
-        assert_eq!(names(leftover_files(&dir)), vec!["mic.wav", "system.wav", "x.part", "y.TMP"]);
+        assert_eq!(
+            names(audio_files(&dir)),
+            vec!["mic.wav", "system.wav", "录音.m4a", "录音.wav"]
+        );
+        assert_eq!(
+            names(leftover_files(&dir)),
+            vec!["mic.wav", "system.wav", "x.part", "y.TMP"]
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -530,10 +657,28 @@ mod tests {
             d
         };
         // a：合成好了但原始音轨还在 → 残留；b：只有原始音轨（没有 录音.*）→ 不算残留；c：最大
-        mk("2026-10-01_0900_a", &[("录音.m4a", 100), ("system.wav", 30), ("mic.wav", 20), (TRANSCRIPT_JSON, 5)]);
-        mk("2026-10-02_0900_b", &[("system.wav", 40), (TRANSCRIPT_JSON, 5), ("dl.part", 7)]);
+        mk(
+            "2026-10-01_0900_a",
+            &[
+                ("录音.m4a", 100),
+                ("system.wav", 30),
+                ("mic.wav", 20),
+                (TRANSCRIPT_JSON, 5),
+            ],
+        );
+        mk(
+            "2026-10-02_0900_b",
+            &[("system.wav", 40), (TRANSCRIPT_JSON, 5), ("dl.part", 7)],
+        );
         let c = mk("2026-10-03_0900_c", &[("录音.mp3", 1000), (MINUTES, 10)]);
-        write_meta(&c, &Meta { archived: true, ..Default::default() }).unwrap();
+        write_meta(
+            &c,
+            &Meta {
+                archived: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         mk("2026-10-04_0900_not-a-meeting", &[("notes.txt", 5000)]);
         let v = storage(&root, |_| false);
         assert_eq!(v["count"], 3);
@@ -543,7 +688,14 @@ mod tests {
         assert_eq!(v["meetings_bytes"], 155 + 52 + 1010 + meta_len);
         let largest = v["largest"].as_array().unwrap();
         let ids: Vec<&str> = largest.iter().map(|x| x["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, vec!["2026-10-03_0900_c", "2026-10-01_0900_a", "2026-10-02_0900_b"]);
+        assert_eq!(
+            ids,
+            vec![
+                "2026-10-03_0900_c",
+                "2026-10-01_0900_a",
+                "2026-10-02_0900_b"
+            ]
+        );
         assert_eq!(largest[0]["audio_bytes"], 1000);
         assert_eq!(largest[0]["archived"], true);
         assert_eq!(largest[0]["date"], "2026-10-03");

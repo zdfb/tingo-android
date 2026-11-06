@@ -40,6 +40,7 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
+    onUnreadableClick: (MeetingCard) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -95,7 +96,11 @@ fun LibraryScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(state.items, key = { it.id }) { card ->
-                    MeetingCardRow(card = card, onClick = { onOpenMeeting(card.id) })
+                    MeetingCardRow(
+                        card = card,
+                        onClick = { onOpenMeeting(card.id) },
+                        onUnreadableClick = { onUnreadableClick(card) },
+                    )
                 }
             }
         }
@@ -103,7 +108,7 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun MeetingCardRow(card: MeetingCard, onClick: () -> Unit) {
+private fun MeetingCardRow(card: MeetingCard, onClick: () -> Unit, onUnreadableClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,8 +119,9 @@ private fun MeetingCardRow(card: MeetingCard, onClick: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 if (card.unreadable) {
+                    // 读不出来的目录要能让用户看见它到底是哪个文件夹，否则无从排查
                     AssistChip(
-                        onClick = {},
+                        onClick = onUnreadableClick,
                         label = { Text(stringResource(R.string.library_unreadable)) },
                     )
                 }

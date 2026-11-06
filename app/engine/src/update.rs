@@ -48,7 +48,10 @@ fn parse(v: &str) -> Option<(Vec<u64>, Option<String>)> {
         Some((c, p)) => (c, Some(p.to_string())),
         None => (v, None),
     };
-    let mut nums: Vec<u64> = core.split('.').map(|p| p.parse().ok()).collect::<Option<_>>()?;
+    let mut nums: Vec<u64> = core
+        .split('.')
+        .map(|p| p.parse().ok())
+        .collect::<Option<_>>()?;
     if nums.is_empty() || nums.len() > 3 {
         return None;
     }
@@ -88,7 +91,8 @@ pub fn checksum_for(text: &str, name: &str) -> Option<String> {
         let mut parts = l.split_whitespace();
         let (sum, file) = (parts.next()?, parts.next()?);
         let file = file.trim_start_matches('*'); // 二进制模式的输出带 *
-        (file == name && sum.len() == 64 && sum.chars().all(|c| c.is_ascii_hexdigit())).then(|| sum.to_ascii_lowercase())
+        (file == name && sum.len() == 64 && sum.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| sum.to_ascii_lowercase())
     })
 }
 
@@ -96,9 +100,17 @@ pub fn checksum_for(text: &str, name: &str) -> Option<String> {
 fn pick_dmg(assets: &[Value]) -> Option<&Value> {
     let dmgs: Vec<&Value> = assets
         .iter()
-        .filter(|a| a["name"].as_str().is_some_and(|n| n.to_ascii_lowercase().ends_with(".dmg")))
+        .filter(|a| {
+            a["name"]
+                .as_str()
+                .is_some_and(|n| n.to_ascii_lowercase().ends_with(".dmg"))
+        })
         .collect();
-    let arch: &[&str] = if std::env::consts::ARCH == "aarch64" { &["aarch64", "arm64"] } else { &["x86_64", "x64", "intel"] };
+    let arch: &[&str] = if std::env::consts::ARCH == "aarch64" {
+        &["aarch64", "arm64"]
+    } else {
+        &["x86_64", "x64", "intel"]
+    };
     dmgs.iter()
         .find(|a| {
             let n = a["name"].as_str().unwrap_or("").to_ascii_lowercase();
@@ -114,12 +126,22 @@ pub fn parse_release(v: &Value, checksums: Option<&str>) -> Option<Release> {
     let latest = tag.trim().trim_start_matches(['v', 'V']).to_string();
     let assets = v["assets"].as_array().cloned().unwrap_or_default();
     let dmg = pick_dmg(&assets);
-    let dmg_name = dmg.and_then(|a| a["name"].as_str()).unwrap_or("").to_string();
+    let dmg_name = dmg
+        .and_then(|a| a["name"].as_str())
+        .unwrap_or("")
+        .to_string();
     Some(Release {
         latest,
         url: v["html_url"].as_str().unwrap_or("").to_string(),
-        notes: v["body"].as_str().unwrap_or("").chars().take(MAX_NOTES).collect(),
-        dmg: dmg.and_then(|a| a["browser_download_url"].as_str()).map(String::from),
+        notes: v["body"]
+            .as_str()
+            .unwrap_or("")
+            .chars()
+            .take(MAX_NOTES)
+            .collect(),
+        dmg: dmg
+            .and_then(|a| a["browser_download_url"].as_str())
+            .map(String::from),
         size: dmg.and_then(|a| a["size"].as_u64()).unwrap_or(0),
         sha256: checksums.and_then(|c| checksum_for(c, &dmg_name)),
         dmg_name,
@@ -136,7 +158,10 @@ fn checksums_url(v: &Value) -> Option<String> {
         .map(String::from)
 }
 
-pub fn client(version: &str, timeout: Option<Duration>) -> Result<reqwest::blocking::Client, String> {
+pub fn client(
+    version: &str,
+    timeout: Option<Duration>,
+) -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(timeout)
@@ -157,7 +182,8 @@ pub fn fetch_latest(version: &str) -> Result<Release, String> {
         return Err(format!("GitHub {}", r.status()));
     }
     let v: Value = r.json().map_err(|e| e.to_string())?;
-    let sums = checksums_url(&v).and_then(|u| c.get(u).send().ok()?.error_for_status().ok()?.text().ok());
+    let sums =
+        checksums_url(&v).and_then(|u| c.get(u).send().ok()?.error_for_status().ok()?.text().ok());
     parse_release(&v, sums.as_deref()).ok_or_else(|| "GitHub: no tag_name".to_string())
 }
 
@@ -177,7 +203,10 @@ mod tests {
         assert_eq!(compare("0.3.0-rc.1", "0.3.0-beta.1"), Some(Greater));
         assert_eq!(compare("0.3.0+build5", "0.3.0"), Some(Equal));
         assert_eq!(compare("latest", "0.2.0"), None);
-        let r = Release { latest: "0.3.0".into(), ..Default::default() };
+        let r = Release {
+            latest: "0.3.0".into(),
+            ..Default::default()
+        };
         assert!(r.newer_than("0.2.0") && !r.newer_than("0.3.0") && !r.newer_than("0.4.0"));
     }
 
@@ -205,7 +234,10 @@ mod tests {
         assert_eq!(j["size_mb"], 12);
         assert_eq!(j["notes"].as_str().unwrap().chars().count(), 3000);
         assert!(j["sha256"].as_str().unwrap().starts_with("0123"));
-        assert_eq!(checksums_url(&v).as_deref(), Some("https://e/checksums.txt"));
+        assert_eq!(
+            checksums_url(&v).as_deref(),
+            Some("https://e/checksums.txt")
+        );
         let bare = parse_release(&json!({"tag_name": "0.1.0"}), None).unwrap();
         assert_eq!((bare.dmg, bare.sha256), (None, None));
         assert!(parse_release(&json!({}), None).is_none());
