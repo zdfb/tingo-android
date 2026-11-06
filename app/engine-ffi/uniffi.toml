@@ -1,0 +1,4 @@
+[bindings.kotlin]
+# 生成的 Kotlin 绑定放在 app 模块的包路径下，Gradle 任务直接把这个目录加进源集。
+package_name = "io.github.tancheng33.tingo.engine"
+cdylib_name = "tingo_ffi"

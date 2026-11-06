@@ -13,7 +13,121 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::asr::{AsrKind, ModelPaths};
+/// 可选的识别模型。VAD、标点、声纹三个基础模型大家共用。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AsrKind {
+    Paraformer,
+    SenseVoice,
+    FunAsrNano,
+    AppleSpeech,
+}
+
+impl AsrKind {
+    pub const ALL: [AsrKind; 4] = [AsrKind::Paraformer, AsrKind::SenseVoice, AsrKind::FunAsrNano, AsrKind::AppleSpeech];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            AsrKind::Paraformer => "paraformer",
+            AsrKind::SenseVoice => "sensevoice",
+            AsrKind::FunAsrNano => "funasr-nano",
+            AsrKind::AppleSpeech => "apple-speech",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.id() == id)
+    }
+
+    /// 能指定会议语言（[asr] language）；Paraformer 只认中文
+    pub fn uses_language(self) -> bool {
+        matches!(self, AsrKind::SenseVoice | AsrKind::FunAsrNano | AsrKind::AppleSpeech)
+    }
+
+    /// 模型自己会加标点（不用再过 CT-Transformer）。SenseVoice 按 VAD 切出的短段识别时基本不出标点，照样要过
+    // 只有识别链路（asr.rs）会问这个问题；Android 侧不编译 asr.rs，留着反而是死代码
+    #[cfg(feature = "sherpa-asr")]
+    pub(crate) fn punctuates(self) -> bool {
+        matches!(self, AsrKind::FunAsrNano | AsrKind::AppleSpeech)
+    }
+}
+
+/// 模型文件布局（相对模型目录）。
+pub struct ModelPaths {
+    pub dir: PathBuf,
+}
+
+impl ModelPaths {
+    pub fn new(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+    pub fn paraformer(&self) -> PathBuf {
+        self.dir.join("paraformer/model.int8.onnx")
+    }
+    pub fn tokens(&self) -> PathBuf {
+        self.dir.join("paraformer/tokens.txt")
+    }
+    pub fn vad(&self) -> PathBuf {
+        self.dir.join("silero_vad.onnx")
+    }
+    pub fn punct(&self) -> PathBuf {
+        self.dir.join("punct/model.int8.onnx")
+    }
+    pub fn speaker(&self) -> PathBuf {
+        self.dir.join("campplus_zh.onnx")
+    }
+    /// 识别模型所在目录（Paraformer 沿用最早的位置，老用户不用重新下载）
+    pub fn asr_dir(&self, kind: AsrKind) -> PathBuf {
+        self.dir.join(match kind {
+            AsrKind::Paraformer => "paraformer",
+            AsrKind::SenseVoice => "sensevoice",
+            AsrKind::FunAsrNano => "funasr-nano",
+            AsrKind::AppleSpeech => "apple-speech",
+        })
+    }
+    pub fn asr_files(&self, kind: AsrKind) -> Vec<PathBuf> {
+        let d = self.asr_dir(kind);
+        match kind {
+            AsrKind::AppleSpeech => vec![],
+            AsrKind::Paraformer => vec![self.paraformer(), self.tokens()],
+            AsrKind::SenseVoice => vec![d.join("model.int8.onnx"), d.join("tokens.txt")],
+            AsrKind::FunAsrNano => vec![
+                d.join("encoder_adaptor.int8.onnx"),
+                d.join("llm.int8.onnx"),
+                d.join("embedding.int8.onnx"),
+                d.join("Qwen3-0.6B/tokenizer.json"),
+            ],
+        }
+    }
+    pub fn base(&self) -> [PathBuf; 3] {
+        [self.vad(), self.punct(), self.speaker()]
+    }
+    pub fn base_ready(&self) -> bool {
+        self.base().iter().all(|p| p.is_file())
+    }
+    pub fn asr_ready(&self, kind: AsrKind) -> bool {
+        self.asr_files(kind).iter().all(|p| p.is_file())
+    }
+    /// 默认的一套（基础模型 + Paraformer）是否齐全：首次启动下载的就是这一套
+    pub fn ready(&self) -> bool {
+        self.base_ready() && self.asr_ready(AsrKind::Paraformer)
+    }
+    fn active_file(&self) -> PathBuf {
+        self.dir.join("active-asr.txt")
+    }
+    /// 当前选用的识别模型；没选过或者选的那个文件不全时用 Paraformer
+    pub fn active(&self) -> AsrKind {
+        std::fs::read_to_string(self.active_file())
+            .ok()
+            .and_then(|s| AsrKind::from_id(s.trim()))
+            .filter(|&k| self.asr_ready(k))
+            .unwrap_or(AsrKind::Paraformer)
+    }
+    pub fn set_active(&self, kind: AsrKind) -> std::io::Result<()> {
+        std::fs::create_dir_all(&self.dir)?;
+        std::fs::write(self.active_file(), kind.id())
+    }
+}
+
 use crate::i18n::tr;
 
 const MODELSCOPE: &str = "https://modelscope.cn/models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx/resolve/master";
@@ -448,6 +562,18 @@ fn extract_dir(tar_bz2: &Path, dst: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 选了 Apple Speech 之后，即使目录里没有任何 onnx 文件也要记住这个选择（基础模型另算）
+    #[test]
+    fn apple_selection_survives_without_onnx_files() {
+        let dir = std::env::temp_dir().join(format!("tingo-apple-choice-{}", std::process::id()));
+        let paths = ModelPaths::new(&dir);
+        let kind = AsrKind::from_id("apple-speech").expect("Apple engine in catalog");
+        paths.set_active(kind).unwrap();
+        assert_eq!(paths.active(), kind);
+        assert!(paths.asr_files(kind).is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn varint_and_entry_encoding() {

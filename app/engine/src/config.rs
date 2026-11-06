@@ -173,14 +173,9 @@ pub fn normalize_api(v: Option<&str>) -> String {
     }
 }
 
+/// 桌面版的配置文件位置（`TINGO_CONFIG` 优先，jiyao 旧位置回退）。其它平台用注入的 [`crate::paths::EnginePaths`]。
 pub fn default_path() -> PathBuf {
-    if let Some(p) = env_var("CONFIG") {
-        return PathBuf::from(p);
-    }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    with_legacy(home.join(".config/tingo/config.toml"), home.join(".config/jiyao/config.toml"))
+    crate::paths::config_file_in(&crate::paths::home_dir())
 }
 
 /// 读配置；环境变量优先（与 Python 版相同的几个）。文件不存在或格式不对时用默认值。

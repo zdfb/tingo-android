@@ -7,3 +7,8 @@ build/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+
+# 本地工具链与构建缓存（体积大，不入库）
+.tools/
+app/engine/target/
+app/engine-ffi/target/

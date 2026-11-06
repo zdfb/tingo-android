@@ -27,19 +27,9 @@ pub const AUDIO_EXTS: [&str; 10] = [
 static FOLDER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})_(.+)$").unwrap());
 
+/// 桌面版的会议库根目录。其它平台（Android）用注入的 [`crate::paths::EnginePaths::meetings_root`]。
 pub fn default_root() -> PathBuf {
-    if let Some(p) = crate::config::env_var("ROOT") {
-        return PathBuf::from(p);
-    }
-    let cfg = crate::config::load(&crate::config::default_path());
-    if !cfg.storage_root.is_empty() {
-        return PathBuf::from(cfg.storage_root);
-    }
-    let docs = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-        .join("Documents");
-    crate::config::with_legacy(docs.join("Tingo"), docs.join("jiyao"))
+    crate::paths::EnginePaths::desktop().meetings_root
 }
 
 /// 会议文件夹名里的标题部分：去掉文件名里不能用的字符和空白
@@ -268,6 +258,9 @@ pub struct Summary {
     pub summary: String,
     pub has_minutes: bool,
     pub has_transcript: bool,
+    /// `transcript.json` 在但解析不出来：目录还在，内容坏了。界面据此标记「不可读」而不是假装没有转写。
+    /// `纪要.md` 读不到不算——那只是文本，读不到就是没纪要。
+    pub unreadable: bool,
     pub duration: String,
     pub speakers: Vec<String>,
     pub tags: Vec<String>,
@@ -294,7 +287,9 @@ pub fn summary(dir: &Path) -> Summary {
         .as_ref()
         .map(|c| c[4].to_string())
         .unwrap_or_else(|| name.clone());
-    let tr = Transcript::load(&dir.join(TRANSCRIPT_JSON)).ok();
+    let transcript_path = dir.join(TRANSCRIPT_JSON);
+    let tr = Transcript::load(&transcript_path).ok();
+    let unreadable = transcript_path.is_file() && tr.is_none();
     let meta = read_meta(dir);
     Summary {
         // 标题：用户改的 → 纪要第一行 # 标题 → 文件夹名里的会议名
@@ -304,6 +299,7 @@ pub fn summary(dir: &Path) -> Summary {
         summary: one_liner(&crate::terms::strip(&minutes)),
         has_minutes: !minutes.is_empty(),
         has_transcript: tr.is_some(),
+        unreadable,
         duration: tr
             .as_ref()
             .map(|t| fmt_ts(t.duration_ms))
@@ -369,19 +365,6 @@ pub fn storage(root: &Path, busy: impl Fn(&str) -> bool) -> Value {
         "leftover_bytes": leftover_bytes,
         "largest": largest,
     })
-}
-
-/// 路径所在磁盘的剩余空间（普通用户可用的）。路径还不存在时看最近一层存在的上级目录。
-pub fn free_bytes(path: &Path) -> Option<u64> {
-    use std::os::unix::ffi::OsStrExt;
-    let existing = path.ancestors().find(|p| p.exists())?;
-    let c = std::ffi::CString::new(existing.as_os_str().as_bytes()).ok()?;
-    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
-    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
-        return None;
-    }
-    #[allow(clippy::unnecessary_cast)] // 各平台字段类型不一样
-    Some(st.f_bavail as u64 * st.f_frsize as u64)
 }
 
 #[cfg(test)]
@@ -493,6 +476,31 @@ mod tests {
         std::fs::remove_dir_all(root).ok();
     }
 
+    /// 规格 meeting-library-read：transcript.json 坏了目录还在，要标记不可读而不是悄悄当成「没转写」
+    #[test]
+    fn corrupted_transcript_is_marked_unreadable() {
+        let root = temp_root("unreadable");
+        let broken = root.join("2026-10-05_0900_损坏");
+        std::fs::create_dir_all(&broken).unwrap();
+        std::fs::write(broken.join(TRANSCRIPT_JSON), "{not json").unwrap();
+        std::fs::write(broken.join(MINUTES), "# 损坏会议\n").unwrap();
+        let m = summary(&broken);
+        assert!(m.unreadable);
+        assert!(!m.has_transcript);
+        assert_eq!(m.title, "损坏会议"); // 其它字段照旧，坏的不影响展示
+        // 只有 纪要.md、没有 transcript.json：只是没转写，不算损坏
+        let plain = root.join("2026-10-06_0900_没有转写");
+        std::fs::create_dir_all(&plain).unwrap();
+        std::fs::write(plain.join(MINUTES), "# 没转写\n").unwrap();
+        std::fs::write(plain.join("录音.m4a"), b"x").unwrap();
+        assert!(!summary(&plain).unreadable);
+        // 列表里坏的也在，不会被丢掉
+        let ids: Vec<String> = list(&root).into_iter().map(|m| m.id).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"2026-10-05_0900_损坏".to_string()));
+        std::fs::remove_dir_all(root).ok();
+    }
+
     #[test]
     fn audio_and_leftover_files() {
         let dir = temp_root("leftovers");
@@ -543,8 +551,6 @@ mod tests {
         // 正在处理的会议不算残留（比如正在合成录音）
         let v = storage(&root, |id| id.ends_with("_a"));
         assert_eq!(v["leftover_bytes"], 7);
-        assert!(free_bytes(&root).is_some_and(|n| n > 0));
-        assert!(free_bytes(&root.join("还没建/的目录")).is_some());
         std::fs::remove_dir_all(root).ok();
     }
 }

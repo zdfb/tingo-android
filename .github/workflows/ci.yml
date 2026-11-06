@@ -39,5 +39,81 @@ jobs:
       # 在 src-tauri / engine 目录里跑，才会用上 rust-toolchain.toml 固定的版本
       - run: cargo clippy -- -D warnings
         working-directory: app/src-tauri
+      # 引擎的桌面形态：http-server + sherpa-asr + desktop-shell 全开，命令与本地开发一致
+      - run: cargo clippy -- -D warnings
+        working-directory: app/engine
       - run: cargo test --release --lib
         working-directory: app/engine
+      # 引擎的 Android 形态：--no-default-features 下不带 axum / sherpa-onnx / libc，也要编过、测过
+      - run: cargo clippy --no-default-features -- -D warnings
+        working-directory: app/engine
+      - run: cargo test --no-default-features --lib
+        working-directory: app/engine
+
+  engine-android:
+    # 桌面形态由 app job 守着；这里只交叉编译 Android 形态，防止核心模块里再长出桌面专属的系统调用。
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/engine
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show  # 按 rust-toolchain.toml 装固定版本
+      - run: rustup target add aarch64-linux-android
+      # cargo-ndk 自己从 runner 预装的 Android SDK 里找 NDK，交叉编译时要给 ring 等 C 代码指编译器
+      - run: cargo install cargo-ndk --locked
+      - run: cargo ndk -t arm64-v8a build --no-default-features
+
+  android-app:
+    # Android 应用：JVM 单测 + 打包 debug APK（原生库由 cargo-ndk 交叉编译后打进 APK）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - run: cargo install cargo-ndk --locked
+      - name: 指向 runner 自带的 NDK
+        run: echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_SDK_ROOT"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+      # Gradle 走 settings.gradle.kts 里配的镜像，wrapper 发行版走腾讯镜像
+      - run: ./gradlew :app:testDebugUnitTest
+      - run: ./gradlew :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tingo-android-debug-apk
+          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+
+  android-instrumented:
+    # 设备级验证：真实 .so + 真实引擎 + Compose 界面。用 API 36 的 x86_64 镜像，
+    # 与本项目的 arm64-v8a / x86_64 两个 ABI 对得上。
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - run: cargo install cargo-ndk --locked
+      - name: 指向 runner 自带的 NDK
+        run: echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_SDK_ROOT"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          working-directory: app/android
+          script: ./gradlew :app:connectedDebugAndroidTest

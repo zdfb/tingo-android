@@ -7,22 +7,46 @@ license = "MIT"
 edition = "2021"
 rust-version = "1.85"
 
+[features]
+# 桌面版三个都开，构建命令不变。
+default = ["http-server", "sherpa-asr", "desktop-shell"]
+# Android 用 --no-default-features：只留纯逻辑核心（文件 + JSON/TOML + 网络请求），
+# 不带 axum、sherpa-onnx、libc，也不起子进程。
+#
+# 三者不是正交的：server.rs 路由要覆盖识别与录音，所以 http-server 顺带打开另外两个；
+# asr.rs 的 Apple Speech 分支要起桌面子进程，所以 sherpa-asr 依赖 desktop-shell。
+http-server = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tokio", "sherpa-asr", "desktop-shell"]
+sherpa-asr = ["dep:sherpa-onnx", "desktop-shell"]
+desktop-shell = ["dep:libc"]
+
 [dependencies]
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart"], optional = true }
 base64 = "0.23.1"
 bzip2 = "0.6.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 faer = "0.22"
 hmac = "0.13.0"
-libc = "0.2.191"
+libc = { version = "0.2.191", optional = true }
 regex = "1.13.1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "stream", "json"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.0"
-sherpa-onnx = { version = "2.0.1", default-features = false, features = ["static"] }
+sherpa-onnx = { version = "2.0.1", default-features = false, features = ["static"], optional = true }
 tar = "0.4.46"
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "sync"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "sync"], optional = true }
 toml = "1.1.8"
-tower = { version = "0.5.3", features = ["util"] }
-tower-http = { version = "0.7.1", features = ["cors", "fs"] }
+tower = { version = "0.5.3", features = ["util"], optional = true }
+tower-http = { version = "0.7.1", features = ["cors", "fs"], optional = true }
+
+[[example]]
+name = "probe"
+required-features = ["sherpa-asr"]
+
+[[example]]
+name = "serve"
+required-features = ["http-server"]
+
+[[example]]
+name = "transcribe"
+required-features = ["sherpa-asr"]

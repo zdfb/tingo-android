@@ -1,0 +1,24 @@
+[package]
+name = "tingo-ffi"
+version = "0.1.0"
+description = "tingo 引擎的 UniFFI 边界层：给 Android 等非桌面宿主用"
+authors = ["stardust <642720202@qq.com>"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+[lib]
+name = "tingo_ffi"
+# cdylib 给 Android 的 JNI 侧加载；rlib 让 Rust 单测能直接调用导出函数。
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# 边界层只依赖可移植核心：桌面专属能力（axum、sherpa-onnx、子进程）不进 Android。
+tingo-engine = { path = "../engine", default-features = false }
+thiserror = "2.0"
+uniffi = { version = "0.32", features = ["cli"] }
+
+[dev-dependencies]
+tempfile = "3"
+tingo-engine = { path = "../engine", default-features = false }

@@ -5,10 +5,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::extract::Request;
-use axum::middleware::Next;
-use axum::response::Response;
-
+#[cfg(feature = "http-server")]
 pub const HEADER: &str = "x-tingo-lang";
 
 static UI_EN: AtomicBool = AtomicBool::new(false);
@@ -111,6 +108,7 @@ pub fn resolve(setting: &str, text: &str) -> Lang {
 }
 
 /// 读请求头 X-Tingo-Lang，更新界面语言
+#[cfg(feature = "http-server")]
 pub fn remember(headers: &axum::http::HeaderMap) {
     if let Some(lang) = headers.get(HEADER).and_then(|v| v.to_str().ok()).and_then(Lang::parse) {
         set_ui(lang);
@@ -118,7 +116,8 @@ pub fn remember(headers: &axum::http::HeaderMap) {
 }
 
 /// axum 中间件：每个请求都过一遍 [`remember`]
-pub async fn layer(req: Request, next: Next) -> Response {
+#[cfg(feature = "http-server")]
+pub async fn layer(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
     remember(req.headers());
     next.run(req).await
 }
@@ -130,8 +129,11 @@ pub static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "http-server")]
     use axum::routing::get;
+    #[cfg(feature = "http-server")]
     use axum::Router;
+    #[cfg(feature = "http-server")]
     use tower::ServiceExt;
 
     #[test]
@@ -150,12 +152,14 @@ mod tests {
         assert_eq!(doc_lang("# T\n\n## 一句话总结\n好"), Lang::Zh);
     }
 
+    #[cfg(feature = "http-server")]
     #[test]
     fn header_switches_ui_language() {
         let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(header_switch_checks());
     }
 
+    #[cfg(feature = "http-server")]
     async fn header_switch_checks() {
         let app: Router = Router::new()
             .route("/", get(|| async { tr("中文", "English").to_string() }))

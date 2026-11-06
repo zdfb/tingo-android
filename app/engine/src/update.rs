@@ -1,12 +1,9 @@
 //! 检查更新（只桌面版）：读 GitHub 上最新的 Release，找 .dmg 安装包和 checksums.txt 里的 sha256。
 
 use std::cmp::Ordering;
-use std::io::Read;
-use std::path::Path;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 pub const LATEST_URL: &str = "https://api.github.com/repos/tancheng33/tingo/releases/latest";
 const MAX_NOTES: usize = 3000;
@@ -162,21 +159,6 @@ pub fn fetch_latest(version: &str) -> Result<Release, String> {
     let v: Value = r.json().map_err(|e| e.to_string())?;
     let sums = checksums_url(&v).and_then(|u| c.get(u).send().ok()?.error_for_status().ok()?.text().ok());
     parse_release(&v, sums.as_deref()).ok_or_else(|| "GitHub: no tag_name".to_string())
-}
-
-/// 文件的 sha256（小写十六进制）
-pub fn sha256_file(path: &Path) -> std::io::Result<String> {
-    let mut f = std::fs::File::open(path)?;
-    let mut h = Sha256::new();
-    let mut buf = vec![0u8; 1 << 16];
-    loop {
-        let n = f.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        h.update(&buf[..n]);
-    }
-    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 #[cfg(test)]

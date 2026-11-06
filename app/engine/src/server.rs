@@ -23,6 +23,7 @@ use tower_http::services::ServeFile;
 use crate::asr::{AsrKind, Engine, ModelPaths};
 use crate::chunked::{transcribe_samples, wav_path, LiveTranscriber};
 use crate::config::{self, Config};
+use crate::disk::DiskSpace;
 use crate::i18n::{self, tr, Lang};
 use crate::meetings::{self, AUDIO, MINUTES, TRANSCRIPT_JSON};
 use crate::{fishbone, obsidian};
@@ -358,7 +359,7 @@ impl AppState {
         v["models_bytes"] = meetings::size_of(&self.opt.models_dir).into();
         v["can_change_directory"] = json!(config::env_var("ROOT").is_none());
         v["changing"] = json!(self.storage_progress.lock().unwrap().active);
-        v["free_bytes"] = meetings::free_bytes(&self.root()).into();
+        v["free_bytes"] = crate::disk::Statvfs.free_bytes(&self.root()).into();
         v
     }
 
@@ -999,12 +1000,12 @@ async fn change_storage(State(s): State<Shared>, Json(r): Json<StorageDirectoryR
     tokio::task::spawn_blocking(move || {
         let _guard = guard;
         let source = s.root();
-        let target = crate::storage::destination(&source, &r.path).map_err(bad)?;
+        let target = crate::storage::destination(&source, &r.path, &crate::paths::EnginePaths::desktop()).map_err(bad)?;
         if source.canonicalize().ok().as_ref() == Some(&target) { return Ok(Json(json!({"root": target}))); }
         *s.storage_progress.lock().unwrap() = crate::storage::Progress { active: true, ..Default::default() };
         let result = (|| {
             if r.copy_existing {
-                crate::storage::copy_library(&source, &target, |copied, total| {
+                crate::storage::copy_library(&source, &target, &crate::disk::Statvfs, |copied, total| {
                     let mut p = s.storage_progress.lock().unwrap();
                     p.copied_bytes = copied;
                     p.total_bytes = total;
@@ -2022,7 +2023,7 @@ async fn download_update(State(s): State<Shared>) -> ApiResult<Json<Job>> {
             st.update(id, |j| j.stage = format!("{:.0} / {:.0} MB", n as f64 / 1e6, total))
         })?;
         if let Some(want) = &r.sha256 {
-            if update::sha256_file(&dest).ok().as_deref() != Some(want.as_str()) {
+            if crate::storage::sha256_file(&dest).ok().as_deref() != Some(want.as_str()) {
                 let _ = std::fs::remove_file(&dest);
                 return Err(i18n::tr(
                     "下载的安装包校验不通过，已删除",
@@ -2247,8 +2248,9 @@ mod tests {
         std::fs::remove_file(target.join("keep.txt")).unwrap();
         let nested = root.join("nested");
         std::fs::create_dir(&nested).unwrap();
-        assert!(crate::storage::destination(&root, nested.to_str().unwrap()).is_err());
-        assert!(crate::storage::destination(&root, root.parent().unwrap().to_str().unwrap()).is_err());
+        let paths = crate::paths::EnginePaths::desktop();
+        assert!(crate::storage::destination(&root, nested.to_str().unwrap(), &paths).is_err());
+        assert!(crate::storage::destination(&root, root.parent().unwrap().to_str().unwrap(), &paths).is_err());
         std::os::unix::fs::symlink(&target, root.join("link")).unwrap();
         assert!(change_storage(State(s.clone()), request()).await.is_err());
         assert_eq!(s.root(), root);

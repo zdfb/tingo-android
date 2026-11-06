@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tingo</string>
+
+    <!-- Navigation -->
+    <string name="nav_record">Record</string>
+    <string name="nav_meetings">Meetings</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Common -->
+    <string name="action_refresh">Refresh</string>
+    <string name="action_back">Back</string>
+    <string name="action_close">Close</string>
+    <string name="unknown">Unknown</string>
+
+    <!-- Detail -->
+    <string name="detail_tab_minutes">Minutes</string>
+    <string name="detail_tab_transcript">Transcript</string>
+    <string name="detail_no_minutes">No minutes for this meeting yet.</string>
+    <string name="detail_no_transcript">This meeting has no transcript.</string>
+    <string name="detail_speaker_default">Speaker %1$d</string>
+    <string name="detail_fishbone_invalid">Could not parse the fishbone diagram, showing raw text</string>
+    <string name="detail_minutes_parse_failed">Could not parse minutes: %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_language">Language</string>
+    <string name="settings_language_zh">中文</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_about">About</string>
+    <string name="settings_engine_version">Engine version: %1$s</string>
+    <string name="settings_data_root">Meeting library</string>
+    <string name="settings_data_root_desc">Meetings are stored in the app\'s private directory; uninstalling keeps anything you exported.</string>
+
+    <!-- Errors -->
+    <string name="error_title">Something went wrong</string>
+    <string name="error_invalid_input">Invalid input. Please check and try again.</string>
+    <string name="error_missing">A file or folder is missing.</string>
+    <string name="error_malformed">This file could not be parsed.</string>
+    <string name="error_permission_denied">No permission to access it.</string>
+    <string name="error_internal">Internal error. Please try again later.</string>
+
+    <!-- Device capability -->
+    <string name="unsupported_abi_title">Not supported on this device</string>
+    <string name="unsupported_abi_body">This build only supports arm64 devices. Please use a 64-bit device or wait for a later release.</string>
+
+    <!-- Recording placeholder (recording lands in a later change) -->
+    <string name="record_placeholder">Recording is being ported and will arrive in a later release.</string>
+
+    <!-- Library -->
+    <string name="library_empty">No meetings yet. Record one on desktop, or drop meeting folders into the library location.</string>
+    <string name="library_failed">Could not read the meeting library. Please check that its location is accessible.</string>
+    <string name="library_unreadable">Unreadable</string>
+    <string name="library_search_hint">Search title, summary or tag</string>
+    <string name="library_filter_archived">Archived only</string>
+    <string name="library_count">%1$d meetings</string>
+    <string name="library_count_filtered">Showing %1$d of %2$d</string>
+    <string name="detail_select_hint">Pick a meeting on the left</string>
+</resources>
