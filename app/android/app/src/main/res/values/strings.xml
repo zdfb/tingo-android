@@ -65,13 +65,11 @@
     <string name="record_finished">录音已保存</string>
     <string name="record_open_meeting">打开这场会议</string>
     <string name="transcribe_start">转写这场会议</string>
-    <string name="transcribe_need_models">需要先下载语音模型，约 %1$d MB。下载一次可重复使用。</string>
     <string name="transcribe_download_and_start">下载模型并开始转写</string>
     <string name="transcribe_downloading">正在下载语音模型…</string>
     <string name="transcribe_running">正在本机转写，可以离开这一页…</string>
     <string name="action_cancel">取消</string>
     <string name="minutes_generate">生成会议纪要</string>
-    <string name="minutes_need_model">需要先下载语言模型，约 %1$d MB。全部在本机运行。</string>
     <string name="minutes_generating">正在本机生成纪要，一分钟左右的会议通常要等几十秒…</string>
     <string name="library_more">更多操作</string>
     <string name="library_archive">归档</string>
@@ -100,4 +98,5 @@
     <string name="recording_notification_stop">结束录音</string>
     <string name="library_action_failed">操作失败：%1$s</string>
     <string name="err_llm_unsupported">本机暂不支持本地纪要生成，转写稿仍然保留</string>
+    <string name="task_need_model">需要先下载语音模型，约 %1$d MB。下载一次可重复使用。</string>
 </resources>

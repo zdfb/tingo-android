@@ -6,6 +6,7 @@ import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.TenVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
+import io.github.tancheng33.tingo.testing.ModelDownloads
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
@@ -29,24 +30,23 @@ class ModelDownloadInstrumentedTest {
 
     @Test
     fun downloadsVadThroughRealHttpAndInitialisesSherpa() {
-        val catalog = ModelCatalog.parse(context.assets.open("models.json").bufferedReader().readText())
+        val catalog = ModelDownloads.catalog(context)
         val vadModel = catalog.byId("vad")!!
         val dir = File(context.cacheDir, "models-test").apply { deleteRecursively(); mkdirs() }
         val store = ModelStore(dir, UrlFetcher())
 
         assertFalse(store.isReady(vadModel))
-        val result = store.download(vadModel)
+        ModelDownloads.ensure(store, listOf(vadModel))
 
-        assertTrue("下载失败：${result.exceptionOrNull()}", result.isSuccess)
         assertTrue(store.isReady(vadModel))
-        assertEquals(vadModel.bytes, result.getOrThrow().length())
+        assertEquals(vadModel.bytes, store.fileFor(vadModel).length())
 
         // 把模型真正交给 sherpa：能构造出 Vad 就说明文件与运行时都对得上
         val vad = Vad(
             assetManager = null,
             config = VadModelConfig(
                 SileroVadModelConfig(
-                    model = result.getOrThrow().absolutePath,
+                    model = store.fileFor(vadModel).absolutePath,
                     threshold = 0.5f,
                     minSilenceDuration = 0.25f,
                     minSpeechDuration = 0.25f,

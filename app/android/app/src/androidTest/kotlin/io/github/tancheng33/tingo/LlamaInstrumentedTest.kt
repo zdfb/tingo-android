@@ -3,6 +3,7 @@ package io.github.tancheng33.tingo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tancheng33.tingo.minutes.LlamaBridge
+import io.github.tancheng33.tingo.testing.ModelDownloads
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
@@ -27,13 +28,10 @@ class LlamaInstrumentedTest {
     fun loadsQuantisedModelAndGeneratesText() {
         assertTrue("原生库不可用（ABI 不受支持？）", LlamaBridge.isAvailable)
 
-        val catalog = ModelCatalog.parse(context.assets.open("llm.json").bufferedReader().readText())
+        val catalog = ModelDownloads.catalog(context, "llm.json")
         val file = catalog.files.single()
-        val store = ModelStore(File(context.cacheDir, "models-llm").apply { mkdirs() }, UrlFetcher())
-        if (!store.isReady(file)) {
-            val result = store.download(file)
-            assertTrue("下载语言模型失败：${result.exceptionOrNull()}", result.isSuccess)
-        }
+        val store = ModelDownloads.store(context, "models-llm")
+        ModelDownloads.ensure(store, listOf(file))
         val path = store.fileFor(file).absolutePath
 
         val started = System.currentTimeMillis()

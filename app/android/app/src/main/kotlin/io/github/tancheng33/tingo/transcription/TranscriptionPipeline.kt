@@ -68,12 +68,12 @@ class TranscriptionPipeline(
         outputDir: File,
         onProgress: (Float) -> Unit,
     ): Transcript = requireModel().use { model ->
-        val pcm = WavReader.read(wav)
-        require(pcm.samples.isNotEmpty()) { "录音是空的" }
+        val format = WavReader.format(wav)
+        require(format.dataBytes > 0) { "录音是空的" }
 
-        val segments = cutByVad(model.vad, pcm)
+        val segments = cutByVad(model.vad, wav)
         if (segments.isEmpty()) {
-            val empty = Transcript(source = wav.name, durationMs = pcm.durationMs, sentences = emptyList())
+            val empty = Transcript(source = wav.name, durationMs = format.durationMs, sentences = emptyList())
             TranscriptWriter.write(outputDir, empty)
             onProgress(1f)
             return@use empty
@@ -82,9 +82,9 @@ class TranscriptionPipeline(
         val recognized = ArrayList<RecognizedSegment>(segments.size)
         segments.forEachIndexed { index, segment ->
             coroutineContext.ensureActive()
-            val text = model.recognize(segment.samples, pcm.sampleRate)
+            val text = model.recognize(segment.samples, format.sampleRate)
             val punctuated = model.punctuate(text)
-            val embedding = model.embed(segment.samples, pcm.sampleRate)
+            val embedding = model.embed(segment.samples, format.sampleRate)
             recognized += RecognizedSegment(segment.startMs, segment.endMs, punctuated, embedding)
             onProgress((index + 1).toFloat() / segments.size)
         }
@@ -94,14 +94,11 @@ class TranscriptionPipeline(
         val renaming = previousNames(outputDir, speakers)
         val transcript = Transcript(
             source = wav.name,
-            durationMs = pcm.durationMs,
-            sentences = recognized.mapIndexed { index, segment ->
-                TranscriptSentence(
-                    speaker = speakers[index],
-                    startMs = segment.startMs,
-                    endMs = segment.endMs,
-                    text = segment.text,
-                )
+            durationMs = format.durationMs,
+            sentences = recognized.flatMapIndexed { index, segment ->
+                // 段落里可能有多句话：按句切开，每句带着自己的时间戳（规格要求一句一个 sentence）
+                SentenceSplitter.split(segment.text, segment.startMs, segment.endMs)
+                    .map { it.copy(speaker = speakers[index]) }
             },
             speakerNames = renaming,
         )
@@ -114,33 +111,42 @@ class TranscriptionPipeline(
 
     private class Segment(val startMs: Long, val endMs: Long, val samples: FloatArray)
 
-    private fun cutByVad(vad: Vad, pcm: Pcm): List<Segment> {
+    /**
+     * 流式切段：wav 分块喂给 VAD，内存里只保留当前块与已切出的语音段。
+     *
+     * 小时级会议录音如果整段读进 FloatArray，单是样本就要几百兆，真机必 OOM。
+     */
+    private fun cutByVad(vad: Vad, wav: File): List<Segment> {
         val window = vad.config.sileroVadModelConfig.windowSize.takeIf { it > 0 } ?: 512
+        val sampleRate = WavReader.format(wav).sampleRate
         val result = ArrayList<Segment>()
-        var offset = 0
-        while (offset + window <= pcm.samples.size) {
-            vad.acceptWaveform(pcm.samples.copyOfRange(offset, offset + window))
+        var carry = FloatArray(0)
+
+        fun drain() {
             while (!vad.empty()) {
                 val speech = vad.front()
                 vad.pop()
                 val startSample = speech.start.toInt()
-                val startMs = startSample * 1000L / pcm.sampleRate
-                val endMs = (startSample + speech.samples.size) * 1000L / pcm.sampleRate
-                result += Segment(startMs, endMs, speech.samples)
+                result += Segment(
+                    startSample * 1000L / sampleRate,
+                    (startSample + speech.samples.size) * 1000L / sampleRate,
+                    speech.samples,
+                )
             }
-            offset += window
+        }
+
+        WavReader.stream(wav) { chunk, _ ->
+            val merged = if (carry.isEmpty()) chunk else carry + chunk
+            var offset = 0
+            while (offset + window <= merged.size) {
+                vad.acceptWaveform(merged.copyOfRange(offset, offset + window))
+                drain()
+                offset += window
+            }
+            carry = if (offset < merged.size) merged.copyOfRange(offset, merged.size) else FloatArray(0)
         }
         vad.flush()
-        while (!vad.empty()) {
-            val speech = vad.front()
-            vad.pop()
-            val startSample = speech.start.toInt()
-            result += Segment(
-                startSample * 1000L / pcm.sampleRate,
-                (startSample + speech.samples.size) * 1000L / pcm.sampleRate,
-                speech.samples,
-            )
-        }
+        drain()
         // 太短的段大概率是噪声或半个字，丢掉
         return result.filter { it.endMs - it.startMs >= MIN_SEGMENT_MS }
     }

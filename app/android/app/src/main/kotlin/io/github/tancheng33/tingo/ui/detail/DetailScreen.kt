@@ -43,6 +43,8 @@ import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.SectionKind
 import io.github.tancheng33.tingo.engine.Turn
 import io.github.tancheng33.tingo.ui.clockOf
+import io.github.tancheng33.tingo.ui.components.TaskStatus
+import io.github.tancheng33.tingo.ui.components.TaskStatusBar
 
 /**
  * 会议详情：纪要 / 转写两栏。
@@ -214,52 +216,6 @@ private const val FISHBONE_FENCE = "```fishbone"
 private fun failureMessage(reasonRes: Int, detail: String?): String =
     if (detail.isNullOrBlank()) stringResource(reasonRes) else stringResource(reasonRes, detail)
 
-/** 纪要生成状态条：缺模型先提示下载，生成中给取消，失败给原因。 */
-@Composable
-private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, onCancel: () -> Unit) {
-    when (state) {
-        MinutesUiState.Idle -> Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
-        }
-
-        is MinutesUiState.NeedModel -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.minutes_need_model, state.missingBytes / 1_000_000),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
-        }
-
-        MinutesUiState.Generating -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Text(stringResource(R.string.minutes_generating), style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
-        }
-
-        is MinutesUiState.Done -> Unit
-
-        is MinutesUiState.Failed -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = failureMessage(state.reasonRes, state.detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
-        }
-    }
-}
-
 /** 转写状态条：缺模型、下载中、识别中、失败各自给出可操作的下一步。 */
 @Composable
 private fun TranscriptionStatus(
@@ -268,63 +224,45 @@ private fun TranscriptionStatus(
     onTranscribe: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    when (state) {
-        TranscriptionUiState.Idle -> if (!hasTranscript) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_start)) }
-            }
-        }
-
-        is TranscriptionUiState.NeedModels -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.transcribe_need_models, state.missingBytes / 1_000_000),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_download_and_start)) }
-        }
-
-        is TranscriptionUiState.Downloading -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(stringResource(R.string.transcribe_downloading), style = MaterialTheme.typography.bodyMedium)
-            LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
-        }
-
-        is TranscriptionUiState.Running -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(stringResource(R.string.transcribe_running), style = MaterialTheme.typography.bodyMedium)
-            LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
-        }
-
-        is TranscriptionUiState.Done -> Unit
-
-        is TranscriptionUiState.Failed -> Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = failureMessage(state.reasonRes, state.detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_start)) }
-        }
-    }
+    TaskStatusBar(
+        status = state.toTaskStatus(),
+        actionLabel = stringResource(R.string.transcribe_start),
+        onAction = onTranscribe,
+        onCancel = onCancel,
+        idleAction = !hasTranscript,
+    )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** 纪要生成状态条：与转写同一种形状，只是文案与按钮不同。 */
+@Composable
+private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, onCancel: () -> Unit) {
+    TaskStatusBar(
+        status = state.toTaskStatus(),
+        actionLabel = stringResource(R.string.minutes_generate),
+        onAction = onGenerate,
+        onCancel = onCancel,
+    )
+}
+
+@Composable
+private fun TranscriptionUiState.toTaskStatus(): TaskStatus = when (this) {
+    TranscriptionUiState.Idle -> TaskStatus.Idle
+    is TranscriptionUiState.NeedModels -> TaskStatus.NeedModel(missingMb = missingBytes / 1_000_000)
+    is TranscriptionUiState.Downloading -> TaskStatus.Running(fraction, R.string.transcribe_downloading)
+    is TranscriptionUiState.Running -> TaskStatus.Running(fraction, R.string.transcribe_running)
+    is TranscriptionUiState.Done -> TaskStatus.Done
+    is TranscriptionUiState.Failed -> TaskStatus.Failed(failureMessage(reasonRes, detail))
+}
+
+@Composable
+private fun MinutesUiState.toTaskStatus(): TaskStatus = when (this) {
+    MinutesUiState.Idle -> TaskStatus.Idle
+    is MinutesUiState.NeedModel -> TaskStatus.NeedModel(missingMb = missingBytes / 1_000_000)
+    MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating)
+    is MinutesUiState.Done -> TaskStatus.Done
+    is MinutesUiState.Failed -> TaskStatus.Failed(failureMessage(reasonRes, detail))
+}
+
 @Composable
 private fun TranscriptPane(
     turns: List<Turn>,

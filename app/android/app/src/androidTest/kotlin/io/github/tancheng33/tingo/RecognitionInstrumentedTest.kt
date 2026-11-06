@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import io.github.tancheng33.tingo.testing.ModelDownloads
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
@@ -33,18 +34,11 @@ class RecognitionInstrumentedTest {
 
     @Test
     fun recognizesChineseMeetingAudioOnDevice() {
-        val catalog = ModelCatalog.parse(context.assets.open("models.json").bufferedReader().readText())
-        val dir = File(context.cacheDir, "models-asr").apply { mkdirs() }
-        val store = ModelStore(dir, UrlFetcher())
+        val catalog = ModelDownloads.catalog(context)
+        val store = ModelDownloads.store(context, "models-asr")
 
         // 识别 + 词表 + 标点；声纹在别的测试里覆盖，这里只回答"听得出什么"
-        val needed = listOf("paraformer", "tokens", "am-mvn", "punct").map { catalog.byId(it)!! }
-        needed.forEach { file ->
-            if (!store.isReady(file)) {
-                val result = store.download(file)
-                assertTrue("下载 ${file.id} 失败：${result.exceptionOrNull()}", result.isSuccess)
-            }
-        }
+        ModelDownloads.ensure(store, listOf("paraformer", "tokens", "am-mvn", "punct").map { catalog.byId(it)!! })
 
         val wav = copySample()
         val pcm = WavReader.read(wav)

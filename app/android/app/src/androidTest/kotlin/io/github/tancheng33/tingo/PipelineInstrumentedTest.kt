@@ -2,6 +2,7 @@ package io.github.tancheng33.tingo
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.tancheng33.tingo.testing.ModelDownloads
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
@@ -28,15 +29,9 @@ class PipelineInstrumentedTest {
 
     @Test
     fun transcribesTwoSpeakerClipEndToEnd() {
-        val catalog = ModelCatalog.parse(context.assets.open("models.json").bufferedReader().readText())
-        val modelDir = File(context.cacheDir, "models-full").apply { mkdirs() }
-        val store = ModelStore(modelDir, UrlFetcher())
-        catalog.files.forEach { file ->
-            if (!store.isReady(file)) {
-                val result = store.download(file)
-                assertTrue("下载 ${file.id} 失败：${result.exceptionOrNull()}", result.isSuccess)
-            }
-        }
+        val catalog = ModelDownloads.catalog(context)
+        val store = ModelDownloads.store(context, "models-full")
+        ModelDownloads.ensure(store, catalog.files)
 
         val wav = copySample()
         val meeting = File(context.cacheDir, "meeting-pipeline").apply {

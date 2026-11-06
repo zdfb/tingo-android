@@ -23,6 +23,58 @@ object WavReader {
     /** wav 头长度；短于这个数的文件不可能有音频 */
     const val HEADER_BYTES = 44L
 
+    /** wav 的格式信息（不读音频数据）。 */
+    data class Format(val sampleRate: Int, val dataBytes: Long) {
+        val durationMs: Long
+            get() = if (sampleRate == 0) 0 else dataBytes / 2 * 1000 / sampleRate
+    }
+
+    /**
+     * 只读文件头。
+     *
+     * 长会议录音动辄几百兆，任何"先读进内存再处理"的写法都会在真机上 OOM；
+     * 转写走 [stream]，这个方法只用来拿采样率与时长。
+     */
+    fun format(file: File): Format {
+        RandomAccessFile(file, "r").use { raf ->
+            val header = ByteArray(44)
+            if (raf.read(header) != 44) error("不是有效的 wav：${file.name}")
+            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
+            require(String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "不是 WAVE 文件" }
+            val channels = u16(header, 22)
+            val sampleRate = u32(header, 24)
+            val bits = u16(header, 34)
+            require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
+            require(channels == 1) { "只支持单声道，实际 $channels" }
+            // 头部长度字段在"边录边写"时不可信，按文件实际大小算
+            return Format(sampleRate, max(0L, file.length() - HEADER_BYTES))
+        }
+    }
+
+    /**
+     * 分块读出音频样本，内存里同时只有 [chunkSamples] 个样本。
+     *
+     * @param onChunk 每块的样本与它在整段音频里的起始样本下标
+     */
+    fun stream(file: File, chunkSamples: Int = 16_000, onChunk: (FloatArray, Long) -> Unit) {
+        val sampleRate = format(file).sampleRate
+        val chunkBytes = chunkSamples * 2
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(HEADER_BYTES)
+            val buffer = ByteArray(chunkBytes)
+            var startSample = 0L
+            while (true) {
+                val read = raf.read(buffer)
+                if (read <= 0) break
+                val samples = FloatArray(read / 2)
+                val byteBuffer = ByteBuffer.wrap(buffer, 0, read).order(ByteOrder.LITTLE_ENDIAN)
+                for (i in samples.indices) samples[i] = byteBuffer.short / 32_768f
+                onChunk(samples, startSample)
+                startSample += samples.size
+            }
+        }
+    }
+
     fun read(file: File): Pcm {
         RandomAccessFile(file, "r").use { raf ->
             val header = ByteArray(44)
