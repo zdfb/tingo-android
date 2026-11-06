@@ -44,7 +44,6 @@
     <string name="unsupported_abi_body">This build only supports arm64 devices. Please use a 64-bit device or wait for a later release.</string>
 
     <!-- Recording placeholder (recording lands in a later change) -->
-    <string name="record_placeholder">Recording is being ported and will arrive in a later release.</string>
 
     <!-- Library -->
     <string name="library_empty">No meetings yet. Record one on desktop, or drop meeting folders into the library location.</string>
@@ -55,4 +54,14 @@
     <string name="library_count">%1$d meetings</string>
     <string name="library_count_filtered">Showing %1$d of %2$d</string>
     <string name="detail_select_hint">Pick a meeting on the left</string>
+    <string name="record_idle_hint">Tap start when ready. Audio stays on this device.</string>
+    <string name="record_permission_denied">No microphone permission, so recording cannot start. You can grant it in system settings.</string>
+    <string name="record_start">Start recording</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_resume">Resume</string>
+    <string name="record_stop">Finish</string>
+    <string name="record_discard">Discard this recording</string>
+    <string name="record_paused_hint">Paused. Resuming continues the same file.</string>
+    <string name="record_finished">Recording saved</string>
+    <string name="record_open_meeting">Open this meeting</string>
 </resources>

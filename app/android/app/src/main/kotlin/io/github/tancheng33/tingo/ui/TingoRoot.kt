@@ -52,7 +52,9 @@ import io.github.tancheng33.tingo.ui.detail.DetailViewModel
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
 import io.github.tancheng33.tingo.ui.library.LibraryViewModel
+import io.github.tancheng33.tingo.recording.MicRecorder
 import io.github.tancheng33.tingo.ui.record.RecordScreen
+import io.github.tancheng33.tingo.ui.record.RecordViewModel
 import io.github.tancheng33.tingo.ui.settings.SettingsScreen
 
 private const val DETAIL_ROUTE = "detail"
@@ -141,7 +143,20 @@ fun TingoRoot(
             startDestination = TopDestination.MEETINGS.route,
             modifier = Modifier.fillMaxSize(),
         ) {
-            composable(TopDestination.RECORD.route) { RecordScreen() }
+            composable(TopDestination.RECORD.route) {
+                RecordRoute(
+                    container = container,
+                    onOpenMeeting = { id ->
+                        if (wide) {
+                            selectedMeetingId = id
+                            navController.navigate(TopDestination.MEETINGS.route) { launchSingleTop = true }
+                        } else {
+                            navController.navigate("$DETAIL_ROUTE/$id")
+                        }
+                        libraryViewModel.refresh()
+                    },
+                )
+            }
 
             composable(TopDestination.MEETINGS.route) {
                 val library = @Composable {
@@ -186,6 +201,30 @@ fun TingoRoot(
             }
         }
     }
+}
+
+@Composable
+private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit) {
+    val viewModel: RecordViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                RecordViewModel(
+                    capture = MicRecorder(),
+                    meetingsRoot = java.io.File(container.dataRoot, "meetings"),
+                )
+            }
+        },
+    )
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    RecordScreen(
+        state = state,
+        onStart = viewModel::start,
+        onPause = viewModel::pause,
+        onResume = viewModel::resume,
+        onStop = viewModel::stop,
+        onDiscard = viewModel::discard,
+        onOpenMeeting = onOpenMeeting,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

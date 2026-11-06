@@ -44,7 +44,6 @@
     <string name="unsupported_abi_body">当前版本只支持 arm64 设备。请换用 64 位设备，或等待后续版本。</string>
 
     <!-- 录音占位（录音能力在后续变更中实现） -->
-    <string name="record_placeholder">录音功能正在移植中，敬请期待。</string>
 
     <!-- 会议列表 -->
     <string name="library_empty">还没有会议。在桌面版录一场会议，或把会议目录放进会议库位置。</string>
@@ -55,4 +54,14 @@
     <string name="library_count">%1$d 场会议</string>
     <string name="library_count_filtered">筛选出 %1$d / %2$d 场</string>
     <string name="detail_select_hint">从左侧选一场会议</string>
+    <string name="record_idle_hint">准备好后点开始，会议音频只存在本机。</string>
+    <string name="record_permission_denied">没有麦克风权限，无法录音。可以在系统设置里开启。</string>
+    <string name="record_start">开始录音</string>
+    <string name="record_pause">暂停</string>
+    <string name="record_resume">继续</string>
+    <string name="record_stop">结束录音</string>
+    <string name="record_discard">放弃这次录音</string>
+    <string name="record_paused_hint">已暂停，继续后接着同一段录音写。</string>
+    <string name="record_finished">录音已保存</string>
+    <string name="record_open_meeting">打开这场会议</string>
 </resources>

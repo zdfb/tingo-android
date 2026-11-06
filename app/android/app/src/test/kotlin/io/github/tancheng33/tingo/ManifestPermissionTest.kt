@@ -32,11 +32,12 @@ class ManifestPermissionTest {
     }
 
     @Test
-    fun doesNotDeclarePermissionsItCannotJustifyYet() {
-        // 地基层不录音也不推送，因此此刻不应声明任何权限；
-        // 录音相关的 RECORD_AUDIO 会在录音变更里随功能一起加入。
-        assertFalse(manifest.contains("RECORD_AUDIO"))
+    fun recordsAudioButNothingElseYet() {
+        // 录音功能已实现，所以 RECORD_AUDIO 是必要权限；
+        // 前台服务与通知权限在录音保活（任务 2.3）里再加，现在不该提前声明。
+        assertTrue(manifest.contains("RECORD_AUDIO"))
         assertFalse(manifest.contains("POST_NOTIFICATIONS"))
+        assertFalse(manifest.contains("FOREGROUND_SERVICE"))
     }
 
     @Test
