@@ -41,7 +41,15 @@ class RecordViewModel(
     private val meetingsRoot: File,
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
+     * 否则"每 200 毫秒刷新一次"的循环会让测试调度器永远不空闲。
+     */
+    scope: (() -> kotlinx.coroutines.CoroutineScope)? = null,
 ) : ViewModel() {
+
+    /** 默认用 ViewModel 自己的作用域；测试注入 backgroundScope。 */
+    private val tickerScope: () -> kotlinx.coroutines.CoroutineScope = scope ?: { viewModelScope }
 
     private val session = RecordingSession()
     private val _state = MutableStateFlow<RecordUiState>(RecordUiState.Idle)
@@ -112,7 +120,7 @@ class RecordViewModel(
 
     private fun startTicker() {
         ticker?.cancel()
-        ticker = viewModelScope.launch(io) {
+        ticker = tickerScope().launch(io) {
             while (isActive) {
                 val s = _state.value
                 if (s is RecordUiState.Recording) {

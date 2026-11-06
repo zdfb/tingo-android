@@ -6,6 +6,7 @@ import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -54,8 +55,8 @@ class RecordViewModelTest {
 
     private fun root(): File = Files.createTempDirectory("tingo-record").toFile()
 
-    private fun viewModel(capture: FakeCapture) =
-        RecordViewModel(capture, root(), clock = { now }, io = dispatcher)
+    private fun TestScope.viewModel(capture: FakeCapture) =
+        RecordViewModel(capture, root(), clock = { now }, io = dispatcher, scope = { backgroundScope })
 
     @Test
     fun startCreatesMeetingDirectoryAndRecordingFile() = runTest(dispatcher) {
@@ -127,7 +128,7 @@ class RecordViewModelTest {
     @Test
     fun discardRemovesEmptyMeetingDirectory() = runTest(dispatcher) {
         val root = root()
-        val vm = RecordViewModel(FakeCapture(), root, clock = { now }, io = dispatcher)
+        val vm = RecordViewModel(FakeCapture(), root, clock = { now }, io = dispatcher, scope = { backgroundScope })
         vm.start()
         val created = root.listFiles()!!.single()
 
