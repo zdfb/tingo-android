@@ -20,6 +20,9 @@ data class Pcm(val samples: FloatArray, val sampleRate: Int) {
  */
 object WavReader {
 
+    /** wav 头长度；短于这个数的文件不可能有音频 */
+    const val HEADER_BYTES = 44L
+
     fun read(file: File): Pcm {
         RandomAccessFile(file, "r").use { raf ->
             val header = ByteArray(44)

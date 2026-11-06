@@ -10,6 +10,9 @@ import io.github.tancheng33.tingo.engine.MeetingSummary
 import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.TingoEnginePort
 import io.github.tancheng33.tingo.engine.TingoFailure
+import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.models.UrlFetcher
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.settings.SharedPrefsStore
 import java.io.File
@@ -44,6 +47,12 @@ class AppContainer(context: Context) {
         } else {
             UnavailableEngine(IllegalStateException("unsupported abi"))
         }
+
+    /** 端侧模型的清单与仓库：模型不进 APK，按清单下载到 `files/tingo/models`。 */
+    val catalog: ModelCatalog = ModelCatalog.parse(
+        appContext.assets.open("models.json").bufferedReader().use { it.readText() },
+    )
+    val models: ModelStore = ModelStore(File(dataRoot, "models"), UrlFetcher())
 
     /**
      * 首次启动时建好会议库目录并写入探针文件。

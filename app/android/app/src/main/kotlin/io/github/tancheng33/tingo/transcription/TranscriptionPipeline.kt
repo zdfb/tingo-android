@@ -1,6 +1,5 @@
 package io.github.tancheng33.tingo.transcription
 
-import android.content.Context
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
 import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
@@ -28,6 +27,11 @@ data class RecognizedSegment(
     val embedding: FloatArray,
 )
 
+/** 转写器接口：界面只依赖它，测试里换成假实现。 */
+interface Transcriber {
+    suspend fun transcribe(wav: File, outputDir: File, onProgress: (Float) -> Unit = {}): Transcript
+}
+
 /**
  * 端侧转写流水线：VAD 切段 → 识别 → 标点 → 声纹 → 聚类 → 写 transcript.json。
  *
@@ -35,20 +39,19 @@ data class RecognizedSegment(
  * （[ModelStore]），这里只消费文件。
  */
 class TranscriptionPipeline(
-    private val context: Context,
     private val store: ModelStore,
     private val catalog: ModelCatalog,
     private val clustering: SpeakerClustering = SpeakerClustering(),
-) {
+) : Transcriber {
     /**
      * 转写一个 wav 文件并写入 [outputDir] 的 `transcript.json`。
      *
      * @param onProgress 0..1 的进度，用来在界面上显示
      */
-    suspend fun transcribe(
+    override suspend fun transcribe(
         wav: File,
         outputDir: File,
-        onProgress: (Float) -> Unit = {},
+        onProgress: (Float) -> Unit,
     ): Transcript {
         val model = requireModel()
         val pcm = WavReader.read(wav)

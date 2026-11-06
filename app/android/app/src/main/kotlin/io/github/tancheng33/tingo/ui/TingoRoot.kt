@@ -47,7 +47,9 @@ import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
+import io.github.tancheng33.tingo.transcription.TranscriptionPipeline
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
+import io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel
 import io.github.tancheng33.tingo.ui.detail.DetailViewModel
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
@@ -237,6 +239,23 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    val transcriptionViewModel: TranscriptionViewModel = viewModel(
+        key = "transcribe-$meetingId",
+        factory = viewModelFactory {
+            initializer {
+                TranscriptionViewModel(
+                    transcriber = TranscriptionPipeline(container.models, container.catalog),
+                    store = container.models,
+                    catalog = container.catalog,
+                    meetingDir = java.io.File(java.io.File(container.dataRoot, "meetings"), meetingId),
+                )
+            }
+        },
+    )
+    val transcription by transcriptionViewModel.state.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(meetingId) { transcriptionViewModel.prepare() }
+
     // 能力矩阵由引擎给出：没有纪要解析能力就不展示纪要栏
     val showMinutesTab = remember(container) { container.engine.capabilities().minutesParse }
 
@@ -258,6 +277,9 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             // 与其做一个按下去毫无反应的按钮，不如先留空回调。
             onSentenceClick = { },
             showMinutesTab = showMinutesTab,
+            transcription = transcription,
+            onTranscribe = transcriptionViewModel::start,
+            onCancelTranscribe = transcriptionViewModel::cancel,
         )
     }
 }

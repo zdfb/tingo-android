@@ -14,7 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -53,6 +55,9 @@ fun DetailScreen(
     initialTab: Int = 0,
     /** 能力矩阵里没有纪要解析时（例如换了个精简引擎），不展示纪要栏 */
     showMinutesTab: Boolean = true,
+    transcription: TranscriptionUiState = TranscriptionUiState.Idle,
+    onTranscribe: () -> Unit = {},
+    onCancelTranscribe: () -> Unit = {},
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -93,7 +98,13 @@ fun DetailScreen(
                         fishbone = detail?.fishbone,
                     )
                 } else {
-                    TranscriptPane(turns = detail?.transcript?.turns.orEmpty(), onSentenceClick = onSentenceClick)
+                    TranscriptPane(
+                        turns = detail?.transcript?.turns.orEmpty(),
+                        onSentenceClick = onSentenceClick,
+                        transcription = transcription,
+                        onTranscribe = onTranscribe,
+                        onCancelTranscribe = onCancelTranscribe,
+                    )
                 }
             }
         }
@@ -166,10 +177,83 @@ private fun FishboneCard(fishbone: Fishbone) {
 
 private const val FISHBONE_FENCE = "```fishbone"
 
+/** 转写状态条：缺模型、下载中、识别中、失败各自给出可操作的下一步。 */
+@Composable
+private fun TranscriptionStatus(
+    state: TranscriptionUiState,
+    hasTranscript: Boolean,
+    onTranscribe: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    when (state) {
+        TranscriptionUiState.Idle -> if (!hasTranscript) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_start)) }
+            }
+        }
+
+        is TranscriptionUiState.NeedModels -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.transcribe_need_models, state.missingBytes / 1_000_000),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_download_and_start)) }
+        }
+
+        is TranscriptionUiState.Downloading -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(stringResource(R.string.transcribe_downloading), style = MaterialTheme.typography.bodyMedium)
+            LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        }
+
+        is TranscriptionUiState.Running -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(stringResource(R.string.transcribe_running), style = MaterialTheme.typography.bodyMedium)
+            LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        }
+
+        is TranscriptionUiState.Done -> Unit
+
+        is TranscriptionUiState.Failed -> Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(state.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_start)) }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TranscriptPane(turns: List<Turn>, onSentenceClick: (ULong) -> Unit) {
+private fun TranscriptPane(
+    turns: List<Turn>,
+    onSentenceClick: (ULong) -> Unit,
+    transcription: TranscriptionUiState,
+    onTranscribe: () -> Unit,
+    onCancelTranscribe: () -> Unit,
+) {
+    TranscriptionStatus(
+        state = transcription,
+        hasTranscript = turns.isNotEmpty(),
+        onTranscribe = onTranscribe,
+        onCancel = onCancelTranscribe,
+    )
     if (turns.isEmpty()) {
+        if (transcription is TranscriptionUiState.Running || transcription is TranscriptionUiState.Downloading) return
         Box(Modifier.fillMaxSize().padding(24.dp)) { Text(stringResource(R.string.detail_no_transcript)) }
         return
     }

@@ -64,4 +64,10 @@
     <string name="record_paused_hint">已暂停，继续后接着同一段录音写。</string>
     <string name="record_finished">录音已保存</string>
     <string name="record_open_meeting">打开这场会议</string>
+    <string name="transcribe_start">转写这场会议</string>
+    <string name="transcribe_need_models">需要先下载语音模型，约 %1$d MB。下载一次可重复使用。</string>
+    <string name="transcribe_download_and_start">下载模型并开始转写</string>
+    <string name="transcribe_downloading">正在下载语音模型…</string>
+    <string name="transcribe_running">正在本机转写，可以离开这一页…</string>
+    <string name="action_cancel">取消</string>
 </resources>

@@ -64,4 +64,10 @@
     <string name="record_paused_hint">Paused. Resuming continues the same file.</string>
     <string name="record_finished">Recording saved</string>
     <string name="record_open_meeting">Open this meeting</string>
+    <string name="transcribe_start">Transcribe this meeting</string>
+    <string name="transcribe_need_models">Speech models need a one-time download of about %1$d MB.</string>
+    <string name="transcribe_download_and_start">Download models and start</string>
+    <string name="transcribe_downloading">Downloading speech models…</string>
+    <string name="transcribe_running">Transcribing on this device; you can leave this page…</string>
+    <string name="action_cancel">Cancel</string>
 </resources>
