@@ -19,6 +19,10 @@ dependencyResolutionManagement {
         maven("https://mirrors.cloud.tencent.com/nexus/repository/maven-public")
         maven("https://maven.aliyun.com/repository/public")
         mavenCentral()
+        // sherpa-onnx 的 Android AAR 只发布在 JitPack
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.k2-fsa.sherpa-onnx") }
+        }
         google()
     }
 }

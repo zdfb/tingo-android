@@ -221,6 +221,8 @@ dependencies {
 
     // uniFFI 生成的 Kotlin 绑定通过 JNA 调用原生库；Android 上要 aar 变体
     implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
+    // 端侧识别：sherpa-onnx 的 Android AAR，含 arm64-v8a / x86_64 的 .so
+    implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

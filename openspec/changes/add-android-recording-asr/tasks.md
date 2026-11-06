@@ -2,9 +2,9 @@
 
 ## 1. 模型与运行时可行性（先验证再改代码）
 
-- [ ] 1.1 量化实验：用 llama.cpp 把 Qwen3-0.6B 从 Q8_0 再量化到 Q4_K_M 与 Q4_0，记录体积、加载时间、生成速度与同题输出差异；产物与命令写进 `spike/on-device-models/`；验证：`RESULTS.md` 里有三档对比表与可复现命令
-- [ ] 1.2 ASR 模型可得性：确认 sherpa-onnx 的 Paraformer int8 / CT-Transformer / CAM++ / silero VAD 四个模型可从公开源下载，记录体积与 sha256；验证：下载脚本能把四个文件拉齐并通过校验
-- [ ] 1.3 sherpa-onnx Android AAR 接入验证：能拉取或本地引入 AAR，跑通一次 `OfflineRecognizer` 初始化；验证：设备级测试里能创建识别器并识别一段 3 秒音频
+- [x] 1.1 量化实验：用 llama.cpp 把 Qwen3-0.6B 从 Q8_0 再量化到 Q4_K_M 与 Q4_0，记录体积、加载时间、生成速度与同题输出差异；产物与命令写进 `spike/on-device-models/`；验证：`RESULTS.md` 里有三档对比表与可复现命令（Q8_0 610 MB / 107 t/s、Q4_K_M 378 MB / 141 t/s、Q4_0 364 MB / 146 t/s，3 次取中位数）
+- [ ] 1.2 ASR 模型可得性：确认 sherpa-onnx 的 Paraformer int8 / CT-Transformer / CAM++ / silero VAD 四个模型可从公开源下载，记录体积与 sha256；验证：下载脚本能把四个文件拉齐并通过校验（已确认 Paraformer int8 与官方量化脚本可从 hf-mirror 获取；其余三个与 sha256 清单待补）
+- [ ] 1.3 sherpa-onnx Android AAR 接入验证：能拉取或本地引入 AAR，跑通一次 `OfflineRecognizer` 初始化；验证：设备级测试里能创建识别器并识别一段 3 秒音频（AAR 已接入、`libsherpa-onnx-jni.so` 在设备上加载通过；还需带模型跑一次真实识别）
 - [ ] 1.4 llama.cpp Android 构建验证：交叉编译出 `libllama.so` 并打进 APK；验证：设备上能加载模型并输出一句 token，记录耗时与内存
 
 ## 2. 录音采集
