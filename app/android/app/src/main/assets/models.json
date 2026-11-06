@@ -1,0 +1,47 @@
+{
+  "note": "端侧转写所需的全部模型。文件不进 APK，首次使用时按此清单下载；体积与 sha256 均已核对过实际文件。",
+  "files": [
+    {
+      "id": "paraformer",
+      "file_name": "paraformer.int8.onnx",
+      "url": "https://hf-mirror.com/csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09/resolve/main/model.int8.onnx",
+      "bytes": 227330205,
+      "sha256": "90bc03034ae1bef9575f8cc798cd1519c8be8aa9e8b458a033e32017ff4d584c"
+    },
+    {
+      "id": "tokens",
+      "file_name": "tokens.txt",
+      "url": "https://hf-mirror.com/csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09/resolve/main/tokens.txt",
+      "bytes": 75354,
+      "sha256": "6c0e3b35cece259829e6cb5b8d90d13db88f61ea3a2953d11898e4b2bfd7a2e2"
+    },
+    {
+      "id": "am-mvn",
+      "file_name": "am.mvn",
+      "url": "https://hf-mirror.com/csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09/resolve/main/am.mvn",
+      "bytes": 11203,
+      "sha256": "29b3c740a2c0cfc6b308126d31d7f265fa2be74f3bb095cd2f143ea970896ae5"
+    },
+    {
+      "id": "punct",
+      "file_name": "punct.int8.onnx",
+      "url": "https://hf-mirror.com/ranger810/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8/resolve/main/model.int8.onnx",
+      "bytes": 75519198,
+      "sha256": "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1"
+    },
+    {
+      "id": "campplus",
+      "file_name": "campplus.onnx",
+      "url": "https://hf-mirror.com/csukuangfj/speaker-embedding-models/resolve/main/3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx",
+      "bytes": 28281138,
+      "sha256": "f682b514c05d947ee3fa91cd6ec6c5c7543479a128373fa29b1faedccd21fd11"
+    },
+    {
+      "id": "vad",
+      "file_name": "silero_vad.onnx",
+      "url": "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+      "bytes": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+    }
+  ]
+}
