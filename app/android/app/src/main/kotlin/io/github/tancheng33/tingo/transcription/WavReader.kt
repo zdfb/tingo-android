@@ -1,0 +1,58 @@
+package io.github.tancheng33.tingo.transcription
+
+import java.io.File
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.max
+
+/** 读出来的单声道音频：样本已归一化到 -1..1，采样率照抄文件头。 */
+data class Pcm(val samples: FloatArray, val sampleRate: Int) {
+    val durationMs: Long
+        get() = if (sampleRate == 0) 0 else samples.size * 1000L / sampleRate
+}
+
+/**
+ * 只读我们自己的录音格式：16 bit PCM 的 wav。
+ *
+ * 不做通用解码（mp3/m4a 交给别的路径），因为手机录出来的就是 wav；
+ * 桌面版录的 m4a 在手机上也不需要重新转写。
+ */
+object WavReader {
+
+    fun read(file: File): Pcm {
+        RandomAccessFile(file, "r").use { raf ->
+            val header = ByteArray(44)
+            if (raf.read(header) != 44) error("不是有效的 wav：${file.name}")
+            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF") { "不是 RIFF 文件" }
+            require(String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "不是 WAVE 文件" }
+
+            val channels = u16(header, 22)
+            val sampleRate = u32(header, 24)
+            val bits = u16(header, 34)
+            require(bits == 16) { "只支持 16 bit PCM，实际 $bits" }
+            require(channels == 1) { "只支持单声道，实际 $channels" }
+
+            // 头部里的长度字段在"边录边写"时不可信，按文件实际大小算
+            val dataBytes = max(0L, (file.length() - 44)).toInt()
+            val raw = ByteArray(dataBytes)
+            var read = 0
+            while (read < dataBytes) {
+                val n = raf.read(raw, read, dataBytes - read)
+                if (n <= 0) break
+                read += n
+            }
+            val buffer = ByteBuffer.wrap(raw, 0, read).order(ByteOrder.LITTLE_ENDIAN)
+            val samples = FloatArray(read / 2) { buffer.short / 32_768f }
+            return Pcm(samples, sampleRate)
+        }
+    }
+
+    private fun u16(b: ByteArray, at: Int): Int = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
+
+    private fun u32(b: ByteArray, at: Int): Int =
+        (b[at].toInt() and 0xFF) or
+            ((b[at + 1].toInt() and 0xFF) shl 8) or
+            ((b[at + 2].toInt() and 0xFF) shl 16) or
+            ((b[at + 3].toInt() and 0xFF) shl 24)
+}
