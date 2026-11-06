@@ -54,15 +54,17 @@ class LibraryViewModel(
     private var query: String = ""
     private var archivedOnly: Boolean = false
 
-    /** 最近一次写操作的失败原因；为 null 表示没有失败。 */
-    var lastError: FailureKind? = null
-        private set
+    /** 最近一次写操作的失败原因；界面据此给出提示，而不是静默失败。 */
+    private val _lastError = MutableStateFlow<FailureKind?>(null)
+    val lastError: StateFlow<FailureKind?> = _lastError.asStateFlow()
 
     init {
         refresh()
     }
 
     fun refresh() {
+        // 用户主动刷新即视为"我知道了"，清掉上一次的操作失败提示
+        _lastError.value = null
         viewModelScope.launch(io) { refreshNow() }
     }
 
@@ -90,7 +92,7 @@ class LibraryViewModel(
             try {
                 repository.setArchived(id, archived)
             } catch (e: TingoFailure) {
-                lastError = e.kind
+                _lastError.value = e.kind
             }
             refreshNow()
         }
@@ -102,7 +104,7 @@ class LibraryViewModel(
             try {
                 repository.delete(id)
             } catch (e: TingoFailure) {
-                lastError = e.kind
+                _lastError.value = e.kind
             }
             refreshNow()
         }

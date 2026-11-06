@@ -167,4 +167,48 @@ class ModelStoreTest {
         assertEquals("abc", catalog.byId("paraformer")!!.sha256)
         assertEquals(null, catalog.byId("vad")!!.sha256)
     }
+
+    @Test
+    fun sameSizeButUnverifiedFileIsRedownloaded() {
+        val root = dir()
+        // 同尺寸的坏文件：体积校验会放过它，所以必须靠"校验指纹"挡住
+        File(root, "model.int8.onnx").writeBytes(ByteArray(payload.size))
+        val fetcher = FakeFetcher(payload)
+
+        val store = ModelStore(root, fetcher)
+        assertFalse("没有指纹的文件不该算就绪", store.isReady(model()))
+
+        val result = store.download(model())
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(0L), fetcher.requests) // 整份重下，不是续传
+        assertTrue(File(root, "model.int8.onnx").readBytes().contentEquals(payload))
+        assertTrue(store.isReady(model()))
+    }
+
+    @Test
+    fun invalidateRemovesFileAndMarker() {
+        val root = dir()
+        val store = ModelStore(root, FakeFetcher(payload))
+        store.download(model())
+        assertTrue(store.isReady(model()))
+
+        store.invalidate(model())
+
+        assertFalse(store.isReady(model()))
+        assertFalse(File(root, "model.int8.onnx").exists())
+        assertFalse(File(root, "model.int8.onnx.verified").exists())
+    }
+
+    @Test
+    fun partialFileStillResumesWithoutMarker() {
+        val root = dir()
+        File(root, "model.int8.onnx").writeBytes(payload.copyOfRange(0, 4_000))
+        val fetcher = FakeFetcher(payload)
+
+        val result = ModelStore(root, fetcher).download(model())
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(4_000L), fetcher.requests)
+    }
 }

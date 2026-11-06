@@ -3,9 +3,6 @@ package io.github.tancheng33.tingo.ui.detail
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.minutes.MinutesGenerator
 import io.github.tancheng33.tingo.minutes.MinutesService
-import io.github.tancheng33.tingo.models.HttpFetcher
-import io.github.tancheng33.tingo.models.ModelCatalog
-import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.transcription.Transcript
 import io.github.tancheng33.tingo.transcription.TranscriptSentence
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
@@ -66,13 +63,6 @@ class MinutesViewModelTest {
         }
     }
 
-    private val store = ModelStore(
-        Files.createTempDirectory("tingo-llm").toFile(),
-        object : HttpFetcher {
-            override fun open(url: String, rangeStart: Long) = error("测试不该下载")
-        },
-    )
-
     private fun meeting(withTranscript: Boolean = true): File {
         val dir = Files.createTempDirectory("tingo-meeting").toFile()
         if (withTranscript) {
@@ -93,7 +83,6 @@ class MinutesViewModelTest {
         model: File = readyModel(),
     ) = MinutesViewModel(
         serviceFactory = { MinutesService(generator) },
-        store = store,
         modelFile = model,
         meetingDir = dir,
         io = dispatcher,

@@ -19,7 +19,8 @@ class RecordingNotificationTest {
 
     @Test
     fun titleSaysWhetherItIsRecording() {
-        assertEquals("正在录音 · 00:12", RecordingNotification.title(recording = true, elapsed = "00:12"))
-        assertEquals("已暂停 · 00:12", RecordingNotification.title(recording = false, elapsed = "00:12"))
+        // 模板由资源提供（中英各一份），这里只验证填充逻辑
+        assertEquals("正在录音 · 00:12", RecordingNotification.title("正在录音 · %1\$s", "00:12"))
+        assertEquals("Recording · 01:05", RecordingNotification.title("Recording · %1\$s", "01:05"))
     }
 }

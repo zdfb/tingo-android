@@ -59,10 +59,24 @@ fun RecordScreen(
         if (granted) onStart()
     }
 
+    // 通知权限只影响"看得见录音状态"，没有它录音照样能进行
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+
     fun startWithPermission() {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-        if (granted) onStart() else launcher.launch(Manifest.permission.RECORD_AUDIO)
+        if (!granted) {
+            launcher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val notifications = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!notifications) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        onStart()
     }
 
     Column(

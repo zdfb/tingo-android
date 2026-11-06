@@ -45,6 +45,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import io.github.tancheng33.tingo.ui.detail.MinutesUiState
+import io.github.tancheng33.tingo.ui.detail.TranscriptionUiState
 import io.github.tancheng33.tingo.data.MeetingExporter
 import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
@@ -106,6 +111,7 @@ fun TingoRoot(
         },
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()
+    val libraryError by libraryViewModel.lastError.collectAsStateWithLifecycle()
 
     /** 宽屏时右侧详情显示哪一场；窄屏走导航压栈。 */
     var selectedMeetingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -178,10 +184,11 @@ fun TingoRoot(
                         onQueryChange = libraryViewModel::onQueryChange,
                         onArchivedOnlyChange = libraryViewModel::onArchivedOnlyChange,
                         onUnreadableClick = { card ->
-                            unreadablePath = "${container.dataRoot.absolutePath}/meetings/${card.id}"
+                            unreadablePath = container.meetingDir(card.id).absolutePath
                         },
                         onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
                         onDelete = { card -> libraryViewModel.delete(card.id) },
+                        actionError = libraryError,
                     )
                 }
                 if (wide) {
@@ -241,7 +248,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
             initializer {
                 RecordViewModel(
                     capture = MicRecorder(),
-                    meetingsRoot = java.io.File(container.dataRoot, "meetings"),
+                    meetingsRoot = File(container.dataRoot, "meetings"),
                 )
             }
         },
@@ -279,6 +286,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
 @Composable
 private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolean, onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val exportScope = androidx.compose.runtime.rememberCoroutineScope()
     val viewModel: DetailViewModel = viewModel(
         key = "detail-$meetingId",
         factory = viewModelFactory {
@@ -295,7 +303,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                     transcriber = TranscriptionPipeline(container.models, container.catalog),
                     store = container.models,
                     catalog = container.catalog,
-                    meetingDir = java.io.File(java.io.File(container.dataRoot, "meetings"), meetingId),
+                    meetingDir = container.meetingDir(meetingId),
                 )
             }
         },
@@ -307,12 +315,11 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         key = "minutes-$meetingId",
         factory = viewModelFactory {
             initializer {
-                val meetingDir = java.io.File(java.io.File(container.dataRoot, "meetings"), meetingId)
+                val meetingDir = container.meetingDir(meetingId)
                 MinutesViewModel(
                     serviceFactory = {
                         MinutesService(LlamaMinutesGenerator(container.llmFile))
                     },
-                    store = container.models,
                     modelFile = container.llmFile,
                     meetingDir = meetingDir,
                 )
@@ -321,6 +328,14 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
     )
     val minutesState by minutesViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { minutesViewModel.prepare() }
+
+    // 转写/纪要写进会议目录后重新读详情：不然界面会一直停在"暂无转写""暂无纪要"
+    androidx.compose.runtime.LaunchedEffect(transcription) {
+        if (transcription is TranscriptionUiState.Done) viewModel.load()
+    }
+    androidx.compose.runtime.LaunchedEffect(minutesState) {
+        if (minutesState is MinutesUiState.Done) viewModel.load()
+    }
 
     // 能力矩阵由引擎给出：没有纪要解析能力就不展示纪要栏
     val showMinutesTab = remember(container) { container.engine.capabilities().minutesParse }
@@ -350,10 +365,15 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
             onExport = {
-                val dir = File(File(container.dataRoot, "meetings"), meetingId)
+                // 读纪要 + 解析整份 transcript 可能上百毫秒，别在主线程做
+                val dir = container.meetingDir(meetingId)
                 val title = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
-                val exported = MeetingExporter.export(dir, title, File(context.cacheDir, "exports"))
-                if (exported != null) shareFile(context, exported)
+                exportScope.launch {
+                    val exported = withContext(Dispatchers.IO) {
+                        MeetingExporter.export(dir, title, File(context.cacheDir, "exports"))
+                    }
+                    if (exported != null) shareFile(context, exported)
+                }
             },
             exportEnabled = state.detail?.let { it.minutesText != null || it.transcript != null } == true,
         )

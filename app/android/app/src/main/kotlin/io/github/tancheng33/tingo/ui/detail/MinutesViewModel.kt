@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.minutes.MinutesService
-import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,7 +37,6 @@ sealed interface MinutesUiState {
  */
 class MinutesViewModel(
     private val serviceFactory: () -> MinutesService,
-    private val store: ModelStore,
     private val modelFile: File,
     private val meetingDir: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -80,6 +78,9 @@ class MinutesViewModel(
                     R.string.err_minutes_rejected,
                     e.problems.firstOrNull() ?: "structure",
                 )
+            } catch (e: OutOfMemoryError) {
+                // 0.6B 模型在低内存设备上可能装不下；规格要求"只保留转写稿、其它功能不受影响"
+                _state.value = MinutesUiState.Failed(R.string.err_llm_unsupported)
             } catch (e: Exception) {
                 _state.value = MinutesUiState.Failed(
                     R.string.err_minutes_failed,

@@ -190,7 +190,7 @@ class LibraryViewModelTest {
         vm.setArchived("m1", true)
         advanceUntilIdle()
 
-        assertEquals(FailureKind.PERMISSION_DENIED, vm.lastError)
+        assertEquals(FailureKind.PERMISSION_DENIED, vm.lastError.value)
         assertTrue(vm.state.value is LibraryUiState.Content)
     }
 }

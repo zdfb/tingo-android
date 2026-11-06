@@ -377,7 +377,7 @@ private fun TranscriptPane(
 }
 
 @Composable
-private fun failureText(kind: FailureKind): String = when (kind) {
+internal fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.INVALID_INPUT -> stringResource(R.string.error_invalid_input)
     FailureKind.MISSING -> stringResource(R.string.error_missing)
     FailureKind.MALFORMED -> stringResource(R.string.error_malformed)

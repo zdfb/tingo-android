@@ -27,6 +27,21 @@ data class RecognizedSegment(
     val embedding: FloatArray,
 )
 
+/**
+ * 重新转写时沿用用户改过的说话人名。
+ *
+ * 编号是按"首次发言顺序"给的，只要新结果里这个编号还在，就沿用旧名字；
+ * 编号超出新结果的丢弃，避免把不存在的说话人写进 transcript.json。
+ */
+internal fun carryOverSpeakerNames(
+    previous: Map<Int, String>?,
+    speakers: List<Int>,
+): Map<Int, String> {
+    if (previous.isNullOrEmpty() || speakers.isEmpty()) return emptyMap()
+    val limit = speakers.max() + 1
+    return previous.filterKeys { it in 0 until limit }
+}
+
 /** 转写器接口：界面只依赖它，测试里换成假实现。 */
 interface Transcriber {
     suspend fun transcribe(wav: File, outputDir: File, onProgress: (Float) -> Unit = {}): Transcript
@@ -52,8 +67,7 @@ class TranscriptionPipeline(
         wav: File,
         outputDir: File,
         onProgress: (Float) -> Unit,
-    ): Transcript {
-        val model = requireModel()
+    ): Transcript = requireModel().use { model ->
         val pcm = WavReader.read(wav)
         require(pcm.samples.isNotEmpty()) { "录音是空的" }
 
@@ -62,7 +76,7 @@ class TranscriptionPipeline(
             val empty = Transcript(source = wav.name, durationMs = pcm.durationMs, sentences = emptyList())
             TranscriptWriter.write(outputDir, empty)
             onProgress(1f)
-            return empty
+            return@use empty
         }
 
         val recognized = ArrayList<RecognizedSegment>(segments.size)
@@ -76,6 +90,8 @@ class TranscriptionPipeline(
         }
 
         val speakers = clustering.cluster(recognized.map { it.embedding })
+        // 用户之前改过的说话人名要留住：重新转写不该把「张总」打回「说话人1」
+        val renaming = previousNames(outputDir, speakers)
         val transcript = Transcript(
             source = wav.name,
             durationMs = pcm.durationMs,
@@ -87,10 +103,14 @@ class TranscriptionPipeline(
                     text = segment.text,
                 )
             },
+            speakerNames = renaming,
         )
         TranscriptWriter.write(outputDir, transcript)
-        return transcript
+        transcript
     }
+
+    private fun previousNames(outputDir: File, speakers: List<Int>): Map<Int, String> =
+        carryOverSpeakerNames(TranscriptWriter.read(outputDir)?.speakerNames, speakers)
 
     private class Segment(val startMs: Long, val endMs: Long, val samples: FloatArray)
 

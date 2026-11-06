@@ -112,7 +112,8 @@ class RecordViewModel(
     /**
      * 前台服务被系统或用户结束：录音流已经断了，不能再假装在录。
      *
-     * 已写入的部分保留在磁盘上（WavWriter 会修复半截文件），用户仍可之后补转写。
+     * 已写入的部分保留在磁盘上，用户之后可以补转写；下次启动时由
+     * [io.github.tancheng33.tingo.recording.WavWriter.repair] 补好没收尾的文件头。
      */
     fun onInterrupted() {
         val current = _state.value
@@ -148,10 +149,18 @@ class RecordViewModel(
         }
     }
 
+    /**
+     * 会议目录名。精确到秒并做占用检查：同一分钟内按下两次"开始"不能复用目录，
+     * 否则第二次会截断第一次已经写下的 wav。
+     */
     private fun newMeetingId(): String {
         val now = java.time.LocalDateTime.now()
-        val stamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm"))
-        return "${stamp}_录音"
+        val stamp = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss"))
+        val base = "${stamp}_录音"
+        if (!File(meetingsRoot, base).exists()) return base
+        var index = 2
+        while (File(meetingsRoot, "${base}-$index").exists()) index++
+        return "${base}-$index"
     }
 
     private companion object {
@@ -159,6 +168,3 @@ class RecordViewModel(
         const val TICK_MS = 200L
     }
 }
-
-/** 进程被杀后恢复：把没收尾的 wav 头补好，返回时长。 */
-internal fun repairRecording(file: File): Long = WavWriter.repair(file)

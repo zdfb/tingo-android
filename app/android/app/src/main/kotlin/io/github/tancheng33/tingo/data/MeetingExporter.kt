@@ -35,9 +35,8 @@ object MeetingExporter {
         return buildString {
             append("# 会议转写\n\n")
             transcript.sentences.forEach { sentence ->
-                val name = transcript.speakerNames[sentence.speaker] ?: "说话人${sentence.speaker + 1}"
-                append("- **").append(name).append("**（")
-                append(mmss(sentence.startMs)).append("）：")
+                append("- **").append(transcript.speakerLabel(sentence.speaker)).append("**（")
+                append(Transcript.mmss(sentence.startMs)).append("）：")
                 append(sentence.text.trim()).append('\n')
             }
         }
@@ -52,11 +51,6 @@ object MeetingExporter {
             .trim('.')
         val safe = cleaned.ifEmpty { "会议纪要" }
         return if (safe.length <= MAX_STEM) safe else safe.take(MAX_STEM).trim()
-    }
-
-    private fun mmss(ms: Long): String {
-        val totalSeconds = ms / 1000
-        return "%02d:%02d".format(totalSeconds / 60, totalSeconds % 60)
     }
 
     private const val MAX_STEM = 60

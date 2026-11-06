@@ -80,6 +80,8 @@ class TranscriptionViewModel(
         job = viewModelScope.launch(io) {
             try {
                 val missing = catalog.files.filterNot { store.isReady(it) }
+                // 规格要求：校验失败要能重下。文件坏了（引擎报错）就作废再试一次
+                var retried = false
                 if (missing.isNotEmpty()) {
                     var downloaded = 0L
                     val total = missing.sumOf { it.bytes }.coerceAtLeast(1)
@@ -103,8 +105,22 @@ class TranscriptionViewModel(
                     }
                 }
                 _state.value = TranscriptionUiState.Running(0f)
-                val transcript = transcriber.transcribe(wav, meetingDir) { fraction ->
-                    _state.value = TranscriptionUiState.Running(fraction)
+                val transcript = try {
+                    transcriber.transcribe(wav, meetingDir) { fraction ->
+                        _state.value = TranscriptionUiState.Running(fraction)
+                    }
+                } catch (e: Exception) {
+                    if (retried) throw e
+                    // 模型文件可能损坏：作废后重下一次，仍失败才报错
+                    retried = true
+                    catalog.files.forEach { store.invalidate(it) }
+                    catalog.files.forEach { file ->
+                        val redownload = store.download(file)
+                        if (redownload.isFailure) throw e
+                    }
+                    transcriber.transcribe(wav, meetingDir) { fraction ->
+                        _state.value = TranscriptionUiState.Running(fraction)
+                    }
                 }
                 _state.value = TranscriptionUiState.Done(transcript)
             } catch (e: kotlinx.coroutines.CancellationException) {

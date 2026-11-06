@@ -36,10 +36,28 @@ class ModelStore(
 ) {
     fun fileFor(file: ModelFile): File = File(dir, file.fileName)
 
-    /** 模型是否已就绪（文件在且体积对得上）。 */
+    /**
+     * 模型是否已就绪。
+     *
+     * 除了体积，还要求有 [markerFor] 里的校验记录：只看体积的话，一个同尺寸的坏文件
+     * 会被当成好模型喂给推理引擎，表现为莫名其妙的识别质量下降。
+     */
     fun isReady(file: ModelFile): Boolean {
         val f = fileFor(file)
-        return f.isFile && f.length() == file.bytes
+        if (!f.isFile || f.length() != file.bytes) return false
+        val marker = markerFor(file)
+        if (!marker.isFile) return false
+        val expected = file.sha256 ?: return true
+        return marker.readText().trim().equals(expected, ignoreCase = true)
+    }
+
+    /** 校验通过后写下的指纹文件；改模型或删模型时一起消失。 */
+    private fun markerFor(file: ModelFile): File = File(dir, "${file.fileName}.verified")
+
+    /** 作废一个模型（校验不符或推理时崩了）：删文件与指纹，下次会重新下载。 */
+    fun invalidate(file: ModelFile) {
+        fileFor(file).delete()
+        markerFor(file).delete()
     }
 
     /** 已占用的字节数（只统计清单里的文件）。 */
@@ -59,10 +77,26 @@ class ModelStore(
     ): Result<File> {
         dir.mkdirs()
         val target = fileFor(file)
-        if (target.isFile && verify(target)) return Result.success(target)
+        // 已经下过并且校验过才算数：只比体积会把同尺寸坏文件当成好模型
+        if (isReady(file)) return Result.success(target)
 
         // 校验不通过或体积不对：从干净状态重来，避免在半截脏数据上叠加
-        val start = if (target.isFile) target.length().takeIf { it < file.bytes } ?: 0L else 0L
+        // 没下完的半截文件可以续传；"体积已经对但没有校验指纹"的文件反而是可疑的，
+        // 整份重下（同尺寸坏文件正是 isReady 要挡掉的那种）
+        val start = if (target.isFile) {
+            val length = target.length()
+            when {
+                length < file.bytes -> length
+                markerFor(file).isFile -> 0L
+                else -> {
+                    target.delete()
+                    0L
+                }
+            }
+        } else {
+            0L
+        }
+        if (start == 0L && markerFor(file).isFile) markerFor(file).delete()
         if (start == 0L && target.isFile) target.delete()
 
         return try {
@@ -85,6 +119,7 @@ class ModelStore(
                 }
             }
             if (verify(target)) {
+                markerFor(file).writeText(file.sha256 ?: "size-only")
                 Result.success(target)
             } else {
                 target.delete()
@@ -98,7 +133,10 @@ class ModelStore(
     /** 删除清单里的全部模型文件，返回释放的字数。 */
     fun deleteAll(catalog: ModelCatalog): Long {
         val freed = usedBytes(catalog)
-        catalog.files.forEach { fileFor(it).delete() }
+        catalog.files.forEach {
+            fileFor(it).delete()
+            markerFor(it).delete()
+        }
         return freed
     }
 

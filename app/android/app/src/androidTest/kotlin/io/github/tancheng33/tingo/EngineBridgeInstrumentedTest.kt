@@ -143,6 +143,12 @@ class EngineBridgeInstrumentedTest {
     }
 
     @Test
+    fun deleteAlsoRejectsPathTraversal() {
+        val failure = runCatching { engine.deleteMeeting("../etc") }.exceptionOrNull()
+        assertTrue("删除必须和归档一样拒绝越界 id", failure != null)
+    }
+
+    @Test
     fun archivingUnknownMeetingFails() {
         val failure = runCatching { engine.setArchived("2020-01-01_0000_不存在", true) }.exceptionOrNull()
         assertTrue("应当报错而不是静默成功", failure != null)

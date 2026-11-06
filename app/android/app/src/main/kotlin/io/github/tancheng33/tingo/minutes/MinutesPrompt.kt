@@ -64,9 +64,9 @@ object MinutesPrompt {
     fun build(transcript: Transcript, maxChars: Int = 12_000): String {
         val body = buildString {
             transcript.sentences.forEach { sentence ->
-                val name = transcript.speakerNames[sentence.speaker] ?: "说话人${sentence.speaker + 1}"
-                append('[').append(mmss(sentence.startMs)).append("] ")
-                append(name).append('：').append(sentence.text.trim()).append('\n')
+                append('[').append(Transcript.mmss(sentence.startMs)).append("] ")
+                append(transcript.speakerLabel(sentence.speaker)).append('：')
+                append(sentence.text.trim()).append('\n')
             }
         }
         val clipped = if (body.length <= maxChars) {
@@ -110,8 +110,5 @@ object MinutesPrompt {
         append("）。请严格按上面的结构重新输出，只输出 Markdown 正文，不要解释。\n")
     }
 
-    fun mmss(ms: Long): String {
-        val totalSeconds = ms / 1000
-        return "%02d:%02d".format(totalSeconds / 60, totalSeconds % 60)
-    }
+    fun mmss(ms: Long): String = Transcript.mmss(ms)
 }

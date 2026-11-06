@@ -95,4 +95,9 @@
     <string name="err_mic_unavailable">Microphone unavailable: %1$s</string>
     <string name="err_stop_failed">Could not finish recording: %1$s</string>
     <string name="err_recording_interrupted">Recording was interrupted by the system; the saved part remains</string>
+    <string name="recording_title_recording">Recording · %1$s</string>
+    <string name="recording_title_paused">Paused · %1$s</string>
+    <string name="recording_notification_stop">Finish</string>
+    <string name="library_action_failed">Action failed: %1$s</string>
+    <string name="err_llm_unsupported">On-device minutes are not supported on this device; the transcript is kept</string>
 </resources>

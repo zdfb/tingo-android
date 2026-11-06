@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,12 @@ class RecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            // 通知上的"结束录音"：请求界面收尾，然后自己退出
+            RecordingKeepAlive.onStopRequested()
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val state = RecordingKeepAlive.state.value
         if (state == null) {
             stopSelf()
@@ -86,6 +93,7 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         observer?.cancel()
+        scope.cancel()
         RecordingKeepAlive.onServiceDestroyed()
         super.onDestroy()
     }
@@ -118,11 +126,22 @@ class RecordingService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val titleTemplate = getString(
+            if (recording) R.string.recording_title_recording else R.string.recording_title_paused,
+        )
+        val stop = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         return NotificationCompat.Builder(this, RecordingNotification.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_record)
-            .setContentTitle(RecordingNotification.title(recording, elapsed))
+            .setContentTitle(RecordingNotification.title(titleTemplate, elapsed))
             .setContentText(getString(R.string.recording_notification_body))
             .setContentIntent(open)
+            // 规格要求在通知栏就能结束录音：不必回到应用
+            .addAction(0, getString(R.string.recording_notification_stop), stop)
             .setOngoing(true)
             .setSilent(true)
             .build()
@@ -142,6 +161,7 @@ class RecordingService : Service() {
     }
 
     companion object {
+        const val ACTION_STOP = "io.github.tancheng33.tingo.action.STOP_RECORDING"
         /** 开始或更新前台服务；已在运行时不重复 startForeground。 */
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java))
@@ -170,4 +190,7 @@ object RecordingKeepAlive {
 
     /** 服务被系统或用户结束时回调；界面据此把停在录音中的状态判为失败。 */
     var onServiceDestroyed: () -> Unit = {}
+
+    /** 用户在通知栏点"结束录音"时回调；界面负责走正常的 stop 流程（保存文件）。 */
+    var onStopRequested: () -> Unit = {}
 }

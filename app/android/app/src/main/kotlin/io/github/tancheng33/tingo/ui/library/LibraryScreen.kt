@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingCard
+import io.github.tancheng33.tingo.engine.FailureKind
+import io.github.tancheng33.tingo.ui.detail.failureText
 
 /**
  * 会议库列表。
@@ -54,8 +56,17 @@ fun LibraryScreen(
     onUnreadableClick: (MeetingCard) -> Unit = {},
     onSetArchived: (MeetingCard, Boolean) -> Unit = { _, _ -> },
     onDelete: (MeetingCard) -> Unit = {},
+    actionError: FailureKind? = null,
     modifier: Modifier = Modifier,
 ) {
+    if (actionError != null) {
+        Text(
+            text = stringResource(R.string.library_action_failed, failureText(actionError)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
     when (state) {
         LibraryUiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()

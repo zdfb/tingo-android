@@ -24,7 +24,11 @@ object RecordingNotification {
     const val CHANNEL_ID = "tingo-recording"
     const val NOTIFICATION_ID = 1
 
-    /** @param elapsed 已格式化的时长（mm:ss 或 h:mm:ss） */
-    fun title(recording: Boolean, elapsed: String): String =
-        if (recording) "正在录音 · $elapsed" else "已暂停 · $elapsed"
+    /**
+     * 通知标题：模板来自资源（中英各一份），这里只负责把时长填进去。
+     *
+     * @param template 形如 "正在录音 · %1$s" 的已本地化模板
+     * @param elapsed 已格式化的时长（mm:ss 或 h:mm:ss）
+     */
+    fun title(template: String, elapsed: String): String = template.format(elapsed)
 }

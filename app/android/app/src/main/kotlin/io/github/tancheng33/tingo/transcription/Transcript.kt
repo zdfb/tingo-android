@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.transcription
 
+import io.github.tancheng33.tingo.files.writeAtomically
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
@@ -49,8 +50,18 @@ data class Transcript(
     /** 按首次发言顺序排列的说话人编号。 */
     fun speakersInOrder(): List<Int> = sentences.map { it.speaker }.distinct()
 
+    /** 说话人的显示名：改过就用改过的，没改过用"说话人 N"。 */
+    fun speakerLabel(speaker: Int): String =
+        speakerNames[speaker]?.takeIf { it.isNotBlank() } ?: "说话人${speaker + 1}"
+
     companion object {
         const val FILE_NAME = "transcript.json"
+
+        /** 时间戳统一按 mm:ss 显示（出处用），别处不再各写一份。 */
+        fun mmss(ms: Long): String {
+            val totalSeconds = ms / 1000
+            return "%02d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+        }
 
         fun fromJson(json: String): Transcript {
             val root = JSONObject(json)
@@ -88,12 +99,8 @@ data class Transcript(
 object TranscriptWriter {
 
     fun write(dir: File, transcript: Transcript): File {
-        dir.mkdirs()
         val target = File(dir, Transcript.FILE_NAME)
-        val tmp = File(dir, "${Transcript.FILE_NAME}.tmp")
-        tmp.writeText(transcript.toJson())
-        if (target.exists()) target.delete()
-        check(tmp.renameTo(target)) { "无法写入 ${target.name}" }
+        writeAtomically(target, transcript.toJson())
         return target
     }
 

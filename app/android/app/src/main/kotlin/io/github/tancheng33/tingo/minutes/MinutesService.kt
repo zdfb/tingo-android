@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.minutes
 
+import io.github.tancheng33.tingo.files.writeAtomically
 import io.github.tancheng33.tingo.transcription.Transcript
 import java.io.File
 
@@ -41,12 +42,8 @@ class MinutesService(
 
     /** 先写临时文件再改名：被系统杀掉时不会留下半截纪要。 */
     fun write(meetingDir: File, markdown: String): File {
-        meetingDir.mkdirs()
         val target = File(meetingDir, FILE_NAME)
-        val tmp = File(meetingDir, "$FILE_NAME.tmp")
-        tmp.writeText(markdown.trimEnd() + "\n")
-        if (target.exists()) target.delete()
-        check(tmp.renameTo(target)) { "无法写入 ${target.name}" }
+        writeAtomically(target, markdown.trimEnd() + "\n")
         return target
     }
 

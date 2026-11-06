@@ -60,6 +60,9 @@ class AppContainer(context: Context) {
     )
     val llmFile: File = models.fileFor(llmCatalog.files.single())
 
+    /** 单个会议的目录；id 是会议库根目录下的单层目录名。 */
+    fun meetingDir(id: String): File = File(File(dataRoot, "meetings"), id)
+
     /**
      * 首次启动时建好会议库目录并写入探针文件。
      *
