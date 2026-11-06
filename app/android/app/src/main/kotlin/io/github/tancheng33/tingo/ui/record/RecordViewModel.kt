@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.record
 
 import androidx.lifecycle.ViewModel
+import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
@@ -27,7 +28,8 @@ sealed interface RecordUiState {
     /** @param meetingId 目录名，用于录音结束后跳转到详情 */
     data class Finished(val meetingId: String, val durationMs: Long) : RecordUiState
 
-    data class Failed(val reason: String) : RecordUiState
+    /** @param detail 动态部分（异常信息），拼进已本地化的模板 */
+    data class Failed(val reasonRes: Int, val detail: String? = null) : RecordUiState
 }
 
 /**
@@ -67,7 +69,7 @@ class RecordViewModel(
             capture.start(file)
         } catch (e: Exception) {
             session.fail(e.message ?: "麦克风不可用")
-            _state.value = RecordUiState.Failed(e.message ?: "麦克风不可用")
+            _state.value = RecordUiState.Failed(R.string.err_mic_unavailable, e.message)
             return
         }
         currentDir = dir
@@ -99,12 +101,27 @@ class RecordViewModel(
             capture.stop()
         } catch (e: Exception) {
             session.fail(e.message ?: "结束录音失败")
-            _state.value = RecordUiState.Failed(e.message ?: "结束录音失败")
+            _state.value = RecordUiState.Failed(R.string.err_stop_failed, e.message)
             return
         }
         session.finish(clock())
         currentDir = null
         _state.value = RecordUiState.Finished(dir.name, duration)
+    }
+
+    /**
+     * 前台服务被系统或用户结束：录音流已经断了，不能再假装在录。
+     *
+     * 已写入的部分保留在磁盘上（WavWriter 会修复半截文件），用户仍可之后补转写。
+     */
+    fun onInterrupted() {
+        val current = _state.value
+        if (current !is RecordUiState.Recording && current !is RecordUiState.Paused) return
+        ticker?.cancel()
+        ticker = null
+        runCatching { capture.stop() }
+        currentDir = null
+        _state.value = RecordUiState.Failed(R.string.err_recording_interrupted)
     }
 
     /** 不保存地放弃本次录音（删除空目录）。 */

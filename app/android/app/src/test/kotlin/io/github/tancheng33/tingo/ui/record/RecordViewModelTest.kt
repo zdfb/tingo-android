@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.ui.record
 
+import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.recording.AudioCapture
 import java.io.File
 import java.nio.file.Files
@@ -55,8 +56,8 @@ class RecordViewModelTest {
 
     private fun root(): File = Files.createTempDirectory("tingo-record").toFile()
 
-    private fun TestScope.viewModel(capture: FakeCapture) =
-        RecordViewModel(capture, root(), clock = { now }, io = dispatcher, scope = { backgroundScope })
+    private fun TestScope.viewModel(capture: FakeCapture, root: File = root()) =
+        RecordViewModel(capture, root, clock = { now }, io = dispatcher, scope = { backgroundScope })
 
     @Test
     fun startCreatesMeetingDirectoryAndRecordingFile() = runTest(dispatcher) {
@@ -122,7 +123,9 @@ class RecordViewModelTest {
         val vm = viewModel(capture)
         vm.start()
 
-        assertEquals(RecordUiState.Failed("麦克风被占用"), vm.state.value)
+        val failed = vm.state.value as RecordUiState.Failed
+        assertEquals(R.string.err_mic_unavailable, failed.reasonRes)
+        assertEquals("麦克风被占用", failed.detail)
     }
 
     @Test
@@ -139,4 +142,31 @@ class RecordViewModelTest {
     }
 
     private fun <T> requireNonNull(value: T?): T = requireNotNull(value)
+
+    @Test
+    fun interruptionMarksRecordingAsFailedAndKeepsFile() = runTest(dispatcher) {
+        val root = root()
+        val capture = FakeCapture()
+        val vm = viewModel(capture, root)
+
+        vm.start()
+        advanceTimeBy(1_000)
+        vm.onInterrupted()
+
+        val failed = vm.state.value as RecordUiState.Failed
+        assertEquals(R.string.err_recording_interrupted, failed.reasonRes)
+        // 会议目录仍在（采集端已写入的部分留在磁盘上，用户还能补转写）
+        val meeting = root.listFiles()!!.single()
+        assertTrue(meeting.isDirectory)
+        assertEquals(1, capture.stopped)
+    }
+
+    @Test
+    fun interruptionIsIgnoredWhenNothingIsRecording() = runTest(dispatcher) {
+        val vm = viewModel(FakeCapture())
+
+        vm.onInterrupted()
+
+        assertEquals(RecordUiState.Idle, vm.state.value)
+    }
 }

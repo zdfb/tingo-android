@@ -61,6 +61,9 @@ import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
 import io.github.tancheng33.tingo.ui.library.LibraryViewModel
 import io.github.tancheng33.tingo.recording.MicRecorder
+import io.github.tancheng33.tingo.recording.RecordingKeepAlive
+import io.github.tancheng33.tingo.recording.RecordingService
+import io.github.tancheng33.tingo.recording.requiresForegroundService
 import io.github.tancheng33.tingo.ui.record.RecordScreen
 import io.github.tancheng33.tingo.ui.record.RecordViewModel
 import io.github.tancheng33.tingo.ui.settings.SettingsScreen
@@ -244,6 +247,23 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // 录音期间挂前台服务：状态变化时同步给服务，服务被结束时把录音判为中断
+    val serviceContext = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        RecordingKeepAlive.onServiceDestroyed = { viewModel.onInterrupted() }
+        onDispose { RecordingKeepAlive.onServiceDestroyed = {} }
+    }
+    androidx.compose.runtime.LaunchedEffect(state) {
+        RecordingKeepAlive.publish(state)
+        if (requiresForegroundService(state)) {
+            RecordingService.start(serviceContext)
+        } else {
+            RecordingService.stop(serviceContext)
+            RecordingKeepAlive.publish(null)
+        }
+    }
+
     RecordScreen(
         state = state,
         onStart = viewModel::start,

@@ -69,9 +69,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 模拟器 API 37 上 Compose UI 测试会报 `NoSuchMethodException: android.hardware.input.InputManager.getInstance`（Compose 测试库与 API 37 的兼容问题），因此设备级测试请用 API 36 镜像。
 
-## 已知限制（地基层）
+## 已知限制
 
-- **不能录音**：采集链路（麦克风 / 屏幕内录 / 前台服务）在录音变更里实现，当前录音页是说明性占位
+- **录音前台服务不在自动化测试里**：Android 14+ 禁止从后台启动 `microphone` 类型的前台服务，
+  无头模拟器里的 instrumentation 进程拿不到这个前提（`ForegroundServiceDidNotStartInTimeException`）。
+  服务的判断逻辑（何时该挂前台、通知文案）由 JVM 单测覆盖，真机上需要手动确认一次锁屏录音不中断
+- **系统内录（录会议软件的声音）只是尽力而为**：会议软件多用 `USAGE_VOICE_COMMUNICATION`，
+  这条通路抓不到；界面会说明并给出替代做法
 - **不能改会议库位置**：数据落在应用专属外部目录（`Android/data/io.github.tancheng33.tingo/files/tingo`）。用 SAF 选目录返回的是 `content://` URI，而引擎按绝对路径存取，需要先给引擎加一层存储抽象（后续变更），当前不提供假入口
 - **无播放器**：详情页时间戳可点击，但还没有音频播放，点击暂无跳转目标
 - 仅支持 `arm64-v8a`（真机）与 `x86_64`（模拟器）；其它 ABI 启动时直接给出不支持提示

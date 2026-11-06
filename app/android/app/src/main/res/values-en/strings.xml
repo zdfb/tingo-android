@@ -89,4 +89,10 @@
     <string name="err_llm_missing">The language model is not downloaded yet</string>
     <string name="err_minutes_rejected">The model did not follow the required structure: %1$s</string>
     <string name="err_minutes_failed">Generating minutes failed: %1$s</string>
+    <string name="recording_channel_name">Recording</string>
+    <string name="recording_channel_desc">Shows the elapsed time and state while recording</string>
+    <string name="recording_notification_body">Tap to return to Tingo; recording continues</string>
+    <string name="err_mic_unavailable">Microphone unavailable: %1$s</string>
+    <string name="err_stop_failed">Could not finish recording: %1$s</string>
+    <string name="err_recording_interrupted">Recording was interrupted by the system; the saved part remains</string>
 </resources>

@@ -145,7 +145,14 @@ fun RecordScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(stringResource(R.string.error_title), style = MaterialTheme.typography.titleMedium)
-                    Text(state.reason, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = if (state.detail.isNullOrBlank()) {
+                            stringResource(state.reasonRes)
+                        } else {
+                            stringResource(state.reasonRes, state.detail)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Button(onClick = ::startWithPermission) { Text(stringResource(R.string.record_start)) }
                 }
             }
