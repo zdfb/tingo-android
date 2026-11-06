@@ -80,4 +80,13 @@
     <string name="library_delete_title">Delete this meeting?</string>
     <string name="library_delete_body">Recording, transcript and minutes are deleted together. This cannot be undone.</string>
     <string name="library_delete_confirm">Delete</string>
+    <string name="detail_export">Export and share</string>
+    <string name="detail_export_empty">This meeting has no minutes or transcript yet</string>
+    <string name="err_no_recording">This meeting has no recording that can be transcribed</string>
+    <string name="err_model_download_failed">Model download failed: %1$s</string>
+    <string name="err_transcribe_failed">Transcription failed: %1$s</string>
+    <string name="err_no_transcript">This meeting has no transcript yet; create one first</string>
+    <string name="err_llm_missing">The language model is not downloaded yet</string>
+    <string name="err_minutes_rejected">The model did not follow the required structure: %1$s</string>
+    <string name="err_minutes_failed">Generating minutes failed: %1$s</string>
 </resources>

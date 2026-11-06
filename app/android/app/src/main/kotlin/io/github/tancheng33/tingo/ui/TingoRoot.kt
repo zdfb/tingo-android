@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo.ui
 
+import java.io.File
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.tancheng33.tingo.data.MeetingExporter
 import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingRepository
@@ -210,6 +213,24 @@ fun TingoRoot(
     }
 }
 
+/** 用系统分享面板把导出的文件交给别的应用；FileProvider 只授权 cache/exports。 */
+private fun shareFile(context: android.content.Context, file: File) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/markdown"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        putExtra(android.content.Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        android.content.Intent.createChooser(intent, context.getString(R.string.detail_export)),
+    )
+}
+
 @Composable
 private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit) {
     val viewModel: RecordViewModel = viewModel(
@@ -237,6 +258,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolean, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val viewModel: DetailViewModel = viewModel(
         key = "detail-$meetingId",
         factory = viewModelFactory {
@@ -307,6 +329,13 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             minutesGeneration = minutesState,
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
+            onExport = {
+                val dir = File(File(container.dataRoot, "meetings"), meetingId)
+                val title = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
+                val exported = MeetingExporter.export(dir, title, File(context.cacheDir, "exports"))
+                if (exported != null) shareFile(context, exported)
+            },
+            exportEnabled = state.detail?.let { it.minutesText != null || it.transcript != null } == true,
         )
     }
 }

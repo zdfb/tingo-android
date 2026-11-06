@@ -80,4 +80,13 @@
     <string name="library_delete_title">删除这场会议？</string>
     <string name="library_delete_body">录音、转写、纪要会一起删除，无法恢复。</string>
     <string name="library_delete_confirm">删除</string>
+    <string name="detail_export">导出并分享</string>
+    <string name="detail_export_empty">这场会议还没有纪要或转写</string>
+    <string name="err_no_recording">这场会议没有可转写的录音</string>
+    <string name="err_model_download_failed">模型下载失败：%1$s</string>
+    <string name="err_transcribe_failed">转写失败：%1$s</string>
+    <string name="err_no_transcript">这场会议还没有转写，先生成转写</string>
+    <string name="err_llm_missing">语言模型还没下载好</string>
+    <string name="err_minutes_rejected">模型没有按要求输出：%1$s</string>
+    <string name="err_minutes_failed">生成纪要失败：%1$s</string>
 </resources>

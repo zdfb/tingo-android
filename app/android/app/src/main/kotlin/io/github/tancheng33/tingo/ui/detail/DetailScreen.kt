@@ -14,7 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +65,8 @@ fun DetailScreen(
     minutesGeneration: MinutesUiState = MinutesUiState.Idle,
     onGenerateMinutes: () -> Unit = {},
     onCancelMinutes: () -> Unit = {},
+    onExport: () -> Unit = {},
+    exportEnabled: Boolean = false,
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -81,11 +87,24 @@ fun DetailScreen(
             val tabs = if (showMinutesTab) 2 else 1
             var tab by remember { mutableIntStateOf(initialTab.coerceIn(0, tabs - 1)) }
             Column(modifier.fillMaxSize()) {
-                Text(
-                    text = detail?.summary?.title.orEmpty(),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = detail?.summary?.title.orEmpty(),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // 有内容才可分享：空会议导出会得到一个空文件，不如不给入口
+                    IconButton(onClick = onExport, enabled = exportEnabled) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = stringResource(R.string.detail_export),
+                        )
+                    }
+                }
                 TabRow(selectedTabIndex = tab) {
                     if (showMinutesTab) {
                         Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.detail_tab_minutes)) })
@@ -190,6 +209,11 @@ private fun FishboneCard(fishbone: Fishbone) {
 
 private const val FISHBONE_FENCE = "```fishbone"
 
+/** 本地化模板 + 动态部分；没有动态部分时直接取模板，避免留下空的"："。 */
+@Composable
+private fun failureMessage(reasonRes: Int, detail: String?): String =
+    if (detail.isNullOrBlank()) stringResource(reasonRes) else stringResource(reasonRes, detail)
+
 /** 纪要生成状态条：缺模型先提示下载，生成中给取消，失败给原因。 */
 @Composable
 private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, onCancel: () -> Unit) {
@@ -226,7 +250,11 @@ private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, 
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(state.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Text(
+                text = failureMessage(state.reasonRes, state.detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
             Button(onClick = onGenerate) { Text(stringResource(R.string.minutes_generate)) }
         }
     }
@@ -286,7 +314,11 @@ private fun TranscriptionStatus(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(state.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Text(
+                text = failureMessage(state.reasonRes, state.detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
             Button(onClick = onTranscribe) { Text(stringResource(R.string.transcribe_start)) }
         }
     }

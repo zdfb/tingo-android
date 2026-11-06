@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 只把导出的纪要目录交给分享面板，不暴露整个应用私有目录 -->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

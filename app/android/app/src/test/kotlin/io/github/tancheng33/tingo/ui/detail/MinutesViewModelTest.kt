@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.ui.detail
 
+import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.minutes.MinutesGenerator
 import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.models.HttpFetcher
@@ -145,7 +146,7 @@ class MinutesViewModelTest {
         vm.start()
         advanceUntilIdle()
 
-        assertTrue((vm.state.value as MinutesUiState.Failed).reason.contains("先生成转写"))
+        assertEquals(R.string.err_no_transcript, (vm.state.value as MinutesUiState.Failed).reasonRes)
     }
 
     @Test
@@ -156,7 +157,8 @@ class MinutesViewModelTest {
         advanceUntilIdle()
 
         val state = vm.state.value as MinutesUiState.Failed
-        assertTrue(state.reason.contains("模型没有按要求输出"))
+        assertEquals(R.string.err_minutes_rejected, state.reasonRes)
+        assertTrue("detail 要带上第一个问题：${state.detail}", state.detail!!.contains("## 议题与讨论"))
     }
 
     @Test
@@ -166,7 +168,9 @@ class MinutesViewModelTest {
         vm.start()
         advanceUntilIdle()
 
-        assertEquals(MinutesUiState.Failed("显存不够"), vm.state.value)
+        val state = vm.state.value as MinutesUiState.Failed
+        assertEquals(R.string.err_minutes_failed, state.reasonRes)
+        assertEquals("显存不够", state.detail)
     }
 
     @Test

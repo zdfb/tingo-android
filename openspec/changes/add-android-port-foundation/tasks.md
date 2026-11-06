@@ -52,3 +52,5 @@
 
 - 全部任务完成后运行 code-review skill 做双轴（Standards / Spec）核查，直到两轴无未决问题
 - 核查通过后 archive 本变更，把三项能力同步进 `openspec/specs/`
+- [x] 5.6 导出与分享：`MeetingExporter` 有纪要导纪要、无纪要导转写为 Markdown，文件名清理路径不友好字符；经 FileProvider 走系统分享面板（只授权 cache/exports）；验证：单测 6 个 + 设备级回归
+- [x] 6.1 中英文文案成对：`StringsParityTest` 校验两份资源 key 集合一致；界面可见的运行期错误改为"资源 id + 动态部分"，不再在 ViewModel 里写死中文

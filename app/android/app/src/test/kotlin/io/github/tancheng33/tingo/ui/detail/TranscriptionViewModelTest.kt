@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.ui.detail
 
+import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.models.HttpFetcher
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelFile
@@ -129,7 +130,8 @@ class TranscriptionViewModelTest {
         advanceUntilIdle()
 
         val state = vm.state.value as TranscriptionUiState.Failed
-        assertTrue(state.reason.contains("模型下载失败"))
+        assertEquals(R.string.err_model_download_failed, state.reasonRes)
+        assertEquals("paraformer", state.detail)
         assertEquals(0, transcriber.calls)
     }
 
@@ -142,7 +144,9 @@ class TranscriptionViewModelTest {
         vm.start()
         advanceUntilIdle()
 
-        assertEquals(TranscriptionUiState.Failed("识别崩了"), vm.state.value)
+        val state = vm.state.value as TranscriptionUiState.Failed
+        assertEquals(R.string.err_transcribe_failed, state.reasonRes)
+        assertEquals("识别崩了", state.detail)
     }
 
     @Test
@@ -153,7 +157,10 @@ class TranscriptionViewModelTest {
         vm.start()
         advanceUntilIdle()
 
-        assertTrue((vm.state.value as TranscriptionUiState.Failed).reason.contains("没有可转写的录音"))
+        assertEquals(
+            R.string.err_no_recording,
+            (vm.state.value as TranscriptionUiState.Failed).reasonRes,
+        )
     }
 
     @Test

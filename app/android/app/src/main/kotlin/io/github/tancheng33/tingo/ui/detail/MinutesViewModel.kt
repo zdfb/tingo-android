@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.detail
 
 import androidx.lifecycle.ViewModel
+import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.models.ModelStore
@@ -25,7 +26,8 @@ sealed interface MinutesUiState {
 
     data class Done(val file: File) : MinutesUiState
 
-    data class Failed(val reason: String) : MinutesUiState
+    /** @param detail 动态部分（校验问题、异常信息），拼进已本地化的模板 */
+    data class Failed(val reasonRes: Int, val detail: String? = null) : MinutesUiState
 }
 
 /**
@@ -58,13 +60,13 @@ class MinutesViewModel(
     fun start() {
         if (job?.isActive == true) return
         val transcript = TranscriptWriter.read(meetingDir) ?: run {
-            _state.value = MinutesUiState.Failed("这场会议还没有转写，先生成转写")
+            _state.value = MinutesUiState.Failed(R.string.err_no_transcript)
             return
         }
         job = viewModelScope.launch(io) {
             try {
                 if (!modelFile.isFile || modelFile.length() == 0L) {
-                    _state.value = MinutesUiState.Failed("语言模型还没下载好")
+                    _state.value = MinutesUiState.Failed(R.string.err_llm_missing)
                     return@launch
                 }
                 _state.value = MinutesUiState.Generating
@@ -74,9 +76,15 @@ class MinutesViewModel(
                 _state.value = MinutesUiState.Idle
                 throw e
             } catch (e: MinutesService.MinutesRejected) {
-                _state.value = MinutesUiState.Failed("模型没有按要求输出：${e.problems.firstOrNull() ?: "结构不符"}")
+                _state.value = MinutesUiState.Failed(
+                    R.string.err_minutes_rejected,
+                    e.problems.firstOrNull() ?: "structure",
+                )
             } catch (e: Exception) {
-                _state.value = MinutesUiState.Failed(e.message ?: "生成纪要失败")
+                _state.value = MinutesUiState.Failed(
+                    R.string.err_minutes_failed,
+                    e.message.orEmpty(),
+                )
             }
         }
     }

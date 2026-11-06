@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.detail
 
 import androidx.lifecycle.ViewModel
+import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
@@ -30,7 +31,8 @@ sealed interface TranscriptionUiState {
 
     data class Done(val transcript: Transcript) : TranscriptionUiState
 
-    data class Failed(val reason: String) : TranscriptionUiState
+    /** @param detail 动态部分（模型 id、异常信息）；只用于拼进已本地化的模板 */
+    data class Failed(val reasonRes: Int, val detail: String? = null) : TranscriptionUiState
 }
 
 /**
@@ -70,7 +72,7 @@ class TranscriptionViewModel(
 
     fun start() {
         val wav = wavFile() ?: run {
-            _state.value = TranscriptionUiState.Failed("这场会议没有可转写的录音")
+            _state.value = TranscriptionUiState.Failed(R.string.err_no_recording)
             return
         }
         if (job?.isActive == true) return
@@ -92,7 +94,8 @@ class TranscriptionViewModel(
                         )
                         if (result.isFailure) {
                             _state.value = TranscriptionUiState.Failed(
-                                "模型下载失败：${file.id}",
+                                R.string.err_model_download_failed,
+                                file.id,
                             )
                             return@launch
                         }
@@ -108,7 +111,10 @@ class TranscriptionViewModel(
                 _state.value = TranscriptionUiState.Idle
                 throw e
             } catch (e: Exception) {
-                _state.value = TranscriptionUiState.Failed(e.message ?: "转写失败")
+                _state.value = TranscriptionUiState.Failed(
+                    R.string.err_transcribe_failed,
+                    e.message.orEmpty(),
+                )
             }
         }
     }
