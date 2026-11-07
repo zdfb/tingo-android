@@ -68,6 +68,8 @@ fun DetailScreen(
     onGenerateMinutes: () -> Unit = {},
     onCancelMinutes: () -> Unit = {},
     onExport: () -> Unit = {},
+    /** 导出归档 zip（录音 + transcript.json + 纪要） */
+    onExportBundle: (() -> Unit)? = null,
     exportEnabled: Boolean = false,
 ) {
     when {
@@ -100,6 +102,14 @@ fun DetailScreen(
                         modifier = Modifier.weight(1f),
                     )
                     // 有内容才可分享：空会议导出会得到一个空文件，不如不给入口
+                    if (onExportBundle != null) {
+                        IconButton(onClick = onExportBundle, enabled = exportEnabled) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Share,
+                                contentDescription = stringResource(R.string.detail_export_bundle),
+                            )
+                        }
+                    }
                     IconButton(onClick = onExport, enabled = exportEnabled) {
                         Icon(
                             imageVector = Icons.Default.Share,

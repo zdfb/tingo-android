@@ -33,6 +33,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
@@ -122,6 +126,7 @@ fun LibraryScreen(
                 items(state.items, key = { it.id }) { card ->
                     MeetingCardRow(
                         card = card,
+                        query = state.query,
                         onClick = { onOpenMeeting(card.id) },
                         onUnreadableClick = { onUnreadableClick(card) },
                         onSetArchived = { onSetArchived(card, it) },
@@ -136,6 +141,8 @@ fun LibraryScreen(
 @Composable
 private fun MeetingCardRow(
     card: MeetingCard,
+    /** 当前搜索词，用来高亮命中的字 */
+    query: String,
     onClick: () -> Unit,
     onUnreadableClick: () -> Unit,
     onSetArchived: (Boolean) -> Unit,
@@ -167,7 +174,7 @@ private fun MeetingCardRow(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = card.title.ifBlank { card.id },
+                    text = highlighted(card.title.ifBlank { card.id }, query),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -216,7 +223,7 @@ private fun MeetingCardRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (card.oneLiner.isNotBlank()) {
-                Text(text = card.oneLiner, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                Text(text = highlighted(card.oneLiner, query), style = MaterialTheme.typography.bodyMedium, maxLines = 2)
             }
             if (card.tags.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -224,6 +231,22 @@ private fun MeetingCardRow(
                         Text(text = "#$tag", style = MaterialTheme.typography.labelSmall)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 把命中关键词的片段画成主色加粗；没命中就原样画。 */
+@Composable
+private fun highlighted(text: String, query: String): AnnotatedString {
+    if (query.isBlank()) return AnnotatedString(text)
+    val accent = MaterialTheme.colorScheme.primary
+    return buildAnnotatedString {
+        Highlight.split(text, query).forEach { piece ->
+            if (piece.matched) {
+                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) { append(piece.text) }
+            } else {
+                append(piece.text)
             }
         }
     }

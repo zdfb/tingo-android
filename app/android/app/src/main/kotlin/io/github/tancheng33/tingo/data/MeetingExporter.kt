@@ -4,11 +4,16 @@ import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.transcription.Transcript
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
- * 导出一场会议为可以分享的 Markdown。
+ * 导出会议：要么一份可读的 Markdown（分享用），要么一个完整归档 zip（存档用）。
  *
- * 手机上"导出"最自然的落点就是分享面板：微信、邮件、备忘录都能接。
+ * 手机上"导出"有两个真实需求，不能混成一个：
+ * - 发给同事看 → 一段文字就够，走分享面板；
+ * - 留档/搬机器 → 录音、转写、纪要要一起带走，走 zip。
+ *
  * 文件名取会议标题并清掉路径不友好字符——标题来自纪要正文，可能含 `#`、`/` 之类。
  */
 object MeetingExporter {
@@ -30,6 +35,37 @@ object MeetingExporter {
         file.writeText(body)
         return file
     }
+
+    /**
+     * 打一个归档 zip：录音 + transcript.json + 纪要.md（有什么打什么）。
+     *
+     * @return 生成的 zip；会议里没有任何可导出的内容时返回 null
+     */
+    fun exportBundle(
+        meetingDir: File,
+        meetingTitle: String,
+        into: File,
+        emptyTitle: String = "会议纪要",
+    ): File? {
+        val entries = bundleEntries(meetingDir)
+        if (entries.isEmpty()) return null
+
+        into.mkdirs()
+        val zip = File(into, fileStem(meetingTitle, emptyTitle) + ".zip")
+        ZipOutputStream(zip.outputStream()).use { out ->
+            entries.forEach { (name, file) ->
+                out.putNextEntry(ZipEntry(name))
+                file.inputStream().use { it.copyTo(out) }
+                out.closeEntry()
+            }
+        }
+        return zip
+    }
+
+    /** zip 里装哪些文件：只要真实存在且非空的。 */
+    fun bundleEntries(meetingDir: File): List<Pair<String, File>> = BUNDLE_NAMES
+        .map { name -> name to File(meetingDir, name) }
+        .filter { (_, file) -> file.isFile && file.length() > 0 }
 
     /** 有纪要就只导纪要；没有纪要但有转写，就把转写排成可读的 Markdown。 */
     fun compose(minutes: String?, transcript: Transcript?, transcriptTitle: String = "会议转写"): String? {
@@ -60,4 +96,11 @@ object MeetingExporter {
     }
 
     private const val MAX_STEM = 60
+
+    /** 归档里带走的文件：与桌面版一场会议的产物一一对应。 */
+    private val BUNDLE_NAMES = listOf(
+        "录音.wav",
+        "transcript.json",
+        MinutesService.FILE_NAME,
+    )
 }

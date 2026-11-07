@@ -333,6 +333,33 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
 private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolean, onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
+    // 归档 zip 的标题在"点导出"那一刻才知道（标题来自纪要），用持有者跨过 launcher 的声明顺序
+    val pendingBundleTitle = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+
+    // 归档导出走 SAF：用户自己挑落点（下载目录、U 盘、网盘），我们只负责把 zip 写进去
+    val bundleLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val dir = container.meetingDir(meetingId)
+        exportScope.launch {
+            withContext(Dispatchers.IO) {
+                val zip = MeetingExporter.exportBundle(
+                    dir,
+                    pendingBundleTitle.value,
+                    File(context.cacheDir, "exports"),
+                    emptyTitle = context.getString(R.string.detail_tab_minutes),
+                )
+                if (zip != null) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            zip.inputStream().use { it.copyTo(out) }
+                        }
+                    }
+                }
+            }
+        }
+    }
     val viewModel: DetailViewModel = viewModel(
         key = "detail-$meetingId",
         factory = viewModelFactory {
@@ -340,6 +367,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val meetingTitle = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
 
     val transcriptionViewModel: TranscriptionViewModel = viewModel(
         key = "transcribe-$meetingId",
@@ -410,15 +438,20 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             minutesGeneration = minutesState,
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
+            onExportBundle = {
+                pendingBundleTitle.value = meetingTitle
+                bundleLauncher.launch(
+                    MeetingExporter.fileStem(meetingTitle, context.getString(R.string.detail_tab_minutes)) + ".zip",
+                )
+            },
             onExport = {
                 // 读纪要 + 解析整份 transcript 可能上百毫秒，别在主线程做
                 val dir = container.meetingDir(meetingId)
-                val title = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
                 exportScope.launch {
                     val exported = withContext(Dispatchers.IO) {
                         MeetingExporter.export(
                             dir,
-                            title,
+                            meetingTitle,
                             File(context.cacheDir, "exports"),
                             transcriptTitle = context.getString(R.string.export_transcript_title),
                             emptyTitle = context.getString(R.string.detail_tab_minutes),

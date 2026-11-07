@@ -81,3 +81,73 @@ class MeetingExporterTest {
         assertEquals(target.absolutePath, file.parentFile!!.absolutePath)
     }
 }
+
+/** 归档导出：留下的是"能搬走的整场会议"，不是一个摘要。 */
+class MeetingExporterBundleTest {
+
+    private fun dir(): File = Files.createTempDirectory("tingo-bundle").toFile()
+
+    private fun meeting(withAudio: Boolean = true, withTranscript: Boolean = true, withMinutes: Boolean = true): File {
+        val dir = dir()
+        File(dir, "会议").let { }
+        if (withAudio) {
+            File(dir, "录音.wav").writeBytes(ByteArray(100) { 1 })
+        }
+        if (withTranscript) {
+            File(dir, "transcript.json").writeText("""{"source":"录音.wav","durationMs":1000,"sentences":[]}""")
+        }
+        if (withMinutes) {
+            File(dir, "纪要.md").writeText("# 一句话总结\n\n测试\n")
+        }
+        return dir
+    }
+
+    private fun namesIn(zip: File): Set<String> {
+        java.util.zip.ZipFile(zip).use { file ->
+            return file.entries().toList().map { it.name }.toSet()
+        }
+    }
+
+    @Test
+    fun bundleContainsAudioTranscriptAndMinutes() {
+        val meeting = meeting()
+        val zip = MeetingExporter.exportBundle(meeting, "周会", dir())!!
+
+        assertEquals(setOf("录音.wav", "transcript.json", "纪要.md"), namesIn(zip))
+    }
+
+    @Test
+    fun bundleSkipsMissingPieces() {
+        val meeting = meeting(withAudio = false, withMinutes = false)
+        val zip = MeetingExporter.exportBundle(meeting, "周会", dir())!!
+
+        assertEquals(setOf("transcript.json"), namesIn(zip))
+    }
+
+    @Test
+    fun emptyMeetingProducesNothing() {
+        val meeting = meeting(withAudio = false, withTranscript = false, withMinutes = false)
+
+        assertEquals(null, MeetingExporter.exportBundle(meeting, "周会", dir()))
+        assertTrue(MeetingExporter.bundleEntries(meeting).isEmpty())
+    }
+
+    @Test
+    fun zipContentRoundTrips() {
+        val meeting = meeting()
+        val zip = MeetingExporter.exportBundle(meeting, "周会", dir())!!
+
+        java.util.zip.ZipFile(zip).use { file ->
+            val entry = file.getEntry("纪要.md")
+            val text = file.getInputStream(entry).bufferedReader().readText()
+            assertEquals("# 一句话总结\n\n测试\n", text)
+        }
+    }
+
+    @Test
+    fun fileStemIsUsedForTheZipName() {
+        val zip = MeetingExporter.exportBundle(meeting(), "a/b:c", dir())!!
+
+        assertTrue("非法字符应被清掉：${zip.name}", zip.name == "a b c.zip")
+    }
+}
