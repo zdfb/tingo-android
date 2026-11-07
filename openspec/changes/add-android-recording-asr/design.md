@@ -37,6 +37,13 @@ sherpa-onnx 运行），配 CT-Transformer 标点、CAM++ 声纹、silero VAD，
   因此改为 `LibraryBackup`：整库打 zip 交给用户选位置、从备份恢复。库仍在应用私有目录，
   引擎不需要任何改动，用户的核心诉求（备份、迁移、找回）也满足了。
 
+- **纪要模型用的是官方量化产物，不是我们实验里再量化的那一份**：`spike/on-device-models/RESULTS.md`
+  用 `llama-quantize --allow-requantize` 把官方 Q8_0 再压到 Q4_K_M（378 MB）与 Q4_0（364 MB），
+  证明了"再量化可行、格式可靠性不受影响"。App 实际分发的是 `unsloth/Qwen3-0.6B-GGUF` 官方
+  Q4_K_M（397 MB）：同档位、体积略大，但有稳定地址与第三方校验，比自己挂一个 397 MB 的产物合适。
+  实验的价值在于选型依据（为什么不是 Q4_0：它会把内容改写成摘要，三节重复问题仍在），
+  而不是产物本身。
+
 ## 决策
 
 ### D1. 推理放在 Kotlin 侧，Rust 只做纯逻辑

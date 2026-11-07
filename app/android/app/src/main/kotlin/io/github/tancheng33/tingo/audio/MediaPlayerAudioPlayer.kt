@@ -17,8 +17,10 @@ class MediaPlayerAudioPlayer : AudioPlayer {
 
     override fun prepare(file: File, onReady: (durationMs: Long) -> Unit) {
         release()
+        var created: MediaPlayer? = null
         val mp = try {
             MediaPlayer().apply {
+                created = this
                 setDataSource(file.absolutePath)
                 setOnPreparedListener {
                     durationMs = it.duration.toLong().coerceAtLeast(0)
@@ -30,6 +32,8 @@ class MediaPlayerAudioPlayer : AudioPlayer {
                 prepareAsync()
             }
         } catch (e: Exception) {
+            // 构造到一半失败时不能漏一个 MediaPlayer：显式释放再报"没有音频"
+            runCatching { created?.release() }
             onReady(0)
             return
         }
@@ -49,7 +53,8 @@ class MediaPlayerAudioPlayer : AudioPlayer {
             pendingSeekMs = positionMs
             return
         }
-        val target = positionMs.coerceIn(0, durationMs.coerceAtLeast(0))
+        // 时长还没拿到（onPrepared 之前）时不能夹到 0，否则用户点的这一句就丢了
+        val target = if (durationMs <= 0) positionMs.coerceAtLeast(0) else positionMs.coerceIn(0, durationMs)
         // 还没准备好时 seekTo 会抛 IllegalStateException，先记下来等 onPrepared
         pendingSeekMs = target
         runCatching { mp.seekTo(target.toInt()); pendingSeekMs = null }

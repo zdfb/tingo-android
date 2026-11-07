@@ -44,6 +44,31 @@ class InterruptedRecordingsTest {
     }
 
     @Test
+    fun repairsRawMicTrackWrittenDuringRecording() {
+        val meetings = root()
+        val dir = File(meetings, "2026-11-01_0900_复盘").apply { mkdirs() }
+        // 录制中写的是 mic.wav；进程被杀时它没有收尾，正是这条恢复要管的对象
+        val mic = File(dir, "mic.wav")
+        WavWriter(mic, 16_000).append(ByteArray(800))
+
+        assertTrue(InterruptedRecordings.needsRepair(mic))
+        assertEquals(1, InterruptedRecordings.repairUnder(meetings))
+        assertFalse(InterruptedRecordings.needsRepair(mic))
+        assertEquals(800L, declaredDataBytes(mic))
+    }
+
+    @Test
+    fun repairsSystemTrackToo() {
+        val meetings = root()
+        val dir = File(meetings, "2026-11-01_1000_内录").apply { mkdirs() }
+        val system = File(dir, "system.wav")
+        WavWriter(system, 48_000, channels = 2).append(ByteArray(1_600))
+
+        assertEquals(1, InterruptedRecordings.repairUnder(meetings))
+        assertFalse(InterruptedRecordings.needsRepair(system))
+    }
+
+    @Test
     fun finishedRecordingIsLeftAlone() {
         val meetings = root()
         val meeting = File(meetings, "2026-11-01_1000_正常").apply { mkdirs() }

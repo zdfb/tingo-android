@@ -9,18 +9,26 @@ import java.io.File
  * 转写也读不出样本。这里把这类文件的头补好，用户下次打开就只见一场正常会议，
  * 而不是一个"点不开"的条目。
  *
+ * 只管补头，不合成 `录音.wav`：合成需要判断两路音轨的时间对齐，属于录音链路的职责，
+ * 启动路径上不要在后台线程做音频处理。
+ *
  * @return 修好的文件数
  */
 object InterruptedRecordings {
 
-    /** 录音文件名的候选（引擎也认 m4a，Android 只产 wav）。 */
-    private val RECORDING_NAMES = listOf("录音.wav")
+    /**
+     * 需要检查的文件名。
+     *
+     * 录制过程中写的是原始音轨（`mic.wav`、`system.wav`），只有正常结束时才合成
+     * `录音.wav`；进程被杀时留下的是前两个，所以它们才是这条恢复的主要对象。
+     */
+    private val REPAIRABLE_NAMES = listOf("mic.wav", "system.wav", "录音.wav")
 
     fun repairUnder(meetingsRoot: File): Int {
         val dirs = meetingsRoot.listFiles { file -> file.isDirectory } ?: return 0
         var repaired = 0
         dirs.forEach { dir ->
-            RECORDING_NAMES.forEach { name ->
+            REPAIRABLE_NAMES.forEach { name ->
                 val wav = File(dir, name)
                 if (wav.isFile && needsRepair(wav)) {
                     runCatching { WavWriter.repair(wav) }.onSuccess { repaired++ }

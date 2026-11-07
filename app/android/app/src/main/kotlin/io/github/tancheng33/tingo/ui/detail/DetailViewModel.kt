@@ -71,7 +71,9 @@ class DetailViewModel(
             } catch (e: TingoFailure) {
                 DetailUiState(loading = false, failure = e.kind)
             }
-            _state.value = next
+            // 转写/纪要完成后会再次 load()：不能把正在播放的播放条抹掉，
+            // 否则音频还在响、界面却没了暂停按钮
+            _state.value = next.copy(playback = _state.value.playback)
             preparePlayback()
         }
     }

@@ -64,7 +64,31 @@ llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 
 模型不进 APK：语音模型（Paraformer 227 MB + 标点 76 MB + CAM++ 28 MB + VAD 0.6 MB）与
 语言模型（Qwen3-0.6B Q4_K_M 397 MB）由 App 首次使用时按 `assets/models.json`、`assets/llm.json`
-下载到 `files/tingo/models/`，带续传与 sha256 校验。
+下载到 `files/tingo/models/`，带续传与 sha256 校验；设置页可看占用、可删除。
+
+**校验强度**：四个语音模型都带 sha256，下载后校验摘要；语言模型这一版 `sha256` 留空
+（镜像不稳定，多次下载中断，没能稳定取到摘要），此时只校验体积与校验指纹——这一点在
+`assets/llm.json` 的 note 里也写了，换到稳定源后应补上真实摘要。
+
+**关于"再量化"这件事的诚实说明**：`spike/on-device-models/RESULTS.md` 里的 Q4_K_M / Q4_0 是
+我们用 `llama-quantize --allow-requantize` 从官方 Q8_0 再量化出来的，用来回答"能不能再压一档、
+速度与格式可靠性如何"。App 实际下载的是 unsloth 官方发布的 Q4_K_M：同样的量化档位、体积略大
+（397 MB vs 378 MB），但它是别人校验过、有稳定下载地址的产物——把这一个 397 MB 的文件挂在自己
+仓库里分发并不合适。也就是说：**实验结论指导了选型，但没有把实验产物当产品分发**。
+
+**内存门槛**：转写时 sherpa 与四个模型常驻，峰值大致 600–800 MB；纪要生成时加载 Q4_K_M 权重
+378 MB + KV cache。这两条链路不同时驻留，所以 6 GB 机型可以跑；加载失败（内存不足）时
+按设计降级为"本机暂不支持本地纪要生成"，录音与转写不受影响。
+
+**模型来源与许可**（都在各自上游仓库的许可下使用，App 不打包、不转售）：
+
+| 模型 | 用途 | 来源 |
+|---|---|---|
+| Paraformer-large int8 + tokens + am.mvn | 中文识别 | `csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09`（FunASR，MIT） |
+| `punct.int8.onnx`（CT-Transformer） | 断句标点 | `sherpa-onnx` 官方标点模型（Apache-2.0） |
+| `campplus.onnx` | 说话人声纹 | 3D-Speaker CAM++（Apache-2.0） |
+| `silero_vad.onnx` | 语音活动检测 | Silero VAD（MIT） |
+| `Qwen3-0.6B-Q4_K_M.gguf` | 纪要生成（实验） | `unsloth/Qwen3-0.6B-GGUF` 官方 Q4_K_M（Apache-2.0）。我们自 Q8_0 再量化的那一份只用于可行性验证（`spike/on-device-models/RESULTS.md`），没有分发——见下文说明 |
 
 ### 在模拟器上验证
 
@@ -87,7 +111,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   会议软件多用 `USAGE_VOICE_COMMUNICATION` 或直接禁止被抓，这条通路常常抓不到；界面会说明并给出替代做法。
   两路音轨写 `mic.wav` / `system.wav`，结束时合成 `录音.wav`（与桌面版布局一致）。
   降声道、重采样、混音这些数字部分是单测覆盖的，**真机完整链路需要人工验收一次**
-- **不能改会议库位置**：数据落在应用专属外部目录（`Android/data/io.github.tancheng33.tingo/files/tingo`）。用 SAF 选目录返回的是 `content://` URI，而引擎按绝对路径存取，需要先给引擎加一层存储抽象（后续变更），当前不提供假入口
+- **不能改会议库位置，改由"备份/恢复"满足迁移需求**：数据落在应用专属外部目录
+  （`Android/data/io.github.tancheng33.tingo/files/tingo`）。SAF 选出的目录只有 `content://` URI，
+  而引擎是原生代码、按绝对路径读写；给引擎整套 IO 加存储抽象代价远超收益。
+  设置页提供"备份到文件 / 从备份恢复"：整库打成一个 zip，恢复默认跳过同名会议
 - **播放器只做"回听某一句"**：详情页有播放/暂停与进度条，点某句跳到该句开头；
   没有快进、倍速、声音波形。没有 `录音.wav` 的会议（例如只导入了 `transcript.json`）不显示播放条
 - 仅支持 `arm64-v8a`（真机）与 `x86_64`（模拟器）；其它 ABI 启动时直接给出不支持提示

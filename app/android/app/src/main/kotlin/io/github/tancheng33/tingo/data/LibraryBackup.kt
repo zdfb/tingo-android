@@ -83,11 +83,19 @@ object LibraryBackup {
         val existing = meetings(meetingsRoot).map { it.name }.toSet()
         val handled = mutableSetOf<String>()
 
-        var sawZipEntry = false
-        ZipInputStream(open()).use { input ->
+        val raw = java.io.BufferedInputStream(open())
+        val source = java.io.PushbackInputStream(raw, 4)
+        // 先看魔数：空会议库的备份是一个"没有条目的合法 zip"，不能和"选错文件"混为一谈
+        val magic = ByteArray(4)
+        val read = source.read(magic)
+        if (read > 0) source.unread(magic, 0, read)
+        val isZip = read == 4 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte() &&
+            magic[2] == 3.toByte() && magic[3] == 4.toByte()
+        require(isZip) { "不是有效的备份文件" }
+
+        ZipInputStream(source).use { input ->
             while (true) {
                 val entry = input.nextEntry ?: break
-                sawZipEntry = true
                 if (entry.isDirectory) continue
                 val segments = entry.name.split('/', '\\').filter { it.isNotEmpty() }
                 // 只认"一层会议目录/文件"的结构；`..`、绝对路径、层级过深一律拒绝
@@ -116,9 +124,6 @@ object LibraryBackup {
                 restored += meetingId
             }
         }
-        // 用户可能选错文件。ZipInputStream 对"不是 zip"只会安静地返回空条目，
-        // 那会让界面显示"恢复到 0 场会议"，像是成功了一样——一个条目都没有就是坏文件。
-        require(sawZipEntry) { "不是有效的备份文件" }
         return RestoreReport(
             restored = restored.distinct(),
             skipped = skipped.sorted(),

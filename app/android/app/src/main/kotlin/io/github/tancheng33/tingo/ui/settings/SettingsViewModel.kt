@@ -72,14 +72,7 @@ class SettingsViewModel(
 
     fun refresh() {
         _state.value = _state.value.copy(loading = true, deleteFailed = false)
-        viewModelScope.launch(io) {
-            val groups = try {
-                SettingsUiState(loading = false, asr = groupOf(catalog), llm = groupOf(llmCatalog))
-            } catch (e: Exception) {
-                SettingsUiState(loading = false)
-            }
-            _state.value = groups
-        }
+        viewModelScope.launch(io) { refreshNow() }
     }
 
     /** 删掉识别模型（四个文件一起，缺一个也用不了）。 */
@@ -121,9 +114,21 @@ class SettingsViewModel(
     private fun delete(target: ModelCatalog) {
         viewModelScope.launch(io) {
             val ok = runCatching { store.deleteAll(target) }.isSuccess
-            _state.value = _state.value.copy(deleteFailed = !ok)
-            refresh()
+            // 先把占用重新算出来，再把"刚才失败过"贴上——反过来会被 refresh 覆盖掉
+            refreshNow()
+            if (!ok) _state.value = _state.value.copy(deleteFailed = true)
         }
+    }
+
+    /** 同步重算占用（调用方已经在 IO 线程上）。 */
+    private suspend fun refreshNow() {
+        val next = try {
+            SettingsUiState(loading = false, asr = groupOf(catalog), llm = groupOf(llmCatalog))
+        } catch (e: Exception) {
+            // 统计失败（例如目录不可读）不该把界面卡在 loading
+            SettingsUiState(loading = false)
+        }
+        _state.value = next
     }
 
     private fun groupOf(target: ModelCatalog): ModelGroup {

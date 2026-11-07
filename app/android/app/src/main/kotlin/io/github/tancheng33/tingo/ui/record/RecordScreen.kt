@@ -68,9 +68,13 @@ fun RecordScreen(
     }
 
     // 通知权限只影响"看得见录音状态"，没有它录音照样能进行
+    var notificationsDenied by remember { mutableStateOf(false) }
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { }
+    ) { granted ->
+        // 没有通知权限录音照样能进行，但状态栏就看不见了——必须说清楚
+        notificationsDenied = !granted
+    }
 
     fun startWithPermission() {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -106,6 +110,20 @@ fun RecordScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                    if (notificationsDenied) {
+                        Text(
+                            stringResource(R.string.record_notification_denied),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (systemAudioDenied) {
+                        Text(
+                            stringResource(R.string.record_system_audio_denied),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Button(onClick = ::startWithPermission) {
                         Text(stringResource(R.string.record_start))
                     }
@@ -124,6 +142,13 @@ fun RecordScreen(
                         progress = { state.level },
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (systemAudioEnabled && !systemAudioActive) {
+                        Text(
+                            text = stringResource(R.string.record_system_audio_missing),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = onPause) { Text(stringResource(R.string.record_pause)) }
                         Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }

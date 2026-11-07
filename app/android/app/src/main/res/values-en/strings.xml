@@ -127,4 +127,5 @@
     <string name="settings_library_backed_up">Backed up %1$d meetings</string>
     <string name="settings_library_restored">Restored %1$d, skipped %2$d (already present), rejected %3$d unsafe files</string>
     <string name="settings_library_failed">Backup/restore failed; check the file</string>
+    <string name="record_notification_denied">Notifications are off: recording still runs, but no progress is shown in the status bar</string>
 </resources>
