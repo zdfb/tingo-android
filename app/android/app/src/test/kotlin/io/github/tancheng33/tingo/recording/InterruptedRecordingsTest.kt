@@ -69,6 +69,22 @@ class InterruptedRecordingsTest {
     }
 
     @Test
+    fun crashedRecordingBecomesTranscribable() {
+        val meetings = root()
+        val dir = File(meetings, "2026-11-01_0900_被杀").apply { mkdirs() }
+        val mic = File(dir, "mic.wav")
+        WavWriter(mic, 16_000).append(ByteArray(1_600))
+
+        assertEquals(1, InterruptedRecordings.repairUnder(meetings))
+
+        // 规格要求"可播放、可转写"：转写只认 录音.wav，所以启动修复必须把它合成出来
+        val mixed = File(dir, "录音.wav")
+        assertTrue("崩溃的录音应被合成为 录音.wav", mixed.isFile)
+        assertFalse(InterruptedRecordings.needsRepair(mixed))
+        assertTrue("转写应能找到音频", RecordingTracks.find(dir)?.name == "录音.wav")
+    }
+
+    @Test
     fun finishedRecordingIsLeftAlone() {
         val meetings = root()
         val meeting = File(meetings, "2026-11-01_1000_正常").apply { mkdirs() }
@@ -86,5 +102,47 @@ class InterruptedRecordingsTest {
         File(empty, "2026-11-01_1100_空").mkdirs()
         assertEquals(0, InterruptedRecordings.repairUnder(empty))
         assertEquals(0, InterruptedRecordings.repairUnder(File(empty, "不存在")))
+    }
+}
+
+/** 补头不能改变音频的采样率/声道，否则就是把文件改坏。 */
+class WavRepairFormatTest {
+
+    private fun dir(): File = Files.createTempDirectory("tingo-repair-fmt").toFile()
+
+    @Test
+    fun repairingStereo48kKeepsItsFormat() {
+        val file = File(dir(), "system.wav")
+        // 48 kHz 立体声，录制中被杀：头里的长度还是 0
+        WavWriter(file, 48_000, channels = 2).append(ByteArray(48_000 * 2 * 2))
+
+        val durationMs = WavWriter.repair(file)
+
+        val pcm = io.github.tancheng33.tingo.transcription.WavReader.readAnyChannels(file)
+        assertEquals(48_000, pcm.sampleRate)
+        // 1 秒的立体声数据：每声道 48000 帧
+        assertEquals(48_000, pcm.samples.size)
+        assertEquals(1_000L, durationMs)
+    }
+
+    @Test
+    fun repairingMono16kKeepsItsFormat() {
+        val file = File(dir(), "mic.wav")
+        WavWriter(file, 16_000).append(ByteArray(16_000))
+
+        val durationMs = WavWriter.repair(file)
+
+        assertEquals(16_000, io.github.tancheng33.tingo.transcription.WavReader.read(file).sampleRate)
+        assertEquals(500L, durationMs)
+    }
+
+    @Test
+    fun headerlessFileFallsBackToDefaults() {
+        val file = File(dir(), "broken.wav")
+        file.writeBytes(ByteArray(0))
+
+        // 空文件补头：按默认 16 kHz 单声道，不崩
+        assertEquals(0L, WavWriter.repair(file))
+        assertEquals(16_000, io.github.tancheng33.tingo.transcription.WavReader.read(file).sampleRate)
     }
 }

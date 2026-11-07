@@ -22,11 +22,9 @@ data class ModelGroup(
     val readyFiles: Int = 0,
     val fileCount: Int = 0,
     val bytes: Long = 0,
-    val totalBytes: Long = 0,
 ) {
     val isReady: Boolean get() = fileCount > 0 && readyFiles == fileCount
     val isEmpty: Boolean get() = bytes == 0L
-    val partial: Boolean get() = !isReady && !isEmpty
 }
 
 /** 备份/恢复的结果，界面据此给一句人话。 */
@@ -134,11 +132,6 @@ class SettingsViewModel(
     private fun groupOf(target: ModelCatalog): ModelGroup {
         val bytes = store.usedBytes(target)
         val ready = target.files.count { store.isReady(it) }
-        return ModelGroup(
-            readyFiles = ready,
-            fileCount = target.files.size,
-            bytes = bytes,
-            totalBytes = target.files.sumOf { it.bytes },
-        )
+        return ModelGroup(readyFiles = ready, fileCount = target.files.size, bytes = bytes)
     }
 }

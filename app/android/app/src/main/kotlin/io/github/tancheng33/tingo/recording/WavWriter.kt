@@ -93,11 +93,39 @@ class WavWriter(
         const val BYTES_PER_SAMPLE = 2
         const val HEADER_SIZE = 44
 
-        /** 进程被杀后，把没来得及收尾的 wav 头补好；返回实际时长（毫秒）。 */
-        fun repair(file: File, sampleRate: Int = SAMPLE_RATE): Long {
+        /**
+         * 进程被杀后，把没来得及收尾的 wav 头补好；返回实际时长（毫秒）。
+         *
+         * 保留原文件的采样率与声道数：`system.wav` 是 48 kHz 立体声，按默认的 16 kHz 单声道
+         * 重写头会让它变成"6 倍速的怪声"，而且时长算错——补头不能改变音频本身的含义。
+         */
+        fun repair(file: File, fallbackSampleRate: Int = SAMPLE_RATE): Long {
+            val format = readFormat(file)
+            val sampleRate = format?.first ?: fallbackSampleRate
+            val channels = format?.second ?: CHANNELS
             val dataBytes = (file.length() - HEADER_SIZE).coerceAtLeast(0)
-            WavWriter(file, sampleRate, existingDataBytes = dataBytes).close()
-            return dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE)
+            WavWriter(file, sampleRate, channels, existingDataBytes = dataBytes).close()
+            return dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE * channels)
         }
+
+        /** 从已有头里读 (采样率, 声道数)；头不完整时返回 null。 */
+        private fun readFormat(file: File): Pair<Int, Int>? {
+            if (file.length() < HEADER_SIZE) return null
+            val header = ByteArray(HEADER_SIZE)
+            val read = file.inputStream().use { it.readNBytes(header, 0, HEADER_SIZE) }
+            if (read < HEADER_SIZE) return null
+            if (String(header, 0, 4, Charsets.US_ASCII) != "RIFF") return null
+            if (String(header, 8, 4, Charsets.US_ASCII) != "WAVE") return null
+            val channels = u16(header, 22)
+            val rate = (header[24].toInt() and 0xFF) or
+                ((header[25].toInt() and 0xFF) shl 8) or
+                ((header[26].toInt() and 0xFF) shl 16) or
+                ((header[27].toInt() and 0xFF) shl 24)
+            if (channels !in 1..8 || rate <= 0) return null
+            return rate to channels
+        }
+
+        private fun u16(bytes: ByteArray, at: Int): Int =
+            (bytes[at].toInt() and 0xFF) or ((bytes[at + 1].toInt() and 0xFF) shl 8)
     }
 }

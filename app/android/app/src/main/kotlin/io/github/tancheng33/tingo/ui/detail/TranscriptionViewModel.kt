@@ -5,6 +5,7 @@ import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.recording.RecordingTracks
 import io.github.tancheng33.tingo.transcription.Transcript
 import io.github.tancheng33.tingo.transcription.Transcriber
 import io.github.tancheng33.tingo.transcription.WavReader
@@ -56,7 +57,8 @@ class TranscriptionViewModel(
 
     /** 录音文件；m4a 之类不支持的格式返回 null（桌面录的会议手机不重转写）。 */
     private fun wavFile(): File? =
-        File(meetingDir, "录音.wav").takeIf { it.isFile && it.length() > WavReader.HEADER_BYTES }
+        // 崩溃留下的会议只有 mic.wav / system.wav，也算有音频
+        RecordingTracks.find(meetingDir)
 
     /** 界面进入详情页时调一次：告诉用户当前能不能直接转写。 */
     fun prepare() {

@@ -51,8 +51,8 @@ fun RecordScreen(
     /** 用户是否勾选"同时录下会议软件的声音" */
     systemAudioEnabled: Boolean = false,
     onSystemAudioChange: (Boolean) -> Unit = {},
-    /** 系统声音这一路是否真的在录；false 表示没抓到（会议软件不允许抓通常如此） */
-    systemAudioActive: Boolean = false,
+    /** 试过抓系统声音但没抓到（会议软件不允许抓通常如此） */
+    systemAudioMissing: Boolean = false,
     /** 用户拒绝了屏幕录制授权 */
     systemAudioDenied: Boolean = false,
     modifier: Modifier = Modifier,
@@ -103,27 +103,21 @@ fun RecordScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(stringResource(R.string.record_idle_hint), style = MaterialTheme.typography.bodyMedium)
-                    if (permissionDenied) {
-                        Text(
-                            stringResource(R.string.record_permission_denied),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (notificationsDenied) {
-                        Text(
-                            stringResource(R.string.record_notification_denied),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (systemAudioDenied) {
-                        Text(
-                            stringResource(R.string.record_system_audio_denied),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                    WarningLine(
+                        text = stringResource(R.string.record_permission_denied),
+                        visible = permissionDenied,
+                        emphasis = true,
+                    )
+                    WarningLine(
+                        text = stringResource(R.string.record_notification_denied),
+                        visible = notificationsDenied,
+                        emphasis = false,
+                    )
+                    WarningLine(
+                        text = stringResource(R.string.record_system_audio_denied),
+                        visible = systemAudioDenied,
+                        emphasis = true,
+                    )
                     Button(onClick = ::startWithPermission) {
                         Text(stringResource(R.string.record_start))
                     }
@@ -142,13 +136,11 @@ fun RecordScreen(
                         progress = { state.level },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (systemAudioEnabled && !systemAudioActive) {
-                        Text(
-                            text = stringResource(R.string.record_system_audio_missing),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                    WarningLine(
+                        text = stringResource(R.string.record_system_audio_missing),
+                        visible = systemAudioMissing,
+                        emphasis = true,
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = onPause) { Text(stringResource(R.string.record_pause)) }
                         Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
@@ -230,4 +222,22 @@ private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (B
             )
         }
     }
+}
+
+/**
+ * 一行提示：给就能看见，不给就什么都不画。
+ *
+ * 录音页有好几种"降级了但还能用"的情况（没通知权限、没系统声音、没麦克风权限），
+ * 各自写一遍 Text + 颜色太重复，这里收成一处。
+ *
+ * @param emphasis true 表示这次录音确实少了东西（红字）；false 表示只是提醒（次要色）
+ */
+@Composable
+private fun WarningLine(text: String, visible: Boolean, emphasis: Boolean) {
+    if (!visible) return
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (emphasis) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

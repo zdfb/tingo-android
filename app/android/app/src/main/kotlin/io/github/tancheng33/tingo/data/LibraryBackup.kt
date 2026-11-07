@@ -83,15 +83,18 @@ object LibraryBackup {
         val existing = meetings(meetingsRoot).map { it.name }.toSet()
         val handled = mutableSetOf<String>()
 
-        val raw = java.io.BufferedInputStream(open())
-        val source = java.io.PushbackInputStream(raw, 4)
-        // 先看魔数：空会议库的备份是一个"没有条目的合法 zip"，不能和"选错文件"混为一谈
+        val source = java.io.PushbackInputStream(java.io.BufferedInputStream(open()), 4)
+        // 先看魔数：空会议库的备份是一个"只有目录尾记录"的合法 zip（PK\x05\x06），
+        // 不能和"选错文件"混为一谈
         val magic = ByteArray(4)
-        val read = source.read(magic)
-        if (read > 0) source.unread(magic, 0, read)
-        val isZip = read == 4 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte() &&
-            magic[2] == 3.toByte() && magic[3] == 4.toByte()
-        require(isZip) { "不是有效的备份文件" }
+        var filled = 0
+        while (filled < 4) {
+            val read = source.read(magic, filled, 4 - filled)
+            if (read <= 0) break
+            filled += read
+        }
+        if (filled > 0) source.unread(magic, 0, filled)
+        require(filled == 4 && isZipSignature(magic)) { "不是有效的备份文件" }
 
         ZipInputStream(source).use { input ->
             while (true) {
@@ -130,6 +133,11 @@ object LibraryBackup {
             rejected = rejected,
         )
     }
+
+    /** zip 的三种开头：普通条目、空归档尾记录、跨卷条目。 */
+    private fun isZipSignature(magic: ByteArray): Boolean =
+        magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte() &&
+            (magic[2].toInt() == 3 || magic[2].toInt() == 5 || magic[2].toInt() == 7)
 
     /** 会议库里的会议目录（跳过隐藏目录与普通文件）。 */
     fun meetings(meetingsRoot: File): List<File> =

@@ -43,11 +43,28 @@ class SettingsInstrumentedTest {
             llmCatalog = ModelCatalog(listOf()),
             meetingsRoot = File(context.cacheDir, "models-settings-meetings"),
         )
-        val freed = store.deleteAll(oneFile)
+        // 走 ViewModel 自己的路径：等它统计完、再让它删除，断言状态与磁盘都归零
+        awaitState(vm) { !it.loading && it.asr.bytes == before }
+        assertTrue("统计到的占用应与文件一致", vm.state.value.asr.isReady)
 
-        assertEquals("删除应释放刚刚统计到的字节", before, freed)
+        vm.deleteAsr()
+        awaitState(vm) { it.asr.isEmpty }
+
         assertEquals(0L, store.usedBytes(oneFile))
         assertTrue("文件应该被删掉", !onDisk.isFile)
-        vm.deleteAsr()
+    }
+
+    /** 轮询等待 ViewModel 在 IO 线程上算完；超时就失败，避免测试空转。 */
+    private fun awaitState(
+        vm: SettingsViewModel,
+        timeoutMs: Long = 10_000,
+        predicate: (SettingsUiState) -> Boolean,
+    ) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (predicate(vm.state.value)) return
+            Thread.sleep(50)
+        }
+        throw AssertionError("等待状态超时，当前：${vm.state.value}")
     }
 }

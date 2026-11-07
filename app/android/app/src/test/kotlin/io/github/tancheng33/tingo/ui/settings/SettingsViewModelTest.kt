@@ -147,7 +147,6 @@ class SettingsViewModelTest {
         val state = vm.state.value
         assertFalse(state.loading)
         assertTrue("没下过应显示为空", state.asr.isEmpty)
-        assertEquals(3_000L, state.asr.totalBytes)
         assertEquals(2, state.asr.fileCount)
     }
 
@@ -178,7 +177,7 @@ class SettingsViewModelTest {
         val group = vm.state.value.asr
         assertFalse(group.isReady)
         assertFalse(group.isEmpty)
-        assertTrue("下了一半要能看出来", group.partial)
+        assertTrue("下了一半既不算就绪也不算空", !group.isReady && !group.isEmpty)
         assertEquals(1, group.readyFiles)
     }
 

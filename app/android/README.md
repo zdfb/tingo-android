@@ -76,9 +76,11 @@ llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 （397 MB vs 378 MB），但它是别人校验过、有稳定下载地址的产物——把这一个 397 MB 的文件挂在自己
 仓库里分发并不合适。也就是说：**实验结论指导了选型，但没有把实验产物当产品分发**。
 
-**内存门槛**：转写时 sherpa 与四个模型常驻，峰值大致 600–800 MB；纪要生成时加载 Q4_K_M 权重
-378 MB + KV cache。这两条链路不同时驻留，所以 6 GB 机型可以跑；加载失败（内存不足）时
-按设计降级为"本机暂不支持本地纪要生成"，录音与转写不受影响。
+**内存门槛（估算，未在真机上实测）**：转写时 sherpa 与四个模型常驻，按权重体积估算峰值
+约 1 GB；纪要生成时加载 Q4_K_M 权重 397 MB + KV cache，同样是数百兆量级。两条链路不同时驻留，
+所以 6 GB 机型理论上够用——但这是估算，`spike/on-device-models/RESULTS.md` 的"端侧运行的剩余工作"
+里列着"真机实测速度与内存"，尚未做。加载失败（内存不足）时按设计降级为
+"本机暂不支持本地纪要生成"，录音与转写不受影响。
 
 **模型来源与许可**（都在各自上游仓库的许可下使用，App 不打包、不转售）：
 
@@ -88,7 +90,7 @@ llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 | `punct.int8.onnx`（CT-Transformer） | 断句标点 | `sherpa-onnx` 官方标点模型（Apache-2.0） |
 | `campplus.onnx` | 说话人声纹 | 3D-Speaker CAM++（Apache-2.0） |
 | `silero_vad.onnx` | 语音活动检测 | Silero VAD（MIT） |
-| `Qwen3-0.6B-Q4_K_M.gguf` | 纪要生成（实验） | `unsloth/Qwen3-0.6B-GGUF` 官方 Q4_K_M（Apache-2.0）。我们自 Q8_0 再量化的那一份只用于可行性验证（`spike/on-device-models/RESULTS.md`），没有分发——见下文说明 |
+| `Qwen3-0.6B-Q4_K_M.gguf`（397 MB） | 纪要生成（实验） | `unsloth/Qwen3-0.6B-GGUF` 官方 Q4_K_M（Apache-2.0）。我们自 Q8_0 再量化的那一份只用于可行性验证（`spike/on-device-models/RESULTS.md`），没有分发——见下文说明 |
 
 ### 在模拟器上验证
 

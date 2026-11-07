@@ -193,3 +193,18 @@ class LibraryBackupBadInputTest {
         assertEquals(listOf("2026-11-01_0900_周会"), report.restored)
     }
 }
+
+/** 空会议库的备份必须能恢复（它是合法 zip，只是没有条目）。 */
+class LibraryBackupEmptyTest {
+
+    @Test
+    fun emptyBackupRestoresToNothingInsteadOfFailing() {
+        val empty = Files.createTempDirectory("tingo-empty").toFile()
+        val zip = File(Files.createTempDirectory("tingo-emptyzip").toFile(), "empty.zip")
+        LibraryBackup.backupTo(empty, zip)
+
+        val report = LibraryBackup.restoreFrom(zip, Files.createTempDirectory("tingo-target").toFile())
+
+        assertTrue("空备份应恢复出 0 场，而不是报错", report.isEmpty)
+    }
+}

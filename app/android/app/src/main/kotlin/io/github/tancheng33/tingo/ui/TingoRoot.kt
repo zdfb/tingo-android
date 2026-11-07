@@ -300,7 +300,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
     val state by viewModel.state.collectAsStateWithLifecycle()
     val serviceContext = androidx.compose.ui.platform.LocalContext.current
     // 是否同时录会议软件的声音：开关、授权结果、以及实际抓到没有
-    val systemAudioActive by viewModel.systemAudioActive.collectAsStateWithLifecycle()
+    val systemAudioStatus by viewModel.systemAudioStatus.collectAsStateWithLifecycle()
     var systemAudioEnabled by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var systemAudioDenied by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -362,7 +362,7 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
         onStart = startWithPermission,
         systemAudioEnabled = systemAudioEnabled,
         onSystemAudioChange = { systemAudioEnabled = it },
-        systemAudioActive = systemAudioActive,
+        systemAudioMissing = systemAudioStatus == RecordViewModel.SystemAudioStatus.MISSING,
         systemAudioDenied = systemAudioDenied,
         onPause = viewModel::pause,
         onResume = viewModel::resume,
@@ -411,7 +411,8 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                 DetailViewModel(
                     engine = container.engine,
                     meetingId = meetingId,
-                    audioFile = File(container.meetingDir(meetingId), "录音.wav"),
+                    audioFile = io.github.tancheng33.tingo.recording.RecordingTracks
+                        .find(container.meetingDir(meetingId)),
                 )
             }
         },

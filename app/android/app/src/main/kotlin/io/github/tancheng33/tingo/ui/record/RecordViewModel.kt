@@ -58,9 +58,18 @@ class RecordViewModel(
     private val _state = MutableStateFlow<RecordUiState>(RecordUiState.Idle)
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
 
-    /** 系统声音那一路是否真的在录；抓不到时为 false，界面据此提示。 */
-    private val _systemAudioActive = MutableStateFlow(false)
-    val systemAudioActive: StateFlow<Boolean> = _systemAudioActive.asStateFlow()
+    /**
+     * 系统声音那一路的状态。
+     *
+     * 三种状态是为了避免"刚开始录音就红字报错"：还没尝试过不能说失败，
+     * 试过之后抓不到才该提示。
+     */
+    enum class SystemAudioStatus { NOT_ATTEMPTED, ACTIVE, MISSING }
+
+    private val _systemAudioStatus = MutableStateFlow(SystemAudioStatus.NOT_ATTEMPTED)
+    val systemAudioStatus: StateFlow<SystemAudioStatus> = _systemAudioStatus.asStateFlow()
+
+
 
     private var currentDir: File? = null
     private var systemAudio: io.github.tancheng33.tingo.recording.SystemAudioCapture? = null
@@ -95,12 +104,12 @@ class RecordViewModel(
         runCatching { capture.start(File(dir, SYSTEM_TRACK)) }
             .onSuccess {
                 systemAudio = capture
-                _systemAudioActive.value = true
+                _systemAudioStatus.value = SystemAudioStatus.ACTIVE
             }
             .onFailure {
                 // 抓不到系统声音不影响录音：麦克风那一路继续，界面提示一句
                 runCatching { capture.stop() }
-                _systemAudioActive.value = false
+                _systemAudioStatus.value = SystemAudioStatus.MISSING
             }
     }
 
@@ -127,7 +136,7 @@ class RecordViewModel(
             val micDuration = capture.stop()
             systemAudio?.let { runCatching { it.stop() } }
             systemAudio = null
-            _systemAudioActive.value = false
+            _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
             // 两路音轨合成 录音.wav；只有麦克风一路时也走这里，文件名统一
             TrackMerger.mixInto(dir)
             micDuration
