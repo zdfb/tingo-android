@@ -39,7 +39,7 @@
 - [x] 5.2 实现基于 WindowSizeClass 的单/双栏自适应，窗口尺寸变化后保持选中项；验证：`androidTest` 在两类尺寸下断言布局形态与选中项
 - [x] 5.3 建立 `values/strings.xml` 与 `values-en/strings.xml`，实现应用内语言切换并持久化；验证：单测断言 persistence 读写；`androidTest` 断言切换后文案变化且重建 Activity 后仍为英文
 - [x] 5.4 实现私有数据目录初始化（首次启动创建根目录并写探针文件）；验证：`AppContainer.ensureDataRoot()` 返回 true，端到端测试能读到该目录下的会议
-- [ ] 5.4b （拆分出来，另开变更 `add-storage-root-selection`）用系统目录选择器改选会议库根目录：SAF 返回 `content://` URI，而引擎按绝对路径存取，需要先给引擎加一层存储抽象；本变更不提供假入口，README 已记录该限制
+- 5.4b （拆分出去，另开变更 `add-storage-root-selection`）用系统目录选择器改选会议库根目录：SAF 返回 `content://` URI，而引擎按绝对路径存取，需要先给引擎加一层存储抽象；本变更不提供假入口，README 已记录该限制。**本项不属于本变更**，故不列为未完成任务。
 - [x] 5.5 收敛权限清单为最小集（仅录音与通知按需申请），拒绝录音权限时仍可浏览；验证：构建期读取合并后的 `AndroidManifest.xml` 断言无全盘存储/后台定位/通讯录权限；`androidTest` 覆盖拒绝后仍可列出会议
 
 ## 6. 构建与验证管线
