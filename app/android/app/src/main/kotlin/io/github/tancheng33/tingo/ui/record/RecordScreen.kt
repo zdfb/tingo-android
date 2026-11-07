@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.recording.SystemAudioSupport
 import io.github.tancheng33.tingo.ui.clockOf
 
 /**
@@ -68,7 +69,20 @@ fun RecordScreen(
     }
 
     // 通知权限只影响"看得见录音状态"，没有它录音照样能进行
+    // 权限可能在系统设置里被重新打开：每次回到前台都重新判定一次，别把旧结论一直挂着
     var notificationsDenied by remember { mutableStateOf(false) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notificationsDenied = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -117,6 +131,12 @@ fun RecordScreen(
                         text = stringResource(R.string.record_system_audio_denied),
                         visible = systemAudioDenied,
                         emphasis = true,
+                    )
+                    // 系统内录开关：之前写完忘了渲染，等于用户根本没有这个选项
+                    SystemAudioToggle(
+                        enabled = systemAudioEnabled,
+                        supported = android.os.Build.VERSION.SDK_INT >= SystemAudioSupport.MIN_SDK,
+                        onChange = onSystemAudioChange,
                     )
                     Button(onClick = ::startWithPermission) {
                         Text(stringResource(R.string.record_start))

@@ -89,6 +89,7 @@ class RecordViewModel(
             return
         }
         currentDir = dir
+        _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
         session.start(clock())
         _state.value = RecordUiState.Recording(0, 0f)
         startTicker()

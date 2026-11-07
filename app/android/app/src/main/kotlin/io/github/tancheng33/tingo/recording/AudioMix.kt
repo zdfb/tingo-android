@@ -108,9 +108,16 @@ object TrackMerger {
         val tracks = listOfNotNull(micSamples, systemSamples)
         if (tracks.isEmpty()) return null
 
-        WavWriter(mixed, AudioMix.TARGET_RATE).apply {
+        // 先写临时文件再改名：中途被杀时不会留下一个"头里长度为 0"的 录音.wav，
+        // 那种半截文件会盖过旁边完好的 mic.wav / system.wav
+        val temp = File(meetingDir, "$MIXED.tmp")
+        WavWriter(temp, AudioMix.TARGET_RATE).apply {
             append(AudioMix.samplesToBytes(AudioMix.mix(tracks)))
             close()
+        }
+        if (!temp.renameTo(mixed)) {
+            temp.delete()
+            return null
         }
         return mixed
     }

@@ -43,6 +43,8 @@ class DetailViewModel(
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
+    /** 播放器在 IO 协程里创建、在主线程使用，跨线程读，必须可见 */
+    @Volatile
     private var player: AudioPlayer? = null
 
     private val _state = MutableStateFlow(DetailUiState())
@@ -72,7 +74,14 @@ class DetailViewModel(
                 DetailUiState(loading = false, failure = e.kind)
             }
             // 转写/纪要完成后会再次 load()：不能把正在播放的播放条抹掉，
-            // 否则音频还在响、界面却没了暂停按钮
+            // 否则音频还在响、界面却没了暂停按钮。但整页读失败时要停下来，
+            // 否则会出现"报错页面上悬着一个播放条"。
+            if (next.failure != null) {
+                // 整页读失败时不该再拉起播放器，否则会留下"报错页面上悬着一个播放条"
+                releasePlayerNow()
+                _state.value = next
+                return@launch
+            }
             _state.value = next.copy(playback = _state.value.playback)
             preparePlayback()
         }

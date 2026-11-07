@@ -77,11 +77,10 @@ class InterruptedRecordingsTest {
 
         assertEquals(1, InterruptedRecordings.repairUnder(meetings))
 
-        // 规格要求"可播放、可转写"：转写只认 录音.wav，所以启动修复必须把它合成出来
-        val mixed = File(dir, "录音.wav")
-        assertTrue("崩溃的录音应被合成为 录音.wav", mixed.isFile)
-        assertFalse(InterruptedRecordings.needsRepair(mixed))
-        assertTrue("转写应能找到音频", RecordingTracks.find(dir)?.name == "录音.wav")
+        // 规格要求"可播放、可转写"：补好头之后 mic.wav 本身就是完整音轨，
+        // 转写与播放通过 RecordingTracks.find 回落到它——不需要在启动时混音
+        assertFalse("头应被补好", InterruptedRecordings.needsRepair(mic))
+        assertEquals("mic.wav", RecordingTracks.find(dir)?.name)
     }
 
     @Test

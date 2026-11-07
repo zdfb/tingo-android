@@ -68,7 +68,13 @@ class TranscriptionViewModelTest {
 
     private fun meeting(withWav: Boolean = true): File {
         val dir = Files.createTempDirectory("tingo-meeting").toFile()
-        if (withWav) File(dir, "录音.wav").writeBytes(ByteArray(44 + 3_200))
+        if (withWav) {
+            // 用 WavWriter 造一条真实可用的音轨：现在"有没有音频"要连头里的长度一起看
+            io.github.tancheng33.tingo.recording.WavWriter(File(dir, "录音.wav"), 16_000).apply {
+                append(ByteArray(3_200))
+                close()
+            }
+        }
         return dir
     }
 

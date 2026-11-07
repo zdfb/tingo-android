@@ -9,9 +9,9 @@ import java.io.File
  * 转写也读不出样本。这里把这类文件的头补好，用户下次打开就只见一场正常会议，
  * 而不是一个"点不开"的条目。
  *
- * 补完头之后会顺手把"只有原始音轨"的会议合成出 `录音.wav`：不合成的话，这场会议
- * 在转写与播放眼里等于没有音频（规格要求它可播放、可转写）。合成只是一次顺序读写，
- * 在后台线程上做，代价可接受。
+ * 只补头、不在启动时混音：混音要整段读入音轨（一小时两轨就是几百兆），放在启动线程上
+ * 会 OOM，也容易和用户正在做的转写抢同一个目录。转写与播放通过 [RecordingTracks.find]
+ * 回落到 `mic.wav` / `system.wav`，所以"可播放、可转写"不依赖混音。
  *
  * @return 修好的文件数
  */
@@ -35,8 +35,6 @@ object InterruptedRecordings {
                     runCatching { WavWriter.repair(wav) }.onSuccess { repaired++ }
                 }
             }
-            // 头补好之后，只有原始音轨的会议还差一个 录音.wav：补上它，转写与播放才认这场会议
-            runCatching { RecordingTracks.ensureMixed(dir) }
         }
         return repaired
     }

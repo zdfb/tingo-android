@@ -51,31 +51,25 @@ class RecordingTracksTest {
     }
 
     @Test
-    fun ensureMixedSynthesisesRecordingFromRawTracks() {
+    fun truncatedMixedFileDoesNotWin() {
         val meeting = dir()
+        // 混音写到一半被杀：头里的 data 长度还是 0
+        WavWriter(File(meeting, RecordingTracks.MIXED), 16_000).append(ByteArray(3_200))
         track(meeting, TrackMerger.MIC_TRACK)
-        track(meeting, TrackMerger.SYSTEM_TRACK, sampleRate = 48_000, channels = 2)
 
-        val mixed = RecordingTracks.ensureMixed(meeting)
-
-        assertTrue("应合成 录音.wav", mixed != null && mixed.isFile)
-        assertEquals(RecordingTracks.MIXED, RecordingTracks.find(meeting)?.name)
-        // 合成结果必须是引擎与转写都认的 16 kHz 单声道
-        val pcm = io.github.tancheng33.tingo.transcription.WavReader.read(mixed!!)
-        assertEquals(16_000, pcm.sampleRate)
+        assertEquals(
+            "半截的 录音.wav 不该盖过完好的 mic.wav",
+            TrackMerger.MIC_TRACK,
+            RecordingTracks.find(meeting)?.name,
+        )
     }
 
     @Test
-    fun ensureMixedDoesNothingWhenRecordingAlreadyExists() {
+    fun completeMixedFileWins() {
         val meeting = dir()
         track(meeting, RecordingTracks.MIXED)
         track(meeting, TrackMerger.MIC_TRACK)
 
-        assertNull(RecordingTracks.ensureMixed(meeting))
-    }
-
-    @Test
-    fun ensureMixedWithoutAnyTrackReturnsNull() {
-        assertNull(RecordingTracks.ensureMixed(dir()))
+        assertEquals(RecordingTracks.MIXED, RecordingTracks.find(meeting)?.name)
     }
 }
