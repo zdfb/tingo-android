@@ -9,6 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +39,9 @@ fun SettingsScreen(
     engineVersion: String,
     dataRoot: String,
     onLanguageChange: (AppLanguage) -> Unit,
+    models: SettingsUiState = SettingsUiState(loading = false),
+    onDeleteAsrModels: () -> Unit = {},
+    onDeleteLlmModel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -75,6 +85,34 @@ fun SettingsScreen(
 
         HorizontalDivider()
 
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.settings_models_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ModelRow(
+                label = stringResource(R.string.settings_models_asr),
+                group = models.asr,
+                onDelete = onDeleteAsrModels,
+            )
+            ModelRow(
+                label = stringResource(R.string.settings_models_llm),
+                group = models.llm,
+                onDelete = onDeleteLlmModel,
+            )
+            if (models.deleteFailed) {
+                Text(
+                    stringResource(R.string.settings_models_delete_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+
+        HorizontalDivider()
+
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
@@ -85,3 +123,55 @@ fun SettingsScreen(
         }
     }
 }
+
+/** 一组模型：名称 + 状态与占用 + 删除入口。没下载过就不给删除按钮。 */
+@Composable
+private fun ModelRow(label: String, group: ModelGroup, onDelete: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.settings_models_delete_title)) },
+            text = { Text(stringResource(R.string.settings_models_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        onDelete()
+                    },
+                ) { Text(stringResource(R.string.settings_models_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = when {
+                    group.isEmpty -> stringResource(R.string.settings_models_empty)
+                    group.isReady -> stringResource(R.string.settings_models_ready, group.bytes / MB)
+                    else -> stringResource(R.string.settings_models_partial, group.bytes / MB)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!group.isEmpty) {
+            TextButton(onClick = { confirming = true }) {
+                Text(stringResource(R.string.settings_models_delete))
+            }
+        }
+    }
+}
+
+/** 字节 → MB，界面只显示整数兆，够用且不啰嗦。 */
+private const val MB = 1_000_000L

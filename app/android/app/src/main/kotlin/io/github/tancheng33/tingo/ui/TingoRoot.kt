@@ -212,11 +212,26 @@ fun TingoRoot(
             }
 
             composable(TopDestination.SETTINGS.route) {
+                val settingsViewModel: io.github.tancheng33.tingo.ui.settings.SettingsViewModel = viewModel(
+                    factory = viewModelFactory {
+                        initializer {
+                            io.github.tancheng33.tingo.ui.settings.SettingsViewModel(
+                                store = container.models,
+                                catalog = container.catalog,
+                                llmCatalog = container.llmCatalog,
+                            )
+                        }
+                    },
+                )
+                val models by settingsViewModel.state.collectAsStateWithLifecycle()
                 SettingsScreen(
                     language = container.settings.language,
                     engineVersion = container.engine.engineVersion(),
                     dataRoot = container.dataRoot.absolutePath,
                     onLanguageChange = onLanguageChange,
+                    models = models,
+                    onDeleteAsrModels = settingsViewModel::deleteAsr,
+                    onDeleteLlmModel = settingsViewModel::deleteLlm,
                 )
             }
         }

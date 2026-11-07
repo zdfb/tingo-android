@@ -109,4 +109,15 @@
     <string name="detail_export_bundle">导出归档（录音、转写、纪要）</string>
     <string name="player_play">播放</string>
     <string name="player_pause">暂停</string>
+    <string name="settings_models">端侧模型</string>
+    <string name="settings_models_desc">模型不进 APK，按需下载；用不上时可以在这里删掉腾出空间</string>
+    <string name="settings_models_asr">语音识别模型（切段 / 识别 / 标点 / 声纹）</string>
+    <string name="settings_models_llm">纪要语言模型（Qwen3-0.6B 量化）</string>
+    <string name="settings_models_ready">已就绪，占用 %1$d MB</string>
+    <string name="settings_models_empty">未下载</string>
+    <string name="settings_models_partial">下载未完成，已占 %1$d MB</string>
+    <string name="settings_models_delete">删除</string>
+    <string name="settings_models_delete_title">删除模型？</string>
+    <string name="settings_models_delete_body">删除后相关功能需要重新下载才能使用，已录好的会议不受影响。</string>
+    <string name="settings_models_delete_failed">删除失败，请重试</string>
 </resources>

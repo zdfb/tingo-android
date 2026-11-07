@@ -130,6 +130,15 @@ class ModelStore(
         }
     }
 
+    /** 删除单个模型文件（连同校验指纹），返回释放的字节数。 */
+    fun delete(file: ModelFile): Long {
+        val target = fileFor(file)
+        val freed = target.takeIf { it.isFile }?.length() ?: 0L
+        target.delete()
+        markerFor(file).delete()
+        return freed
+    }
+
     /** 删除清单里的全部模型文件，返回释放的字数。 */
     fun deleteAll(catalog: ModelCatalog): Long {
         val freed = usedBytes(catalog)
