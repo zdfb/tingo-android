@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -163,9 +164,12 @@ class RecordViewModelTest {
         vm.start()
         capture.emit(ByteArray(3_200))
         vm.stop()
+        // 混音在 IO 协程里做：测试调度器上要显式跑到空闲
+        advanceUntilIdle()
 
         val dir = root.listFiles()!!.single()
         val mixed = File(dir, RecordViewModel.RECORDING_FILE)
+
         assertTrue("停止后应合成 录音.wav", mixed.isFile)
         assertTrue("合成结果不能是空文件", mixed.length() > 44)
         assertTrue("原始音轨保留在磁盘上，便于排查", File(dir, RecordViewModel.MIC_TRACK).isFile)

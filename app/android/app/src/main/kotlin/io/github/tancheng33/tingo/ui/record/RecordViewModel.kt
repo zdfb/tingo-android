@@ -5,6 +5,7 @@ import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
+import io.github.tancheng33.tingo.recording.RecordingTracks
 import io.github.tancheng33.tingo.recording.TrackMerger
 import io.github.tancheng33.tingo.recording.WavWriter
 import java.io.File
@@ -129,6 +130,13 @@ class RecordViewModel(
         startTicker()
     }
 
+    /**
+     * 结束录音。
+     *
+     * 只做"停止采集 + 报结果"这类快操作；混音（要整段读两路音轨）放到 IO 协程里跑，
+     * 否则一小时双轨录音按下"结束"会卡住主线程。混音没完成也不影响使用：
+     * [RecordingTracks.find] 会先回落到 `mic.wav`，转写时还会再补一次混音。
+     */
     fun stop() {
         val dir = currentDir ?: return
         ticker?.cancel()
@@ -138,8 +146,6 @@ class RecordViewModel(
             systemAudio?.let { runCatching { it.stop() } }
             systemAudio = null
             _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
-            // 两路音轨合成 录音.wav；只有麦克风一路时也走这里，文件名统一
-            TrackMerger.mixInto(dir)
             micDuration
         } catch (e: Exception) {
             session.fail(e.message ?: "结束录音失败")
@@ -149,6 +155,14 @@ class RecordViewModel(
         session.finish(clock())
         currentDir = null
         _state.value = RecordUiState.Finished(dir.name, duration)
+        mergeInBackground(dir)
+    }
+
+    /** 后台把原始音轨合成 `录音.wav`；失败不打扰用户，转写时还有一次机会。 */
+    private fun mergeInBackground(dir: File) {
+        viewModelScope.launch(io) {
+            runCatching { RecordingTracks.ensureMixed(dir) }
+        }
     }
 
     /**
@@ -165,7 +179,9 @@ class RecordViewModel(
         runCatching { capture.stop() }
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
-        runCatching { TrackMerger.mixInto(currentDir!!) }
+        // 中断也要把两路合起来，否则对方的声音就留在了没人看的 system.wav 里；
+        // 混音放到 IO 里做，别卡住处理中断的主线程
+        currentDir?.let { mergeInBackground(it) }
         currentDir = null
         _state.value = RecordUiState.Failed(R.string.err_recording_interrupted)
     }
