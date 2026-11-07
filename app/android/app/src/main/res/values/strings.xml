@@ -120,4 +120,11 @@
     <string name="settings_models_delete_title">删除模型？</string>
     <string name="settings_models_delete_body">删除后相关功能需要重新下载才能使用，已录好的会议不受影响。</string>
     <string name="settings_models_delete_failed">删除失败，请重试</string>
+    <string name="settings_library">会议库备份</string>
+    <string name="settings_library_desc">把整个会议库打成一个 zip 带走，或从备份里恢复。恢复默认不覆盖已有的同名会议。</string>
+    <string name="settings_library_backup">备份到文件…</string>
+    <string name="settings_library_restore">从备份恢复…</string>
+    <string name="settings_library_backed_up">已备份 %1$d 场会议</string>
+    <string name="settings_library_restored">恢复 %1$d 场，跳过 %2$d 场（已存在），拒绝 %3$d 个不安全文件</string>
+    <string name="settings_library_failed">备份/恢复失败，请确认文件可用</string>
 </resources>

@@ -37,7 +37,12 @@ class SettingsInstrumentedTest {
         val onDisk = File(context.cacheDir, "models-settings/${vad.fileName}")
         assertTrue("模型文件应该真的落盘了", onDisk.isFile)
 
-        val vm = SettingsViewModel(store = store, catalog = oneFile, llmCatalog = ModelCatalog(listOf()))
+        val vm = SettingsViewModel(
+            store = store,
+            catalog = oneFile,
+            llmCatalog = ModelCatalog(listOf()),
+            meetingsRoot = File(context.cacheDir, "models-settings-meetings"),
+        )
         val freed = store.deleteAll(oneFile)
 
         assertEquals("删除应释放刚刚统计到的字节", before, freed)

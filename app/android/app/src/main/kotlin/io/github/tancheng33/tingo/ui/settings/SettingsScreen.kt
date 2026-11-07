@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.setValue
@@ -42,6 +44,10 @@ fun SettingsScreen(
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
     onDeleteLlmModel: () -> Unit = {},
+    libraryBusy: Boolean = false,
+    libraryResult: LibraryOpResult? = null,
+    onBackupLibrary: () -> Unit = {},
+    onRestoreLibrary: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -107,6 +113,45 @@ fun SettingsScreen(
                     stringResource(R.string.settings_models_delete_failed),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.settings_library_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onBackupLibrary, enabled = !libraryBusy) {
+                    Text(stringResource(R.string.settings_library_backup))
+                }
+                OutlinedButton(onClick = onRestoreLibrary, enabled = !libraryBusy) {
+                    Text(stringResource(R.string.settings_library_restore))
+                }
+            }
+            libraryResult?.let { result ->
+                Text(
+                    text = when (result) {
+                        is LibraryOpResult.BackedUp -> stringResource(R.string.settings_library_backed_up, result.meetings)
+                        is LibraryOpResult.Restored -> stringResource(
+                            R.string.settings_library_restored,
+                            result.restored,
+                            result.skipped,
+                            result.rejected,
+                        )
+                        LibraryOpResult.Failed -> stringResource(R.string.settings_library_failed)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (result == LibraryOpResult.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
         }

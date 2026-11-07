@@ -55,3 +55,12 @@
 - [x] 7.1 播放器：详情页播放/暂停与进度条，点击某句跳到该句开头并存进 `PlaybackState`；
   没有 `录音.wav`（或只有 44 字节头）时不出现播放条，点击是空操作；
   验证：`DetailPlaybackTest` 覆盖可用性判定、seek 并播放、暂停/恢复、进度换算、ViewModel 清理时释放
+
+## 8. 会议库备份与恢复
+
+- [x] 8.1 整库备份：把 `meetings/` 下每场会议打成 zip，经 SAF `CreateDocument` 写到用户选的位置
+- [x] 8.2 整库恢复：从 zip 写回会议库，拒绝 `..`/绝对路径/多余层级，默认跳过同名会议；
+  流式 API 直接接 SAF 的 `InputStream`/`OutputStream`，不落临时文件
+- [x] 8.3 选错文件的处理：不是 zip 时明确报错，而不是安静地报告"恢复 0 场"
+- 验证：`LibraryBackupTest` 9 个 + `LibraryBackupBadInputTest` 3 个 + `SettingsViewModelTest` 4 个覆盖
+  打包、恢复、不覆盖、路径穿越、坏文件、流式入口；设备级 `LibraryBackupInstrumentedTest` 用真实文件跑一遍往返

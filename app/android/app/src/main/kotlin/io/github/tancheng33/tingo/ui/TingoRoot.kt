@@ -219,11 +219,36 @@ fun TingoRoot(
                                 store = container.models,
                                 catalog = container.catalog,
                                 llmCatalog = container.llmCatalog,
+                                meetingsRoot = File(container.dataRoot, "meetings"),
                             )
                         }
                     },
                 )
                 val models by settingsViewModel.state.collectAsStateWithLifecycle()
+                val settingsContext = androidx.compose.ui.platform.LocalContext.current
+
+                // 备份：用户选落点，zip 直接写进 SAF 给的流（没有临时文件、没有清理负担）
+                val backupLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
+                ) { uri ->
+                    if (uri != null) {
+                        settingsViewModel.backupTo {
+                            settingsContext.contentResolver.openOutputStream(uri)
+                                ?: error("无法写入所选位置")
+                        }
+                    }
+                }
+                val restoreLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+                ) { uri ->
+                    if (uri != null) {
+                        settingsViewModel.restoreFrom {
+                            settingsContext.contentResolver.openInputStream(uri)
+                                ?: error("无法读取所选文件")
+                        }
+                    }
+                }
+
                 SettingsScreen(
                     language = container.settings.language,
                     engineVersion = container.engine.engineVersion(),
@@ -232,6 +257,10 @@ fun TingoRoot(
                     models = models,
                     onDeleteAsrModels = settingsViewModel::deleteAsr,
                     onDeleteLlmModel = settingsViewModel::deleteLlm,
+                    libraryBusy = models.libraryBusy,
+                    libraryResult = models.libraryResult,
+                    onBackupLibrary = { backupLauncher.launch("tingo-会议库备份.zip") },
+                    onRestoreLibrary = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
                 )
             }
         }

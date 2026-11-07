@@ -120,4 +120,11 @@
     <string name="settings_models_delete_title">Delete models?</string>
     <string name="settings_models_delete_body">The features will need a fresh download afterwards; existing meetings are unaffected.</string>
     <string name="settings_models_delete_failed">Delete failed, please retry</string>
+    <string name="settings_library">Library backup</string>
+    <string name="settings_library_desc">Pack the whole library into one zip to move it, or restore from a backup. Restoring never overwrites meetings you already have.</string>
+    <string name="settings_library_backup">Back up to file…</string>
+    <string name="settings_library_restore">Restore from backup…</string>
+    <string name="settings_library_backed_up">Backed up %1$d meetings</string>
+    <string name="settings_library_restored">Restored %1$d, skipped %2$d (already present), rejected %3$d unsafe files</string>
+    <string name="settings_library_failed">Backup/restore failed; check the file</string>
 </resources>

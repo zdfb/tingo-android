@@ -57,8 +57,86 @@ class SettingsViewModelTest {
         File(store.fileFor(file).parentFile, "${file.fileName}.verified").writeText(file.sha256 ?: "size-only")
     }
 
-    private fun viewModel(store: ModelStore, asr: ModelCatalog, llm: ModelCatalog) =
-        SettingsViewModel(store, asr, llm, io = dispatcher)
+    private var root: File = Files.createTempDirectory("tingo-meetings").toFile()
+
+    private fun viewModel(
+        store: ModelStore,
+        asr: ModelCatalog,
+        llm: ModelCatalog,
+        meetingsRoot: File = root,
+    ) = SettingsViewModel(store, asr, llm, meetingsRoot = meetingsRoot, io = dispatcher)
+
+    private fun meeting(id: String, file: String = "纪要.md", content: String = "# 一"): File {
+        val dir = File(root, id).apply { mkdirs() }
+        File(dir, file).writeText(content)
+        return dir
+    }
+
+    @Test
+    fun backupWritesEveryMeetingIntoTheZip() = runTest(dispatcher) {
+        meeting("2026-11-01_0900_周会")
+        meeting("2026-11-02_1000_复盘")
+        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
+
+        vm.backupTo { zip.outputStream() }
+        advanceUntilIdle()
+
+        val result = vm.state.value.libraryResult as LibraryOpResult.BackedUp
+        assertEquals(2, result.meetings)
+        assertTrue(zip.length() > 0)
+    }
+
+    @Test
+    fun restoreReportsWhatItDid() = runTest(dispatcher) {
+        meeting("2026-11-01_0900_周会", "纪要.md", "备份内容")
+        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
+        vm.backupTo { zip.outputStream() }
+        advanceUntilIdle()
+
+        // 换一个空的会议库来还原
+        root = Files.createTempDirectory("tingo-meetings-2").toFile()
+        val vm2 = viewModel(store(), catalog(1_000), catalog("gguf", 3_000), meetingsRoot = root)
+        vm2.restoreFrom { zip.inputStream() }
+        advanceUntilIdle()
+
+        val result = vm2.state.value.libraryResult as LibraryOpResult.Restored
+        assertEquals(1, result.restored)
+        assertEquals(0, result.skipped)
+        assertEquals("备份内容", File(root, "2026-11-01_0900_周会/纪要.md").readText())
+    }
+
+    @Test
+    fun restoreDoesNotOverwriteExistingMeetings() = runTest(dispatcher) {
+        meeting("2026-11-01_0900_周会", "纪要.md", "备份内容")
+        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
+        vm.backupTo { zip.outputStream() }
+        advanceUntilIdle()
+
+        val vm2 = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        vm2.restoreFrom { zip.inputStream() }
+        advanceUntilIdle()
+
+        val result = vm2.state.value.libraryResult as LibraryOpResult.Restored
+        assertEquals(0, result.restored)
+        assertEquals(1, result.skipped)
+        assertEquals("备份内容", File(root, "2026-11-01_0900_周会/纪要.md").readText())
+    }
+
+    @Test
+    fun brokenZipReportsFailure() = runTest(dispatcher) {
+        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val broken = File(Files.createTempDirectory("tingo-zip").toFile(), "broken.zip").apply {
+            writeText("这不是 zip")
+        }
+
+        vm.restoreFrom { broken.inputStream() }
+        advanceUntilIdle()
+
+        assertEquals(LibraryOpResult.Failed, vm.state.value.libraryResult)
+    }
 
     @Test
     fun reportsNothingDownloadedInitially() = runTest(dispatcher) {
