@@ -1,0 +1,207 @@
+package io.github.tancheng33.tingo.ui.detail
+
+import io.github.tancheng33.tingo.audio.AudioPlayer
+import io.github.tancheng33.tingo.engine.Capabilities
+import io.github.tancheng33.tingo.engine.MeetingDetail
+import io.github.tancheng33.tingo.engine.MeetingSummary
+import io.github.tancheng33.tingo.engine.TingoEnginePort
+import io.github.tancheng33.tingo.transcription.Transcript
+import io.github.tancheng33.tingo.transcription.TranscriptSentence
+import java.io.File
+import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+/** 播放：点击某一句要跳到那一句、要真的开始播、没有录音时不要出现播放条。 */
+class DetailPlaybackTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    private class FakePlayer : AudioPlayer {
+        var preparedWith: File? = null
+        var durationMs = 0L
+        var playing = false
+        var seeks = mutableListOf<Long>()
+        var releases = 0
+
+        override fun prepare(file: File, onReady: (Long) -> Unit) {
+            preparedWith = file
+            onReady(durationMs)
+        }
+
+        override fun play() { playing = true }
+
+        override fun pause() { playing = false }
+
+        override fun seekTo(positionMs: Long) { seeks += positionMs }
+
+        override val positionMs: Long
+            get() = seeks.lastOrNull() ?: 0L
+
+        override val isPlaying: Boolean
+            get() = playing
+
+        override fun release() { releases++ }
+    }
+
+    private fun meetingDir(withAudio: Boolean): File {
+        val dir = Files.createTempDirectory("tingo-playback").toFile()
+        if (withAudio) File(dir, "录音.wav").writeBytes(ByteArray(1_000) { 1 })
+        return dir
+    }
+
+    private fun engine(): TingoEnginePort = object : TingoEnginePort {
+        override fun engineVersion(): String = "test"
+        override fun capabilities(): Capabilities = Capabilities(
+            meetingStorage = true,
+            transcriptParse = true,
+            minutesParse = true,
+            fishboneParse = true,
+            speakerNaming = true,
+            termsExtract = true,
+        )
+        override fun meetingsRoot(): String = "/tmp"
+        override fun scanLibrary(): List<MeetingSummary> = emptyList()
+        override fun readMeeting(id: String) = MeetingDetail(
+            summary = MeetingSummary(
+                id = id,
+                title = "周会",
+                date = "2026-11-01",
+                time = "09:00",
+                duration = "01:00",
+                oneLiner = "",
+                tags = emptyList(),
+                archived = false,
+                hasTranscript = true,
+                hasAudio = true,
+                hasMinutes = false,
+                unreadable = false,
+                speakers = listOf("说话人1"),
+                sizeBytes = 1uL,
+            ),
+            transcript = null,
+            minutesText = null,
+            fishbone = null,
+        )
+        override fun parseMinutes(text: String) = error("不涉及")
+        override fun parseFishbone(text: String) = null
+        override fun setArchived(id: String, archived: Boolean) = Unit
+        override fun deleteMeeting(id: String): ULong = 0uL
+    }
+
+    private fun viewModel(dir: File, player: FakePlayer) = DetailViewModel(
+        engine = engine(),
+        meetingId = "2026-11-01_0900_周会",
+        audioFile = File(dir, "录音.wav"),
+        playerFactory = { player },
+        io = dispatcher,
+    )
+
+    @Test
+    fun playbackBecomesAvailableWithRecording() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = true), player)
+        advanceUntilIdle()
+
+        val playback = vm.state.value.playback
+        assertTrue("有录音就该能播", playback.available)
+        assertEquals(60_000L, playback.durationMs)
+        assertFalse(playback.playing)
+    }
+
+    @Test
+    fun noRecordingMeansNoPlayer() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = false), player)
+        advanceUntilIdle()
+
+        assertFalse("没有录音不该出现播放条", vm.state.value.playback.available)
+        assertEquals(null, player.preparedWith)
+
+        vm.playFrom(1_000)
+        assertTrue("没有播放器时点击是空操作", player.seeks.isEmpty())
+    }
+
+    @Test
+    fun headerOnlyWavCountsAsNoRecording() = runTest(dispatcher) {
+        val dir = Files.createTempDirectory("tingo-playback").toFile()
+        File(dir, "录音.wav").writeBytes(ByteArray(44))
+        val player = FakePlayer()
+        val vm = DetailViewModel(
+            engine = engine(),
+            meetingId = "id",
+            audioFile = File(dir, "录音.wav"),
+            playerFactory = { player },
+            io = dispatcher,
+        )
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.playback.available)
+    }
+
+    @Test
+    fun clickingSentenceSeeksAndStartsPlaying() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = true), player)
+        advanceUntilIdle()
+
+        vm.playFrom(12_000)
+
+        assertEquals(listOf(12_000L), player.seeks)
+        assertTrue(player.playing)
+        assertTrue(vm.state.value.playback.playing)
+        assertEquals(12_000L, vm.state.value.playback.positionMs)
+    }
+
+    @Test
+    fun togglePausesAndResumes() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = true), player)
+        advanceUntilIdle()
+
+        vm.togglePlayPause()
+        assertTrue(player.playing)
+
+        vm.togglePlayPause()
+        assertFalse(player.playing)
+        assertFalse(vm.state.value.playback.playing)
+    }
+
+    @Test
+    fun progressIsDerivedFromPosition() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = true), player)
+        advanceUntilIdle()
+
+        vm.playFrom(15_000)
+
+        assertEquals(0.25f, vm.state.value.playback.progress, 0.001f)
+    }
+
+    @Test
+    fun playerIsReleasedWhenViewModelClears() = runTest(dispatcher) {
+        val player = FakePlayer().apply { durationMs = 60_000 }
+        val vm = viewModel(meetingDir(withAudio = true), player)
+        advanceUntilIdle()
+
+        vm.releasePlayerNow()
+
+        assertEquals(1, player.releases)
+    }
+}

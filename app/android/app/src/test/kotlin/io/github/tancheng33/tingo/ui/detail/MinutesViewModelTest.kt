@@ -142,6 +142,22 @@ class MinutesViewModelTest {
     }
 
     @Test
+    fun outOfMemoryDegradesToUnsupportedMessage() = runTest(dispatcher) {
+        val generator = object : MinutesGenerator {
+            override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String =
+                throw OutOfMemoryError("装不下 0.6B")
+        }
+        val vm = viewModel(meeting(), generator, model = readyModel())
+
+        vm.start()
+        advanceUntilIdle()
+
+        val failed = vm.state.value as MinutesUiState.Failed
+        // 低内存设备上 0.6B 可能装不下：说清楚"本机暂不支持"，转写稿仍然保留
+        assertEquals(R.string.err_llm_unsupported, failed.reasonRes)
+    }
+
+    @Test
     fun rejectedOutputIsReportedWithReason() = runTest(dispatcher) {
         val vm = viewModel(meeting(), FakeGenerator("# 标题\n\n## 一句话总结\n不行"))
 

@@ -11,8 +11,9 @@ import java.net.URL
  * 重试与校验交给 [ModelStore]：网络层不该偷偷重下整份文件。
  */
 class UrlFetcher(
-    private val connectTimeoutMs: Int = 15_000,
-    private val readTimeoutMs: Int = 30_000,
+    private val connectTimeoutMs: Int = 20_000,
+    // 模型动辄几百兆、只走镜像；读超时给宽一点，否则慢镜像上 227 MB 的文件会在中途被判超时
+    private val readTimeoutMs: Int = 60_000,
 ) : HttpFetcher {
 
     override fun open(url: String, rangeStart: Long): HttpFetcher.FetchedStream {

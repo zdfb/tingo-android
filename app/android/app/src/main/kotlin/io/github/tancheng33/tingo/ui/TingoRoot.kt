@@ -363,10 +363,23 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
     val viewModel: DetailViewModel = viewModel(
         key = "detail-$meetingId",
         factory = viewModelFactory {
-            initializer { DetailViewModel(container.engine, meetingId) }
+            initializer {
+                DetailViewModel(
+                    engine = container.engine,
+                    meetingId = meetingId,
+                    audioFile = File(container.meetingDir(meetingId), "录音.wav"),
+                )
+            }
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // 播放中每 500 ms 拉一次进度；没有播放器时这个循环什么也不做
+    androidx.compose.runtime.LaunchedEffect(state.playback.playing) {
+        while (state.playback.playing) {
+            kotlinx.coroutines.delay(500)
+            viewModel.refreshPlayback()
+        }
+    }
     val meetingTitle = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
 
     val transcriptionViewModel: TranscriptionViewModel = viewModel(
@@ -428,9 +441,8 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         DetailScreen(
             state = state,
             onRetry = viewModel::load,
-            // 播放器随录音链路一起接入：现在点击时间戳没有可跳转的目标，
-            // 与其做一个按下去毫无反应的按钮，不如先留空回调。
-            onSentenceClick = { },
+            // 点一句就跳到那一句开始播；没有录音时 ViewModel 里是空操作
+            onSentenceClick = { startMs -> viewModel.playFrom(startMs.toLong()) },
             showMinutesTab = showMinutesTab,
             transcription = transcription,
             onTranscribe = transcriptionViewModel::start,
@@ -461,6 +473,8 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                 }
             },
             exportEnabled = state.detail?.let { it.minutesText != null || it.transcript != null } == true,
+            playback = state.playback,
+            onTogglePlay = viewModel::togglePlayPause,
         )
     }
 }

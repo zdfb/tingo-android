@@ -107,4 +107,6 @@
     <string name="record_system_audio_missing">没抓到会议软件的声音（对方多半禁止了内录），本次只有麦克风</string>
     <string name="record_system_audio_denied">未授予屏幕录制权限，本次只录麦克风</string>
     <string name="detail_export_bundle">导出归档（录音、转写、纪要）</string>
+    <string name="player_play">播放</string>
+    <string name="player_pause">暂停</string>
 </resources>

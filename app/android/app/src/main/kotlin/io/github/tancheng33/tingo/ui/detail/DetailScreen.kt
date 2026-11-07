@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
+import io.github.tancheng33.tingo.transcription.Transcript
+import io.github.tancheng33.tingo.audio.PlaybackState
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -71,6 +73,8 @@ fun DetailScreen(
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
     exportEnabled: Boolean = false,
+    playback: PlaybackState = PlaybackState(),
+    onTogglePlay: () -> Unit = {},
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -116,6 +120,9 @@ fun DetailScreen(
                             contentDescription = stringResource(R.string.detail_export),
                         )
                     }
+                }
+                if (playback.available) {
+                    PlaybackBar(playback = playback, onTogglePlay = onTogglePlay)
                 }
                 TabRow(selectedTabIndex = tab) {
                     if (showMinutesTab) {
@@ -216,6 +223,34 @@ private fun FishboneCard(fishbone: Fishbone) {
                 HorizontalDivider()
             }
         }
+    }
+}
+
+/**
+ * 播放条：只有一个按钮和一条进度。
+ *
+ * 会议录音的用法是"点某句话回听那一段"，所以这里不做完整播放器（快进、倍速、列表），
+ * 只给一个播放/暂停和一条能看出进度的线。
+ */
+@Composable
+private fun PlaybackBar(playback: PlaybackState, onTogglePlay: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 用文字按钮而不是图标：播放/暂停的图标在核心图标集里不全，文字也更明确
+        TextButton(onClick = onTogglePlay) {
+            Text(stringResource(if (playback.playing) R.string.player_pause else R.string.player_play))
+        }
+        LinearProgressIndicator(
+            progress = { playback.progress },
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "${Transcript.mmss(playback.positionMs)} / ${Transcript.mmss(playback.durationMs)}",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

@@ -21,15 +21,17 @@ object ModelDownloads {
     fun catalog(context: Context, asset: String = "models.json"): ModelCatalog =
         ModelCatalog.parse(context.assets.open(asset).bufferedReader().readText())
 
-    /** 确保这些文件都下好；每个文件失败会重试一次再抛。 */
-    fun ensure(store: ModelStore, files: List<ModelFile>, attempts: Int = 2) {
+    /** 确保这些文件都下好；失败会退避重试（下载支持续传，重试很便宜）。 */
+    fun ensure(store: ModelStore, files: List<ModelFile>, attempts: Int = 3) {
         files.forEach { file ->
             if (store.isReady(file)) return@forEach
             var lastError: Throwable? = null
-            repeat(attempts) {
+            repeat(attempts) { attempt ->
                 val result = store.download(file)
                 if (result.isSuccess) return@forEach
                 lastError = result.exceptionOrNull()
+                // 慢镜像上偶尔会卡一下；续传重试前稍等，别连着撞同一个坑
+                if (attempt < attempts - 1) Thread.sleep(1_000L * (attempt + 1))
             }
             throw AssertionError("下载 ${file.id} 失败：${lastError?.message}", lastError)
         }
