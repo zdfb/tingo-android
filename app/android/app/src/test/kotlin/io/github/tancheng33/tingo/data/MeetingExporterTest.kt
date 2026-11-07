@@ -91,7 +91,11 @@ class MeetingExporterBundleTest {
         val dir = dir()
         File(dir, "会议").let { }
         if (withAudio) {
-            File(dir, "录音.wav").writeBytes(ByteArray(100) { 1 })
+            // 真正的音轨：归档现在按"完整音轨"判断，伪造的字节数组没有合法头
+            io.github.tancheng33.tingo.recording.WavWriter(File(dir, "录音.wav"), 16_000).apply {
+                append(ByteArray(3_200))
+                close()
+            }
         }
         if (withTranscript) {
             File(dir, "transcript.json").writeText("""{"source":"录音.wav","durationMs":1000,"sentences":[]}""")
@@ -149,5 +153,24 @@ class MeetingExporterBundleTest {
         val zip = MeetingExporter.exportBundle(meeting(), "a/b:c", dir())!!
 
         assertTrue("非法字符应被清掉：${zip.name}", zip.name == "a b c.zip")
+    }
+}
+
+/** 崩溃恢复的会议只有 mic.wav：归档不能因此丢掉录音。 */
+class MeetingExporterCrashCaseTest {
+
+    @Test
+    fun bundleIncludesWhicheverAudioTrackExists() {
+        val dir = Files.createTempDirectory("tingo-bundle-crash").toFile()
+        io.github.tancheng33.tingo.recording.WavWriter(File(dir, "mic.wav"), 16_000).apply {
+            append(ByteArray(3_200))
+            close()
+        }
+        File(dir, "纪要.md").writeText("# 一句话总结\n")
+
+        val names = MeetingExporter.bundleEntries(dir).map { it.first }
+
+        assertTrue("应带上实际存在的音轨：$names", names.contains("mic.wav"))
+        assertTrue("纪要也要在：$names", names.contains("纪要.md"))
     }
 }

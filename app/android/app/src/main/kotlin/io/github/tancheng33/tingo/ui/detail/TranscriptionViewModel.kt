@@ -56,9 +56,17 @@ class TranscriptionViewModel(
     private var job: Job? = null
 
     /** 录音文件；m4a 之类不支持的格式返回 null（桌面录的会议手机不重转写）。 */
-    private fun wavFile(): File? =
-        // 崩溃留下的会议只有 mic.wav / system.wav，也算有音频
-        RecordingTracks.find(meetingDir)
+    private fun wavFile(): File? = RecordingTracks.find(meetingDir)
+
+    /**
+     * 转写前把崩溃留下的原始音轨合成 `录音.wav`。
+     *
+     * 两路都在时必须混音：不然只有本机一侧的声音进转写；`system.wav` 是 48 kHz 立体声，
+     * 不混音也无法直接被识别链消费。混音要整段读入，所以只在 IO 协程里、用户点了转写时做。
+     */
+    private fun ensureMixedForTranscription() {
+        runCatching { RecordingTracks.ensureMixed(meetingDir) }
+    }
 
     /** 界面进入详情页时调一次：告诉用户当前能不能直接转写。 */
     fun prepare() {
@@ -70,13 +78,19 @@ class TranscriptionViewModel(
     }
 
     fun start() {
-        val wav = wavFile() ?: run {
+        if (job?.isActive == true) return
+        if (wavFile() == null) run {
             _state.value = TranscriptionUiState.Failed(R.string.err_no_recording)
             return
         }
-        if (job?.isActive == true) return
 
         job = viewModelScope.launch(io) {
+            // 崩溃留下的会议只有原始音轨：在 IO 里合成一次，再交给识别链
+            ensureMixedForTranscription()
+            val wav = wavFile() ?: run {
+                _state.value = TranscriptionUiState.Failed(R.string.err_no_recording)
+                return@launch
+            }
             try {
                 val missing = catalog.files.filterNot { store.isReady(it) }
                 // 规格要求：校验失败要能重下。文件坏了（引擎报错）就作废再试一次

@@ -35,6 +35,8 @@ object InterruptedRecordings {
                     runCatching { WavWriter.repair(wav) }.onSuccess { repaired++ }
                 }
             }
+            // 混音写到一半被杀会留下 录音.wav.tmp：删掉，否则它既占空间又会混进归档
+            dir.listFiles { file -> file.name.endsWith(".tmp") }?.forEach { it.delete() }
         }
         return repaired
     }

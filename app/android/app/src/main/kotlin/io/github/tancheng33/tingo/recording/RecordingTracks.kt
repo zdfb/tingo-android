@@ -16,6 +16,23 @@ object RecordingTracks {
     const val MIXED = TrackMerger.MIXED
     private val RAW = listOf(TrackMerger.MIC_TRACK, TrackMerger.SYSTEM_TRACK, "mixed.wav")
 
+    /**
+     * 转写前把原始音轨合成 `录音.wav`（如果还没有）。
+     *
+     * 转写要的是 16 kHz 单声道，而 `system.wav` 是 48 kHz 立体声；两路都在时还必须把
+     * 对方的声音混进去，否则转写出来只有本机一侧。混音会整段读入，所以只在用户真正点了
+     * "转写"时做（IO 协程里），绝不在启动路径上做。
+     *
+     * @return 合成出的文件；已有 `录音.wav` 或没有音轨时返回 null
+     */
+    fun ensureMixed(meetingDir: File): File? {
+        val mixed = File(meetingDir, MIXED)
+        if (isComplete(mixed)) return null
+        val hasRaw = RAW.any { isComplete(File(meetingDir, it)) }
+        if (!hasRaw) return null
+        return TrackMerger.mixInto(meetingDir)
+    }
+
     /** 会议可用的音频文件；`录音.wav` 优先，其次才是残留的原始音轨。 */
     fun find(meetingDir: File): File? = (listOf(MIXED) + RAW)
         .map { File(meetingDir, it) }

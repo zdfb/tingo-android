@@ -21,12 +21,21 @@ class LanguageSwitchTest {
 
     @Test
     fun switchingToEnglishUpdatesUiAndSurvivesRecreate() {
-        val chineseSettings = compose.activity.getString(R.string.nav_settings)
-        val chineseMeetings = compose.activity.getString(R.string.nav_meetings)
+        // 语言是持久化设置：上一次运行可能把它留在英文，测试不能假设初始是中文
+        val chineseMeetings = "会议" // values/strings.xml 的 nav_meetings
         val englishMeetings = "Meetings" // values-en/strings.xml 的 nav_meetings
 
-        // 切到设置页
-        compose.onNodeWithText(chineseSettings).performClick()
+        // 先切到设置页，把语言复位成中文，再切英文——这样重复运行也不会互相影响
+        // 底栏的标签就是导航文案本身（语言未知，所以两种都试）
+        compose.onAllNodesWithText(compose.activity.getString(R.string.nav_settings))
+            .fetchSemanticsNodes()
+            .takeIf { it.isNotEmpty() }
+            ?.let { compose.onNodeWithText(compose.activity.getString(R.string.nav_settings)).performClick() }
+            ?: compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("中文").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText(chineseMeetings).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("English").performClick()
 
         // 重建后导航文案换成英文

@@ -62,10 +62,21 @@ object MeetingExporter {
         return zip
     }
 
-    /** zip 里装哪些文件：只要真实存在且非空的。 */
-    fun bundleEntries(meetingDir: File): List<Pair<String, File>> = BUNDLE_NAMES
-        .map { name -> name to File(meetingDir, name) }
-        .filter { (_, file) -> file.isFile && file.length() > 0 }
+    /**
+     * zip 里装哪些文件：只要真实存在且非空的。
+     *
+     * 音频不写死 `录音.wav`：崩溃恢复出来的会议只有 `mic.wav`/`system.wav`，
+     * 写死会让归档悄悄丢掉录音。
+     */
+    fun bundleEntries(meetingDir: File): List<Pair<String, File>> {
+        val audio = io.github.tancheng33.tingo.recording.RecordingTracks.find(meetingDir)
+        val others = BUNDLE_NAMES
+            .filter { it != "录音.wav" }
+            .map { name -> name to File(meetingDir, name) }
+            .filter { (_, file) -> file.isFile && file.length() > 0 }
+        val audioEntry = audio?.let { listOf(it.name to it) } ?: emptyList()
+        return audioEntry + others
+    }
 
     /** 有纪要就只导纪要；没有纪要但有转写，就把转写排成可读的 Markdown。 */
     fun compose(minutes: String?, transcript: Transcript?, transcriptTitle: String = "会议转写"): String? {
