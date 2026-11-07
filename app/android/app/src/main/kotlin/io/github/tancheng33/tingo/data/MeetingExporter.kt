@@ -3,6 +3,8 @@ package io.github.tancheng33.tingo.data
 import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.transcription.Transcript
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
+import io.github.tancheng33.tingo.recording.RecordingTracks
+import io.github.tancheng33.tingo.recording.TrackMerger
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -69,13 +71,14 @@ object MeetingExporter {
      * 写死会让归档悄悄丢掉录音。
      */
     fun bundleEntries(meetingDir: File): List<Pair<String, File>> {
-        val audio = io.github.tancheng33.tingo.recording.RecordingTracks.find(meetingDir)
+        // 音轨可能不止一路：崩溃恢复的会议留着 mic.wav 与 system.wav，两路都要带上，
+        // 否则归档里只剩本机一侧的声音
+        val audio = RecordingTracks.audioTracks(meetingDir).map { it.name to it }
         val others = BUNDLE_NAMES
-            .filter { it != "录音.wav" }
+            .filter { it != RECORDING_NAME }
             .map { name -> name to File(meetingDir, name) }
             .filter { (_, file) -> file.isFile && file.length() > 0 }
-        val audioEntry = audio?.let { listOf(it.name to it) } ?: emptyList()
-        return audioEntry + others
+        return audio + others
     }
 
     /** 有纪要就只导纪要；没有纪要但有转写，就把转写排成可读的 Markdown。 */
@@ -108,9 +111,11 @@ object MeetingExporter {
 
     private const val MAX_STEM = 60
 
-    /** 归档里带走的文件：与桌面版一场会议的产物一一对应。 */
+    /** 音频文件名由 [TrackMerger] 定义，这里不重复写死字面量。 */
+    private val RECORDING_NAME get() = TrackMerger.MIXED
+
+    /** 归档里带走的非音频文件：与桌面版一场会议的产物一一对应。 */
     private val BUNDLE_NAMES = listOf(
-        "录音.wav",
         "transcript.json",
         MinutesService.FILE_NAME,
     )

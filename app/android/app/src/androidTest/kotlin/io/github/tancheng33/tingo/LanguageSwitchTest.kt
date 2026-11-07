@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import android.content.Context
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -19,23 +21,25 @@ class LanguageSwitchTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
+    /**
+     * 语言是持久化设置，上一次运行可能把它留在英文；清掉再重建，
+     * 让每条用例都从"默认中文"开始，彼此不干扰。
+     */
+    @Before
+    fun resetLanguage() {
+        compose.activity.getSharedPreferences("tingo-settings", Context.MODE_PRIVATE).edit()
+            .remove("ui_language").commit()
+        compose.activityRule.scenario.recreate()
+    }
+
     @Test
     fun switchingToEnglishUpdatesUiAndSurvivesRecreate() {
-        // 语言是持久化设置：上一次运行可能把它留在英文，测试不能假设初始是中文
-        val chineseMeetings = "会议" // values/strings.xml 的 nav_meetings
+        val chineseSettings = compose.activity.getString(R.string.nav_settings)
+        val chineseMeetings = compose.activity.getString(R.string.nav_meetings)
         val englishMeetings = "Meetings" // values-en/strings.xml 的 nav_meetings
 
-        // 先切到设置页，把语言复位成中文，再切英文——这样重复运行也不会互相影响
-        // 底栏的标签就是导航文案本身（语言未知，所以两种都试）
-        compose.onAllNodesWithText(compose.activity.getString(R.string.nav_settings))
-            .fetchSemanticsNodes()
-            .takeIf { it.isNotEmpty() }
-            ?.let { compose.onNodeWithText(compose.activity.getString(R.string.nav_settings)).performClick() }
-            ?: compose.onNodeWithText("Settings").performClick()
-        compose.onNodeWithText("中文").performClick()
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodesWithText(chineseMeetings).fetchSemanticsNodes().isNotEmpty()
-        }
+        // 切到设置页
+        compose.onNodeWithText(chineseSettings).performClick()
         compose.onNodeWithText("English").performClick()
 
         // 重建后导航文案换成英文

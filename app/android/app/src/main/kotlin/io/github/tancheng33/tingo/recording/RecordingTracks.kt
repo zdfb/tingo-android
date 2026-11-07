@@ -16,6 +16,10 @@ object RecordingTracks {
     const val MIXED = TrackMerger.MIXED
     private val RAW = listOf(TrackMerger.MIC_TRACK, TrackMerger.SYSTEM_TRACK, "mixed.wav")
 
+    /** 会议目录里所有完整音轨（归档用：两路都留着时两路都要带走）。 */
+    fun audioTracks(meetingDir: File): List<File> =
+        (listOf(MIXED) + RAW).map { File(meetingDir, it) }.filter { isComplete(it) }
+
     /**
      * 转写前把原始音轨合成 `录音.wav`（如果还没有）。
      *
@@ -28,8 +32,10 @@ object RecordingTracks {
     fun ensureMixed(meetingDir: File): File? {
         val mixed = File(meetingDir, MIXED)
         if (isComplete(mixed)) return null
-        val hasRaw = RAW.any { isComplete(File(meetingDir, it)) }
-        if (!hasRaw) return null
+        val raw = RAW.map { File(meetingDir, it) }.filter { isComplete(it) }
+        if (raw.isEmpty()) return null
+        // 即使是单路麦克风也合成 录音.wav：桌面版的约定就是"一场会议的录音叫 录音.wav"，
+        // 统一了文件名，导出、播放、转写才不必各写一套判断
         return TrackMerger.mixInto(meetingDir)
     }
 

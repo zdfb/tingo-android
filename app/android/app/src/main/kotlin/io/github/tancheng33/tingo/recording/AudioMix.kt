@@ -109,8 +109,10 @@ object TrackMerger {
         if (tracks.isEmpty()) return null
 
         // 先写临时文件再改名：中途被杀时不会留下一个"头里长度为 0"的 录音.wav，
-        // 那种半截文件会盖过旁边完好的 mic.wav / system.wav
-        val temp = File(meetingDir, "$MIXED.tmp")
+        // 那种半截文件会盖过旁边完好的 mic.wav / system.wav。
+        // 临时名必须唯一：结束录音后的后台混音与转写前的混音可能同时在写同一个目录，
+        // 共用一个 .tmp 会互相截断。
+        val temp = File.createTempFile("mix-", ".tmp", meetingDir)
         WavWriter(temp, AudioMix.TARGET_RATE).apply {
             append(AudioMix.samplesToBytes(AudioMix.mix(tracks)))
             close()

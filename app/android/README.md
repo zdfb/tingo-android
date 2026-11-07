@@ -59,6 +59,20 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
 
+当前状态（最近一次全量验证，2026-11-07）：**JVM 单测 206 个全绿；设备级测试 33 个全绿**
+（API 36 arm64 模拟器，含端到端转写流水线、真实模型下载与校验、llama 生成、会议库备份恢复）。
+完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除四个
+依赖下载的测试类：
+
+```bash
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=\
+io.github.tancheng33.tingo.PipelineInstrumentedTest,\
+io.github.tancheng33.tingo.RecognitionInstrumentedTest,\
+io.github.tancheng33.tingo.LlamaInstrumentedTest,\
+io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
+```
+
 只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`（此时
 llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 
