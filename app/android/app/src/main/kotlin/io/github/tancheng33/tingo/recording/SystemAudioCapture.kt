@@ -27,6 +27,7 @@ class SystemAudioCapture(
     private var record: AudioRecord? = null
     private var writer: WavWriter? = null
     @Volatile private var running = false
+    @Volatile private var paused = false
     private var worker: Thread? = null
 
     /** 开始把系统声音写进 [file]；失败抛异常，由调用方转成界面提示。 */
@@ -67,6 +68,11 @@ class SystemAudioCapture(
         worker = thread(name = "tingo-system-audio", isDaemon = true) {
             val buffer = ByteArray(bufferSize)
             while (running) {
+                if (paused) {
+                    // 暂停时不读：这一段声音不写进文件，恢复后与麦克风那一路对得上
+                    Thread.sleep(20)
+                    continue
+                }
                 val read = recorder.read(buffer, 0, buffer.size)
                 if (read > 0) {
                     runCatching { wav.append(buffer, read) }
@@ -76,6 +82,16 @@ class SystemAudioCapture(
                 }
             }
         }
+    }
+
+    /** 暂停：停止消费系统声音（与麦克风同步，别让两路时间轴错开）。 */
+    fun pause() {
+        paused = true
+    }
+
+    /** 继续。 */
+    fun resume() {
+        paused = false
     }
 
     /** 结束并回填 wav 头；返回写入的毫秒数。 */

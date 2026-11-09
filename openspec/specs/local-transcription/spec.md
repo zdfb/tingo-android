@@ -1,7 +1,8 @@
 # local-transcription Specification
 
 ## Purpose
-TBD - created by archiving change add-android-recording-asr. Update Purpose after archive.
+
+本地转写定义"把一场会议的录音变成带说话人的转写稿"这件事：模型如何获取与校验、音频如何按静音切段流式识别、说话人如何聚类，以及失败与取消时用户看到什么。它全部在本机完成，不上传任何音频。
 
 ## Requirements
 

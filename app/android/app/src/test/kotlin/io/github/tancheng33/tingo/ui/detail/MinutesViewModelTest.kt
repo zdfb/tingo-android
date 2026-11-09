@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.detail
 
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.models.HttpFetcher
 import io.github.tancheng33.tingo.minutes.MinutesGenerator
 import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.transcription.Transcript
@@ -54,6 +55,19 @@ class MinutesViewModelTest {
         - 无
     """.trimIndent()
 
+    /** 假的 HTTP 层：给 N 字节内容，或直接失败。 */
+    private class FakeHttp(private val size: Int, private val fail: Boolean = false) : HttpFetcher {
+        override fun open(url: String, rangeStart: Long): HttpFetcher.FetchedStream {
+            if (fail) throw java.io.IOException("网络断开")
+            val data = ByteArray(size) { 7 }
+            val stream = object : java.io.InputStream() {
+                private var i = rangeStart.toInt()
+                override fun read(): Int = if (i >= data.size) -1 else data[i++].toInt()
+            }
+            return HttpFetcher.FetchedStream(stream, rangeStart > 0)
+        }
+    }
+
     private class FakeGenerator(private val output: String, private val fail: Boolean = false) : MinutesGenerator {
         var calls = 0
         override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String {
@@ -96,6 +110,70 @@ class MinutesViewModelTest {
         advanceUntilIdle() // prepare 现在在 IO 协程里读 transcript.json
 
         assertTrue(vm.state.value is MinutesUiState.NeedModel)
+    }
+
+    /** 新装的设备没有语言模型：点"生成纪要"应自己下载，而不是永远提示"还没下载好"。 */
+    @Test
+    fun startDownloadsTheModelWhenMissing() = runTest(dispatcher) {
+        val models = Files.createTempDirectory("tingo-llm-models").toFile()
+        val store = io.github.tancheng33.tingo.models.ModelStore(models, FakeHttp(16))
+        val catalog = io.github.tancheng33.tingo.models.ModelCatalog(
+            listOf(
+                io.github.tancheng33.tingo.models.ModelFile(
+                    id = "qwen3-0.6b",
+                    fileName = "Qwen3-0.6B-Q4_K_M.gguf",
+                    url = "https://hf-mirror.com/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+                    bytes = 16,
+                ),
+            ),
+        )
+        val model = store.fileFor(catalog.files.single())
+        val vm = MinutesViewModel(
+            serviceFactory = { MinutesService(FakeGenerator(good)) },
+            modelFile = model,
+            meetingDir = meeting(),
+            store = store,
+            catalog = catalog,
+            io = dispatcher,
+        )
+
+        vm.start()
+        advanceUntilIdle()
+
+        assertTrue("下载后应生成纪要：${vm.state.value}", vm.state.value is MinutesUiState.Done)
+    }
+
+    @Test
+    fun startReportsDownloadFailure() = runTest(dispatcher) {
+        val models = Files.createTempDirectory("tingo-llm-models-fail").toFile()
+        val catalog = io.github.tancheng33.tingo.models.ModelCatalog(
+            listOf(
+                io.github.tancheng33.tingo.models.ModelFile(
+                    id = "qwen3-0.6b",
+                    fileName = "Qwen3-0.6B-Q4_K_M.gguf",
+                    url = "https://example.invalid/x.gguf",
+                    bytes = 16,
+                ),
+            ),
+        )
+        val failing = io.github.tancheng33.tingo.models.ModelStore(
+            Files.createTempDirectory("tingo-llm-fail").toFile(),
+            FakeHttp(16, fail = true),
+        )
+        val vm = MinutesViewModel(
+            serviceFactory = { MinutesService(FakeGenerator(good)) },
+            modelFile = failing.fileFor(catalog.files.single()),
+            meetingDir = meeting(),
+            store = failing,
+            catalog = catalog,
+            io = dispatcher,
+        )
+
+        vm.start()
+        advanceUntilIdle()
+
+        val state = vm.state.value as MinutesUiState.Failed
+        assertEquals(R.string.err_model_download_failed, state.reasonRes)
     }
 
     @Test

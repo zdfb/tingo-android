@@ -303,6 +303,7 @@ private fun TranscriptionUiState.toTaskStatus(): TaskStatus = when (this) {
 private fun MinutesUiState.toTaskStatus(): TaskStatus = when (this) {
     MinutesUiState.Idle -> TaskStatus.Idle
     is MinutesUiState.NeedModel -> TaskStatus.NeedModel(missingMb = missingBytes / 1_000_000)
+    is MinutesUiState.Downloading -> TaskStatus.Running(fraction, R.string.minutes_downloading)
     MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating)
     is MinutesUiState.Done -> TaskStatus.Done
     is MinutesUiState.Failed -> TaskStatus.Failed(

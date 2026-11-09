@@ -25,7 +25,11 @@ class MicRecorder : AudioCapture {
     @Volatile
     private var paused = false
 
+    /** 采集线程里遇到的致命错误（磁盘满、写入被关闭）；stop() 之后由调用方查。 */
     @Volatile
+    var failed: Throwable? = null
+        private set
+
     private var currentLevel = 0f
 
     override fun start(file: File) {
@@ -50,6 +54,9 @@ class MicRecorder : AudioCapture {
 
         thread = Thread({
             val buffer = ByteArray(bufferBytes)
+            // 磁盘写满、或 stop() 在 join 超时后关掉了 writer，append 都会抛异常。
+            // 在采集线程上抛 = 整个进程被杀（录音直接丢），所以就地兜住并结束这一轮采集。
+            try {
             while (running) {
                 if (paused) {
                     Thread.sleep(20)
@@ -66,7 +73,13 @@ class MicRecorder : AudioCapture {
                 // read 一定是 2 的整数倍（16 bit 单声道），WavWriter 里有断言兜底
                 wav.append(buffer, read)
             }
-            currentLevel = 0f
+            } catch (e: Exception) {
+                // 写不下去就停：已写入的部分仍然是一份可修复的 wav（启动时会补头）
+                failed = e
+                running = false
+            } finally {
+                currentLevel = 0f
+            }
         }, "tingo-mic").apply { isDaemon = true; start() }
     }
 

@@ -307,16 +307,27 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
 
     androidx.compose.runtime.DisposableEffect(Unit) {
         RecordingKeepAlive.onServiceDestroyed = { viewModel.onInterrupted() }
+        // 服务拿到投影（或确认拿不到）后，把采集器交给录音状态机
+        RecordingKeepAlive.onSystemAudioCapture = { capture ->
+            if (capture != null) viewModel.attachSystemAudio(capture)
+            else viewModel.systemAudioFailed()
+        }
         // 通知栏的"结束录音"走正常收尾，文件会被保存（不能当成被系统中断）
         RecordingKeepAlive.onStopRequested = { viewModel.stop() }
         onDispose {
             RecordingKeepAlive.onServiceDestroyed = {}
             RecordingKeepAlive.onStopRequested = {}
+            RecordingKeepAlive.onSystemAudioCapture = {}
         }
     }
+    // 每个 tick 只更新通知，不重复拉起服务
     androidx.compose.runtime.LaunchedEffect(state) {
         RecordingKeepAlive.publish(state)
-        if (requiresForegroundService(state)) {
+    }
+    // 服务只在"需不需要"变化时启停：state 里带着每 200 ms 变一次的计时，不能当 key
+    val needsService = requiresForegroundService(state)
+    androidx.compose.runtime.LaunchedEffect(needsService, systemAudioEnabled) {
+        if (needsService) {
             RecordingService.start(serviceContext, systemAudio = systemAudioEnabled)
         } else {
             RecordingService.stop(serviceContext)
@@ -332,13 +343,8 @@ private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit
         if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
             systemAudioDenied = false
             viewModel.start()
-            val manager = serviceContext.getSystemService(android.media.projection.MediaProjectionManager::class.java)
-            val projection = manager?.getMediaProjection(android.app.Activity.RESULT_OK, data)
-            if (projection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                viewModel.attachSystemAudio(
-                    io.github.tancheng33.tingo.recording.SystemAudioCapture(projection),
-                )
-            }
+            // 投影必须在"已带 mediaProjection 类型的前台服务"里取，所以先起服务再让服务去要
+            RecordingService.start(serviceContext, systemAudio = true, projection = data)
         } else {
             // 用户拒绝：照常录麦克风，并明确告诉用户这次没有对方声音
             systemAudioDenied = true
@@ -454,6 +460,8 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                     },
                     modelFile = container.llmFile,
                     meetingDir = meetingDir,
+                    store = container.models,
+                    catalog = container.llmCatalog,
                 )
             }
         },

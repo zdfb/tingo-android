@@ -1,7 +1,8 @@
 # recording-capture Specification
 
 ## Purpose
-TBD - created by archiving change add-android-recording-asr. Update Purpose after archive.
+
+录音采集定义一场会议的声音如何进入应用：麦克风与系统内录两路如何开始、暂停、结束与合成，进程被杀后如何恢复，以及用户是否清楚"这次到底录到了什么"。它是后续转写与纪要的唯一声音来源。
 
 ## Requirements
 

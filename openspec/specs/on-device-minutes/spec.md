@@ -1,7 +1,8 @@
 # on-device-minutes Specification
 
 ## Purpose
-TBD - created by archiving change add-android-recording-asr. Update Purpose after archive.
+
+端侧纪要生成定义"把转写稿变成结构化会议纪要"这件事：提示词约束的章节结构、鱼骨图摘要的产出、生成结果的自检与降级，以及在内存不足时的诚实失败。纪要由设备上的小语言模型生成，不依赖云端。
 
 ## Requirements
 

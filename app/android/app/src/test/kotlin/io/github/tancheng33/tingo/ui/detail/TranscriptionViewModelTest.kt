@@ -91,6 +91,7 @@ class TranscriptionViewModelTest {
         val vm = viewModel(meeting(), FakeTranscriber(), store)
 
         vm.prepare()
+        advanceUntilIdle() // 读模型标记放到 IO 之后，prepare 变成异步
 
         val state = vm.state.value as TranscriptionUiState.NeedModels
         assertEquals(1_000L, state.missingBytes)
@@ -103,6 +104,7 @@ class TranscriptionViewModelTest {
         val vm = viewModel(meeting(), FakeTranscriber(), store)
 
         vm.prepare()
+        advanceUntilIdle()
 
         assertEquals(TranscriptionUiState.Idle, vm.state.value)
     }

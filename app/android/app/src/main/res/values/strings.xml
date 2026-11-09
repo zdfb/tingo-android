@@ -128,4 +128,5 @@
     <string name="settings_library_restored">恢复 %1$d 场，跳过 %2$d 场（已存在），拒绝 %3$d 个不安全文件</string>
     <string name="settings_library_failed">备份/恢复失败，请确认文件可用</string>
     <string name="record_notification_denied">通知权限被关闭：录音仍在进行，但状态栏看不到进度</string>
+    <string name="minutes_downloading">正在下载语言模型…</string>
 </resources>

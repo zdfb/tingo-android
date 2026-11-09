@@ -71,10 +71,14 @@ class TranscriptionViewModel(
     /** 界面进入详情页时调一次：告诉用户当前能不能直接转写。 */
     fun prepare() {
         if (_state.value !is TranscriptionUiState.Idle) return
-        val missing = catalog.files.filterNot { store.isReady(it) }
-        if (missing.isEmpty()) return
-        if (wavFile() == null) return
-        _state.value = TranscriptionUiState.NeedModels(missingBytes = missing.sumOf { it.bytes })
+        // 读 .verified 标记与 wav 头都是磁盘操作，放 IO：进详情页不该卡主线程
+        viewModelScope.launch(io) {
+            val missing = catalog.files.filterNot { store.isReady(it) }
+            if (missing.isEmpty()) return@launch
+            if (wavFile() == null) return@launch
+            if (_state.value !is TranscriptionUiState.Idle) return@launch
+            _state.value = TranscriptionUiState.NeedModels(missingBytes = missing.sumOf { it.bytes })
+        }
     }
 
     fun start() {

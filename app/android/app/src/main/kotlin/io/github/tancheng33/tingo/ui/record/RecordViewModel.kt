@@ -115,10 +115,17 @@ class RecordViewModel(
             }
     }
 
+    /** 服务报告"这次没抓到系统声音"：界面据此提示，麦克风那一路继续。 */
+    fun systemAudioFailed() {
+        _systemAudioStatus.value = SystemAudioStatus.MISSING
+    }
+
     fun pause() {
         if (_state.value !is RecordUiState.Recording) return
         session.pause(clock())
         capture.pause()
+        // 系统音轨也要停：只停麦克风会让两路在恢复后错位，合成出的录音与转写时间轴对不上
+        runCatching { systemAudio?.pause() }
         _state.value = RecordUiState.Paused(session.elapsedMs(clock()))
     }
 
@@ -126,6 +133,7 @@ class RecordViewModel(
         if (_state.value !is RecordUiState.Paused) return
         session.resume(clock())
         capture.resume()
+        runCatching { systemAudio?.resume() }
         _state.value = RecordUiState.Recording(session.elapsedMs(clock()), capture.level())
         startTicker()
     }

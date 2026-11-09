@@ -154,8 +154,16 @@ class EngineBridgeInstrumentedTest {
         assertTrue("应当报错而不是静默成功", failure != null)
     }
 
+    /**
+     * 从干净的会议库开始。
+     *
+     * 实机上的应用数据不会被自动清掉（`adb install -r` 保留数据、Gradle 也可能跳过卸载），
+     * 上一次运行留下的目录会让"库里有哪几场会议"这种断言假失败——模拟器上没暴露，
+     * 因为每次重装都清了数据。
+     */
     private fun copyFixtures(context: Context) {
         val meetings = File(root, "meetings")
+        meetings.listFiles()?.forEach { it.deleteRecursively() }
         // 夹具随测试 APK 打包，因此从 instrumentation 的 context 取 assets，写入 targetContext 的目录
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         for (name in assets.list("fixtures").orEmpty()) {

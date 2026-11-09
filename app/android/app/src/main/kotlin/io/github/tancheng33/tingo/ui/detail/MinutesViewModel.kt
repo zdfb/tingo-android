@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.minutes.MinutesService
+import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -20,6 +22,9 @@ sealed interface MinutesUiState {
 
     /** 语言模型还没下载；[missingBytes] 用来提示要下多少 */
     data class NeedModel(val missingBytes: Long) : MinutesUiState
+
+    /** 正在下载语言模型；[fraction] 为 0..1 */
+    data class Downloading(val fraction: Float) : MinutesUiState
 
     data object Generating : MinutesUiState
 
@@ -44,6 +49,9 @@ class MinutesViewModel(
     private val serviceFactory: () -> MinutesService,
     private val modelFile: File,
     private val meetingDir: File,
+    /** 语言模型的下载器；缺失时由本 ViewModel 自己按清单下载 */
+    private val store: ModelStore? = null,
+    private val catalog: ModelCatalog? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -57,7 +65,7 @@ class MinutesViewModel(
         if (_state.value !is MinutesUiState.Idle) return
         viewModelScope.launch(io) {
             val hasTranscript = TranscriptWriter.read(meetingDir) != null
-            val modelReady = modelFile.isFile && modelFile.length() > 0
+            val modelReady = isModelReady()
             if (hasTranscript && !modelReady && _state.value is MinutesUiState.Idle) {
                 _state.value = MinutesUiState.NeedModel(missingBytes = LLM_BYTES_HINT)
             }
@@ -72,8 +80,14 @@ class MinutesViewModel(
         }
         job = viewModelScope.launch(io) {
             try {
-                if (!modelFile.isFile || modelFile.length() == 0L) {
-                    _state.value = MinutesUiState.Failed(R.string.err_llm_missing)
+                // 语言模型也走和语音模型一样的下载路径：新装的应用没有它，
+                // 用户点一下就该自己下回来，而不是永远停在"还没下载好"
+                if (!downloadModelIfNeeded()) {
+                    // 下载失败已经写进状态；清单里找不到对应文件时补一句"模型缺失"，
+                    // 否则点了"生成纪要"什么都不会发生
+                    if (_state.value !is MinutesUiState.Failed) {
+                        _state.value = MinutesUiState.Failed(R.string.err_llm_missing)
+                    }
                     return@launch
                 }
                 _state.value = MinutesUiState.Generating
@@ -99,6 +113,33 @@ class MinutesViewModel(
             }
         }
     }
+
+    /**
+     * 缺语言模型时按清单下载；返回是否已经可用。
+     *
+     * 失败时把"下载失败"如实报出来——以前这里只报"模型还没下载好"，
+     * 而应用里根本没有触发下载的入口，等于这条功能在新机器上永远用不了。
+     */
+    private suspend fun downloadModelIfNeeded(): Boolean {
+        val file = catalog?.files?.firstOrNull { store?.fileFor(it) == modelFile } ?: return isModelReady()
+        if (store == null) return isModelReady()
+        if (store.isReady(file)) return true
+        _state.value = MinutesUiState.Downloading(0f)
+        val result = store.download(
+            file,
+            onProgress = { progress ->
+                val fraction = (progress.downloaded.toFloat() / file.bytes.coerceAtLeast(1)).coerceIn(0f, 1f)
+                _state.value = MinutesUiState.Downloading(fraction)
+            },
+        )
+        if (result.isFailure) {
+            _state.value = MinutesUiState.Failed(R.string.err_model_download_failed, result.exceptionOrNull()?.message)
+            return false
+        }
+        return true
+    }
+
+    private fun isModelReady(): Boolean = modelFile.isFile && modelFile.length() > 0
 
     fun cancel() {
         job?.cancel()

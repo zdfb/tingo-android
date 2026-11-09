@@ -11,9 +11,13 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import android.media.projection.MediaProjectionManager
 import androidx.core.content.ContextCompat
 import io.github.tancheng33.tingo.MainActivity
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.settings.AppLocale
+import io.github.tancheng33.tingo.settings.AppSettings
+import io.github.tancheng33.tingo.settings.SharedPrefsStore
 import io.github.tancheng33.tingo.ui.clockOf
 import io.github.tancheng33.tingo.ui.record.RecordUiState
 import kotlinx.coroutines.CoroutineScope
@@ -85,8 +89,10 @@ class RecordingService : Service() {
                 return START_NOT_STICKY
             }
             started = true
+            intent?.let { attachProjection(it) }
         } else {
             updateNotification(state)
+            intent?.let { attachProjection(it) }
         }
         // 不要 START_STICKY：录音流已经没了，重启一个空服务只会让用户困惑
         return START_NOT_STICKY
@@ -97,6 +103,22 @@ class RecordingService : Service() {
         scope.cancel()
         RecordingKeepAlive.onServiceDestroyed()
         super.onDestroy()
+    }
+
+    /**
+     * 在前台服务已经带 mediaProjection 类型跑起来之后，再向系统要这条投影。
+     *
+     * 失败（用户撤销授权、系统拒绝）时回调 null，界面据此说"这次没抓到对方声音"，
+     * 麦克风那一路继续录，不因为内录失败而整场作废。
+     */
+    private fun attachProjection(intent: Intent) {
+        val data = intent.getParcelableExtra(EXTRA_PROJECTION, Intent::class.java) ?: return
+        val manager = ContextCompat.getSystemService(this, MediaProjectionManager::class.java)
+        val capture = runCatching {
+            val projection = manager?.getMediaProjection(android.app.Activity.RESULT_OK, data)
+            projection?.let { SystemAudioCapture(it) }
+        }.getOrNull()
+        RecordingKeepAlive.onSystemAudioCapture(capture)
     }
 
     /** 是否同时录系统声音：决定要不要把 mediaProjection 类型一起声明。 */
@@ -122,7 +144,14 @@ class RecordingService : Service() {
         manager?.notify(RecordingNotification.NOTIFICATION_ID, buildNotification(state))
     }
 
+    /**
+     * 通知文案用**应用内选择的语言**，不是系统语言。
+     *
+     * 服务拿到的 Context 没套过 AppLocale（只有 Activity 在 attachBaseContext 里套了），
+     * 所以中文界面配英文系统时会冒出英文通知。
+     */
     private fun buildNotification(state: RecordUiState): Notification {
+        val texts = AppLocale.wrap(this, AppSettings(SharedPrefsStore(this)).language)
         val recording = state is RecordUiState.Recording
         val elapsed = when (state) {
             is RecordUiState.Recording -> clockOf(state.elapsedMs.toULong())
@@ -135,7 +164,7 @@ class RecordingService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val titleTemplate = getString(
+        val titleTemplate = texts.getString(
             if (recording) R.string.recording_title_recording else R.string.recording_title_paused,
         )
         val stop = PendingIntent.getService(
@@ -147,10 +176,10 @@ class RecordingService : Service() {
         return NotificationCompat.Builder(this, RecordingNotification.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_record)
             .setContentTitle(RecordingNotification.title(titleTemplate, elapsed))
-            .setContentText(getString(R.string.recording_notification_body))
+            .setContentText(texts.getString(R.string.recording_notification_body))
             .setContentIntent(open)
             // 规格要求在通知栏就能结束录音：不必回到应用
-            .addAction(0, getString(R.string.recording_notification_stop), stop)
+            .addAction(0, texts.getString(R.string.recording_notification_stop), stop)
             .setOngoing(true)
             .setSilent(true)
             .build()
@@ -176,13 +205,20 @@ class RecordingService : Service() {
          * @param systemAudio 是否在抓系统声音（会议软件的对方声音）。为 true 时前台服务
          *   必须同时声明 mediaProjection 类型，否则 Android 14 会直接杀掉进程。
          */
-        fun start(context: Context, systemAudio: Boolean = false) {
+        /**
+         * @param projection 屏幕录制授权结果。必须由**服务**在 startForeground 之后调用
+         *   `getMediaProjection`——Android 14 起，前台服务没带 mediaProjection 类型就取投影
+         *   会抛 SecurityException，直接崩在授权的回调里。
+         */
+        fun start(context: Context, systemAudio: Boolean = false, projection: Intent? = null) {
             val intent = Intent(context, RecordingService::class.java)
             intent.putExtra(EXTRA_SYSTEM_AUDIO, systemAudio)
+            if (projection != null) intent.putExtra(EXTRA_PROJECTION, projection)
             ContextCompat.startForegroundService(context, intent)
         }
 
         const val EXTRA_SYSTEM_AUDIO = "systemAudio"
+        const val EXTRA_PROJECTION = "projection"
 
         fun stop(context: Context) {
             context.stopService(Intent(context, RecordingService::class.java))
@@ -210,4 +246,7 @@ object RecordingKeepAlive {
 
     /** 用户在通知栏点"结束录音"时回调；界面负责走正常的 stop 流程（保存文件）。 */
     var onStopRequested: () -> Unit = {}
+
+    /** 系统声音那一路准备好（或确认失败，参数为 null）时回调。 */
+    var onSystemAudioCapture: (SystemAudioCapture?) -> Unit = {}
 }
