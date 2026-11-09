@@ -1,0 +1,83 @@
+package io.github.tancheng33.tingo.ui.theme
+
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/**
+ * 视觉令牌：与桌面版 `app/src/style.css` 的 `:root` 一一对应。
+ *
+ * 界面里不许出现字面颜色，一律从 [TingoColors] 取——两端同一套值，
+ * 改一处两端一起变，也避免"这个蓝色好像和桌面版不太一样"这种返工。
+ */
+object TingoColors {
+    // 浅色：近白底、细描边白卡片（桌面版同样的取值）
+    val bg = Color(0xFFFAFAFC)
+    val card = Color(0xFFFFFFFF)
+    val line = Color(0xFFE9E9ED)
+    val lineSoft = Color(0xFFF0F0F3)
+    val seg = Color(0xFFF2F2F5)
+    val hover = Color(0xFFF4F4F7)
+    val text = Color(0xFF0A0A0A)
+    val text2 = Color(0xFF27251E)
+    val muted = Color(0xFF7D8187)
+    val faint = Color(0xFFA3A7AD)
+    val black = Color(0xFF000000)
+
+    val blue = Color(0xFF1F4BFF)
+    val blueSoft = Color(0xFFE9EFFF)
+    val cyan = Color(0xFF34C6F4)
+    val red = Color(0xFFF04438)
+    val green = Color(0xFF12B76A)
+    val amber = Color(0xFFF79009)
+}
+
+/** 深色：桌面版只给了深色背景与描边，这里补齐前后景对比。 */
+object TingoColorsDark {
+    val bg = Color(0xFF0B0F1E)
+    val card = Color(0xFF121831)
+    val line = Color(0xFF232B4A)
+    val lineSoft = Color(0xFF1B2240)
+    val seg = Color(0xFF1B2240)
+    val hover = Color(0xFF1B2240)
+    val text = Color(0xFFEEF1FB)
+    val text2 = Color(0xFFDCE2F5)
+    val muted = Color(0xFF9AA3BF)
+    val faint = Color(0xFF6C7597)
+    val black = Color(0xFFEEF1FB)
+
+    val blue = Color(0xFF9DB2FF)
+    val blueSoft = Color(0xFF1E2A5C)
+    val cyan = Color(0xFF67D8F8)
+    val red = Color(0xFFF97066)
+    val green = Color(0xFF47CD89)
+    val amber = Color(0xFFFDB022)
+}
+
+/** 尺寸与间距：桌面版是 240px 侧栏 + 16px 圆角卡片，手机端按同一节奏缩放。 */
+object TingoDimens {
+    val radiusCard = 16.dp
+    val radiusControl = 10.dp
+    val radiusPill = 999.dp
+    val hairline = 1.dp
+    val gutter = 20.dp
+    val gap = 12.dp
+    val gapTight = 8.dp
+
+    val cardShape = RoundedCornerShape(radiusCard)
+    val controlShape = RoundedCornerShape(radiusControl)
+    val pillShape = RoundedCornerShape(radiusPill)
+}
+
+/** 字阶：正文 14sp（与桌面版 body 一致），标题只加粗不换字体。 */
+object TingoType {
+    val body = 14.sp
+    val bodySmall = 13.sp
+    val label = 12.sp
+    val caption = 11.sp
+
+    val display = 30.sp
+    val title = 20.sp
+    val section = 15.sp
+}

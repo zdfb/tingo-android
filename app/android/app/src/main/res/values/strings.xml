@@ -110,7 +110,7 @@
     <string name="player_play">播放</string>
     <string name="player_pause">暂停</string>
     <string name="settings_models">端侧模型</string>
-    <string name="settings_models_desc">模型不进 APK，按需下载；用不上时可以在这里删掉腾出空间</string>
+    <string name="settings_models_desc">模型随安装包内置，首次启动解包，之后全程离线；删掉后下次使用时从安装包重新解包</string>
     <string name="settings_models_asr">语音识别模型（切段 / 识别 / 标点 / 声纹）</string>
     <string name="settings_models_llm">纪要语言模型（Qwen3-0.6B 量化）</string>
     <string name="settings_models_ready">已就绪，占用 %1$d MB</string>

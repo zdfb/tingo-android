@@ -4,6 +4,18 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import io.github.tancheng33.tingo.ui.theme.TingoColors
+import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,10 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
@@ -114,9 +123,14 @@ fun RecordScreen(
             when (state) {
                 RecordUiState.Idle -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.record_idle_hint), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = stringResource(R.string.record_idle_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TingoTheme.colors.muted,
+                    )
                     WarningLine(
                         text = stringResource(R.string.record_permission_denied),
                         visible = permissionDenied,
@@ -138,65 +152,65 @@ fun RecordScreen(
                         supported = android.os.Build.VERSION.SDK_INT >= SystemAudioSupport.MIN_SDK,
                         onChange = onSystemAudioChange,
                     )
-                    Button(onClick = ::startWithPermission) {
-                        Text(stringResource(R.string.record_start))
-                    }
+                    PrimaryPill(
+                        label = stringResource(R.string.record_start),
+                        onClick = ::startWithPermission,
+                    )
                 }
 
                 is RecordUiState.Recording -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Text(
-                        clockOf(state.elapsedMs.toULong()),
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    LinearProgressIndicator(
-                        progress = { state.level },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    TimerText(clockOf(state.elapsedMs.toULong()))
+                    LevelBar(level = state.level)
                     WarningLine(
                         text = stringResource(R.string.record_system_audio_missing),
                         visible = systemAudioMissing,
                         emphasis = true,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = onPause) { Text(stringResource(R.string.record_pause)) }
-                        Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
+                        GhostPill(label = stringResource(R.string.record_pause), onClick = onPause)
+                        PrimaryPill(label = stringResource(R.string.record_stop), onClick = onStop)
                     }
-                    TextButton(onClick = onDiscard) { Text(stringResource(R.string.record_discard)) }
+                    DiscardLink(onClick = onDiscard)
                 }
 
                 is RecordUiState.Paused -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    TimerText(clockOf(state.elapsedMs.toULong()))
                     Text(
-                        clockOf(state.elapsedMs.toULong()),
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        text = stringResource(R.string.record_paused_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TingoTheme.colors.muted,
                     )
-                    Text(stringResource(R.string.record_paused_hint), style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = onResume) { Text(stringResource(R.string.record_resume)) }
-                        OutlinedButton(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
+                        PrimaryPill(label = stringResource(R.string.record_resume), onClick = onResume)
+                        GhostPill(label = stringResource(R.string.record_stop), onClick = onStop)
                     }
-                    TextButton(onClick = onDiscard) { Text(stringResource(R.string.record_discard)) }
+                    DiscardLink(onClick = onDiscard)
                 }
 
                 is RecordUiState.Finished -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(stringResource(R.string.record_finished), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        clockOf(state.durationMs.toULong()),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = stringResource(R.string.record_finished),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TingoTheme.colors.text,
                     )
-                    Button(onClick = { onOpenMeeting(state.meetingId) }) {
-                        Text(stringResource(R.string.record_open_meeting))
-                    }
+                    Text(
+                        text = clockOf(state.durationMs.toULong()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TingoTheme.colors.muted,
+                    )
+                    PrimaryPill(
+                        label = stringResource(R.string.record_open_meeting),
+                        onClick = { onOpenMeeting(state.meetingId) },
+                    )
                 }
 
                 is RecordUiState.Failed -> Column(
@@ -212,7 +226,10 @@ fun RecordScreen(
                         },
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Button(onClick = ::startWithPermission) { Text(stringResource(R.string.record_start)) }
+                    PrimaryPill(
+                        label = stringResource(R.string.record_start),
+                        onClick = ::startWithPermission,
+                    )
                 }
             }
         }
@@ -227,20 +244,41 @@ fun RecordScreen(
  */
 @Composable
 private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (Boolean) -> Unit) {
+    val colors = TingoTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.card, TingoDimens.cardShape)
+            .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Switch(checked = enabled && supported, enabled = supported, onCheckedChange = onChange)
-        Column {
-            Text(stringResource(R.string.record_system_audio_label), style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.weight(1f)) {
             Text(
-                stringResource(
+                text = stringResource(R.string.record_system_audio_label),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.text,
+            )
+            Text(
+                text = stringResource(
                     if (supported) R.string.record_system_audio_hint else R.string.record_system_audio_unsupported,
                 ),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.muted,
             )
         }
+        Switch(
+            checked = enabled && supported,
+            enabled = supported,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = colors.blue,
+                checkedThumbColor = colors.card,
+                uncheckedTrackColor = colors.seg,
+                uncheckedThumbColor = colors.faint,
+            ),
+        )
     }
 }
 
@@ -255,9 +293,96 @@ private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (B
 @Composable
 private fun WarningLine(text: String, visible: Boolean, emphasis: Boolean) {
     if (!visible) return
+    val colors = TingoTheme.colors
     Text(
         text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = if (emphasis) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (emphasis) colors.red else colors.muted,
+        modifier = Modifier
+            .background(if (emphasis) colors.red.copy(alpha = 0.08f) else colors.seg, TingoDimens.controlShape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     )
+}
+
+/** 黑色胶囊主按钮：桌面版的主按钮就是这个样子（黑底白字、圆角拉满）。 */
+@Composable
+private fun PrimaryPill(label: String, onClick: () -> Unit) {
+    val colors = TingoTheme.colors
+    Box(
+        modifier = Modifier
+            .height(52.dp)
+            .background(colors.black, TingoDimens.pillShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 36.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            color = if (colors.black == TingoColors.black) androidx.compose.ui.graphics.Color.White else colors.bg,
+        )
+    }
+}
+
+/** 次要动作：描边胶囊。 */
+@Composable
+private fun GhostPill(label: String, onClick: () -> Unit) {
+    val colors = TingoTheme.colors
+    Box(
+        modifier = Modifier
+            .height(52.dp)
+            .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.pillShape)
+            .background(colors.card, TingoDimens.pillShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = TextStyle(fontSize = 15.sp), color = colors.text2)
+    }
+}
+
+@Composable
+private fun DiscardLink(onClick: () -> Unit) {
+    val colors = TingoTheme.colors
+    Text(
+        text = stringResource(R.string.record_discard),
+        style = MaterialTheme.typography.labelLarge,
+        color = colors.faint,
+        modifier = Modifier.clickable(onClick = onClick).padding(8.dp),
+    )
+}
+
+/** 计时：大号、字距收紧、等宽数字，读秒不跳。 */
+@Composable
+private fun TimerText(text: String) {
+    val colors = TingoTheme.colors
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 52.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = (-1.2).sp,
+            fontFeatureSettings = "tnum",
+        ),
+        color = colors.text,
+    )
+}
+
+/** 电平：一根细条，安静时不晃眼。 */
+@Composable
+private fun LevelBar(level: Float) {
+    val colors = TingoTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .background(colors.seg, TingoDimens.pillShape),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(level.coerceIn(0f, 1f))
+                .background(colors.blue, TingoDimens.pillShape),
+        )
+    }
 }

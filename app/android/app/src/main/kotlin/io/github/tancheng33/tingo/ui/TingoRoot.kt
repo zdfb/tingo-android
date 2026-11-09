@@ -30,6 +30,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.runtime.Composable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.LaunchedEffect
@@ -199,34 +209,58 @@ fun TingoRoot(
             recordViewModel.start()
         }
     }
+    // 录音权限原来是在录音页里申请的。现在状态机在外壳层，权限也得跟着上来，
+    // 否则切页之后点"开始录音"会直接撞上没授权（采集抛异常，用户只看到"麦克风不可用"）
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { /* 授权结果不在这里处理：startRecording 会重新判定一次权限 */ }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { /* 没有通知权限也能录音，只是状态栏看不到：界面自己会提示 */ }
+
     val startRecording: () -> Unit = {
-        if (systemAudioEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val manager = recordContext.getSystemService(MediaProjectionManager::class.java)
-            projectionLauncher.launch(manager.createScreenCaptureIntent())
+        val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            recordContext,
+            android.Manifest.permission.RECORD_AUDIO,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!micGranted) {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         } else {
-            recordViewModel.start()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    recordContext,
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (systemAudioEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val manager = recordContext.getSystemService(MediaProjectionManager::class.java)
+                projectionLauncher.launch(manager.createScreenCaptureIntent())
+            } else {
+                recordViewModel.start()
+            }
         }
     }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            TopDestination.entries.forEach { destination ->
-                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                item(
-                    selected = selected,
-                    onClick = {
-                        navController.navigate(destination.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(destination.icon, contentDescription = null) },
-                    label = { Text(stringResource(destination.labelRes)) },
-                )
-            }
+    androidx.compose.material3.Scaffold(
+        containerColor = TingoTheme.colors.bg,
+        bottomBar = {
+            TingoBottomBar(
+                destinations = TopDestination.entries,
+                isSelected = { destination ->
+                    currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                },
+                onSelect = { destination ->
+                    navController.navigate(destination.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+            )
         },
-    ) {
+    ) { _ ->
         val onOpenMeeting: (String) -> Unit = { id ->
             if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
         }
@@ -567,5 +601,65 @@ private fun EmptyDetailHint() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * 底部导航：桌面版侧栏的三项在手机上落成一条。
+ *
+ * 选中项不是"变个颜色"，而是换成一块细描边的白底卡片——桌面版侧栏就是这个语言，
+ * 一眼能看出"我在哪"。
+ */
+@Composable
+private fun TingoBottomBar(
+    destinations: List<TopDestination>,
+    isSelected: (TopDestination) -> Boolean,
+    onSelect: (TopDestination) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    Column {
+        androidx.compose.material3.HorizontalDivider(
+            thickness = TingoDimens.hairline,
+            color = colors.line,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.bg)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            destinations.forEach { destination ->
+                val selected = isSelected(destination)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(if (selected) colors.card else colors.bg, TingoDimens.controlShape)
+                        .then(
+                            if (selected) {
+                                Modifier.border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.controlShape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clickable { onSelect(destination) }
+                        .padding(vertical = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = null,
+                        tint = if (selected) colors.text else colors.muted,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(destination.labelRes),
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal),
+                        color = if (selected) colors.text else colors.muted,
+                    )
+                }
+            }
+        }
     }
 }

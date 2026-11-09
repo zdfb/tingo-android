@@ -2,6 +2,12 @@ package io.github.tancheng33.tingo.ui.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -102,7 +108,10 @@ fun DetailScreen(
                 ) {
                     Text(
                         text = detail?.summary?.title.orEmpty(),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = TingoTheme.colors.text,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     // 有内容才可分享：空会议导出会得到一个空文件，不如不给入口
@@ -124,13 +133,22 @@ fun DetailScreen(
                 if (playback.available) {
                     PlaybackBar(playback = playback, onTogglePlay = onTogglePlay)
                 }
-                TabRow(selectedTabIndex = tab) {
-                    if (showMinutesTab) {
-                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.detail_tab_minutes)) })
-                        Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(stringResource(R.string.detail_tab_transcript)) })
-                    } else {
-                        Tab(selected = true, onClick = {}, text = { Text(stringResource(R.string.detail_tab_transcript)) })
-                    }
+                // 分段控件（桌面版同样的"灰底 + 白色浮起项"），比 M3 的 TabRow 更接近桌面观感
+                if (showMinutesTab) {
+                    SegmentedTabs(
+                        tabs = listOf(
+                            stringResource(R.string.detail_tab_minutes),
+                            stringResource(R.string.detail_tab_transcript),
+                        ),
+                        selected = tab,
+                        onSelect = { tab = it },
+                    )
+                } else {
+                    SegmentedTabs(
+                        tabs = listOf(stringResource(R.string.detail_tab_transcript)),
+                        selected = 0,
+                        onSelect = {},
+                    )
                 }
                 if (showMinutesTab && tab == 0) {
                     MinutesPane(
@@ -370,4 +388,43 @@ internal fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.MALFORMED -> stringResource(R.string.error_malformed)
     FailureKind.PERMISSION_DENIED -> stringResource(R.string.error_permission_denied)
     FailureKind.INTERNAL -> stringResource(R.string.error_internal)
+}
+
+/** 灰底分段控件：选中项是浮起的白卡片。 */
+@Composable
+private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val colors = TingoTheme.colors
+    Row(
+        modifier = Modifier
+            .padding(horizontal = TingoDimens.gutter)
+            .fillMaxWidth()
+            .background(colors.seg, TingoDimens.controlShape)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        tabs.forEachIndexed { index, label ->
+            val active = index == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(if (active) colors.card else colors.seg, TingoDimens.controlShape)
+                    .then(
+                        if (active) {
+                            Modifier.border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.controlShape)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable { onSelect(index) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (active) colors.text else colors.muted,
+                )
+            }
+        }
+    }
 }

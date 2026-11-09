@@ -110,7 +110,7 @@
     <string name="player_play">Play</string>
     <string name="player_pause">Pause</string>
     <string name="settings_models">On-device models</string>
-    <string name="settings_models_desc">Models are not bundled in the APK; they are downloaded on demand and can be deleted here to free space</string>
+    <string name="settings_models_desc">Models ship inside the app and are unpacked on first launch, then everything runs offline; deleting one re-unpacks it from the app next time</string>
     <string name="settings_models_asr">Speech recognition models (VAD / ASR / punctuation / speaker)</string>
     <string name="settings_models_llm">Minutes language model (quantised Qwen3-0.6B)</string>
     <string name="settings_models_ready">Ready, using %1$d MB</string>
