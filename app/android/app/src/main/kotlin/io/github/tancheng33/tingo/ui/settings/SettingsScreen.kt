@@ -1,5 +1,13 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,26 +62,39 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(TingoTheme.colors.bg)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = TingoDimens.gutter, vertical = TingoDimens.gap),
+        verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppLanguage.entries.forEach { option ->
-                    FilterChip(
-                        selected = option == language,
-                        onClick = { onLanguageChange(option) },
-                        label = {
-                            Text(
-                                when (option) {
-                                    AppLanguage.ZH -> stringResource(R.string.settings_language_zh)
-                                    AppLanguage.EN -> stringResource(R.string.settings_language_en)
-                                },
+                    val active = option == language
+                    val colors = TingoTheme.colors
+                    Box(
+                        modifier = Modifier
+                            .background(if (active) colors.blueSoft else colors.card, TingoDimens.pillShape)
+                            .border(
+                                BorderStroke(
+                                    TingoDimens.hairline,
+                                    if (active) colors.blueSoft else colors.line,
+                                ),
+                                TingoDimens.pillShape,
                             )
-                        },
-                    )
+                            .clickable { onLanguageChange(option) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = when (option) {
+                                AppLanguage.ZH -> stringResource(R.string.settings_language_zh)
+                                AppLanguage.EN -> stringResource(R.string.settings_language_en)
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (active) colors.blue else colors.muted,
+                        )
+                    }
                 }
             }
         }
@@ -81,23 +102,23 @@ fun SettingsScreen(
         HorizontalDivider()
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(dataRoot, style = MaterialTheme.typography.bodySmall)
             Text(
                 stringResource(R.string.settings_data_root_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TingoTheme.colors.muted,
             )
         }
 
         HorizontalDivider()
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(
                 stringResource(R.string.settings_models_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TingoTheme.colors.muted,
             )
             ModelRow(
                 label = stringResource(R.string.settings_models_asr),
@@ -125,7 +146,7 @@ fun SettingsScreen(
                 Text(
                     stringResource(R.string.settings_models_delete_failed),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = TingoTheme.colors.red,
                 )
             }
         }
@@ -133,18 +154,42 @@ fun SettingsScreen(
         HorizontalDivider()
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(
                 stringResource(R.string.settings_library_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TingoTheme.colors.muted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onBackupLibrary, enabled = !libraryBusy) {
-                    Text(stringResource(R.string.settings_library_backup))
+                val colors = TingoTheme.colors
+                Box(
+                    modifier = Modifier
+                        .height(44.dp)
+                        .background(colors.black, TingoDimens.pillShape)
+                        .clickable(enabled = !libraryBusy, onClick = onBackupLibrary)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_library_backup),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onBlack,
+                    )
                 }
-                OutlinedButton(onClick = onRestoreLibrary, enabled = !libraryBusy) {
-                    Text(stringResource(R.string.settings_library_restore))
+                Box(
+                    modifier = Modifier
+                        .height(44.dp)
+                        .background(colors.card, TingoDimens.pillShape)
+                        .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.pillShape)
+                        .clickable(enabled = !libraryBusy, onClick = onRestoreLibrary)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_library_restore),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.text2,
+                    )
                 }
             }
             libraryResult?.let { result ->
@@ -160,11 +205,7 @@ fun SettingsScreen(
                         LibraryOpResult.Failed -> stringResource(R.string.settings_library_failed)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (result == LibraryOpResult.Failed) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color = if (result == LibraryOpResult.Failed) TingoTheme.colors.red else TingoTheme.colors.muted,
                 )
             }
         }
@@ -172,7 +213,7 @@ fun SettingsScreen(
         HorizontalDivider()
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(
                 stringResource(R.string.settings_engine_version, engineVersion),
                 style = MaterialTheme.typography.bodyMedium,
@@ -220,13 +261,18 @@ private fun ModelRow(label: String, group: ModelGroup, onDelete: () -> Unit) {
                     else -> stringResource(R.string.settings_models_partial, group.bytes / MB)
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TingoTheme.colors.muted,
             )
         }
         if (!group.isEmpty) {
-            TextButton(onClick = { confirming = true }) {
-                Text(stringResource(R.string.settings_models_delete))
-            }
+            Text(
+                text = stringResource(R.string.settings_models_delete),
+                style = MaterialTheme.typography.labelLarge,
+                color = TingoTheme.colors.red,
+                modifier = Modifier
+                    .clickable { confirming = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
         }
     }
 }
