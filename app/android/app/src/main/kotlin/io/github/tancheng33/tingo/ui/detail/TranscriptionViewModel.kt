@@ -47,6 +47,8 @@ class TranscriptionViewModel(
     private val store: ModelStore,
     private val catalog: ModelCatalog,
     private val meetingDir: File,
+    /** 从 APK 内置模型包解包（删过模型的用户不必联网） */
+    private val ensureBundled: () -> Boolean = { false },
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -91,6 +93,8 @@ class TranscriptionViewModel(
         job = viewModelScope.launch(io) {
             // 崩溃留下的会议只有原始音轨：在 IO 里合成一次，再交给识别链
             ensureMixedForTranscription()
+            // 模型随 APK 内置：先解包，只有包里没有时才需要下载
+            runCatching { ensureBundled() }
             val wav = wavFile() ?: run {
                 _state.value = TranscriptionUiState.Failed(R.string.err_no_recording)
                 return@launch

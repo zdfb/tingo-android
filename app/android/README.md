@@ -59,8 +59,11 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
 
-当前状态（最近一次全量验证，2026-11-07）：**JVM 单测 206 个全绿；设备级测试 33 个全绿**
-（API 36 arm64 模拟器，含端到端转写流水线、真实模型下载与校验、llama 生成、会议库备份恢复）。
+当前状态（2026-11-09 实机验收）：**JVM 单测 213 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
+arm64）在**飞行模式下**跑通 17 个设备级用例（引擎桥接 10、备份恢复与 sherpa 运行时 4、
+中文识别 / 双人流水线 / llama 生成 3），证明内置模型确实离线可用。
+Compose UI 测试（16 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
+系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
 完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除四个
 依赖下载的测试类：
 
@@ -76,9 +79,21 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`（此时
 llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 
-模型不进 APK：语音模型（Paraformer 227 MB + 标点 76 MB + CAM++ 28 MB + VAD 0.6 MB）与
-语言模型（Qwen3-0.6B Q4_K_M 397 MB）由 App 首次使用时按 `assets/models.json`、`assets/llm.json`
-下载到 `files/tingo/models/`，带续传与 sha256 校验；设置页可看占用、可删除。
+**模型随 APK 内置**：语音模型（Paraformer int8 227 MB + 标点 76 MB + CAM++ 28 MB + VAD 0.6 MB）
+与语言模型（Qwen3-0.6B Q4_K_M 397 MB）都打进 `assets/models/`，APK 约 **746 MB**。
+安装后首次启动由 `ModelInstaller` 解包到应用私有目录（幂等、带进度），**端侧推理全程不需要网络**。
+
+模型不进仓库（700+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：
+
+```bash
+./scripts/fetch-models-offline.sh              # 优先从已连接设备取，其次走镜像
+./scripts/fetch-models-offline.sh --from-mirror # 只走镜像
+```
+
+网络下载路径仍然保留作兜底（开发构建没内置模型时可用），但正常安装包里不需要它。
+验证"真的离线可用"：把手机调成飞行模式，跑 `RecognitionInstrumentedTest` /
+`PipelineInstrumentedTest` / `LlamaInstrumentedTest` —— 本轮实机（REDMI Turbo 4）在断网下
+这三个用例全绿。
 
 **校验强度**：四个语音模型都带 sha256，下载后校验摘要；语言模型这一版 `sha256` 留空
 （镜像不稳定，多次下载中断，没能稳定取到摘要），此时只校验体积与校验指纹——这一点在

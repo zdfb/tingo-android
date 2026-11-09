@@ -125,6 +125,18 @@ fun hostLibPath(): String {
  * 设备级测试用的会议夹具直接取自引擎的测试夹具，避免仓库里存两份。
  * 输出到 `fixtures/` 子目录，测试侧照旧按 `assets("fixtures/<会议>")` 读取。
  */
+/**
+ * 把 `models/` 里的模型打进 assets/models/，安装后由应用解包到自己的模型目录。
+ *
+ * 模型不进仓库（700+ MB 的二进制不该进 git）：`scripts/fetch-models-offline.sh` 负责把它们
+ * 从模拟器/实机或镜像取到 `models/`。缺文件时这里只警告、不失败，方便只跑单元测试。
+ */
+val syncBundledModels by tasks.registering(Sync::class) {
+    from(layout.projectDirectory.dir("../models"))
+    into(layout.buildDirectory.dir("generated/models/assets/models"))
+    include("*.onnx", "*.gguf", "*.txt", "*.mvn")
+}
+
 val syncTestFixtures by tasks.registering(Sync::class) {
     from(rootProject.layout.projectDirectory.dir("../engine/tests/fixtures"))
     into(layout.buildDirectory.dir("generated/fixtures/assets/fixtures"))
@@ -173,6 +185,11 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        // 模型是二进制大文件：压缩只会让 APK 更大、首次解包更慢
+        noCompress += listOf("onnx", "gguf", "mvn", "txt")
+    }
+
     defaultConfig {
         // 把打包的 ABI 清单注入代码：AbiCheck 因此不需要自己再写一份
         buildConfigField("String", "SUPPORTED_ABIS", "\"${rustAbis.joinToString(",")}\"")
@@ -184,6 +201,8 @@ android {
             // Android SourceSet API 不接受 Provider，这里在配置期解析为具体目录
             kotlin.srcDir(uniffiOutDir.get().asFile)
             jniLibs.srcDir(cargoJniLibsDir.get().asFile)
+            // 模型随 APK 内置：assemble 前把 models/ 的内容放进 assets/models/
+            assets.srcDir(layout.buildDirectory.dir("generated/models/assets").get().asFile)
         }
         getByName("test") {
             kotlin.srcDir("src/test/kotlin")
@@ -210,6 +229,11 @@ tasks.named("preBuild") {
 // androidTest 的 assets 在合并测试资源之前要就位
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAssets") }.configureEach {
     dependsOn(syncTestFixtures)
+}
+
+// 主 assets（内置模型）要在合并主资源之前同步好
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") && !it.name.contains("AndroidTest") }.configureEach {
+    dependsOn(syncBundledModels)
 }
 
 dependencies {

@@ -52,6 +52,8 @@ class MinutesViewModel(
     /** 语言模型的下载器；缺失时由本 ViewModel 自己按清单下载 */
     private val store: ModelStore? = null,
     private val catalog: ModelCatalog? = null,
+    /** 从 APK 内置模型包解包（删过模型的用户不必联网） */
+    private val ensureBundled: () -> Boolean = { false },
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -121,6 +123,9 @@ class MinutesViewModel(
      * 而应用里根本没有触发下载的入口，等于这条功能在新机器上永远用不了。
      */
     private suspend fun downloadModelIfNeeded(): Boolean {
+        if (isModelReady()) return true
+        // 先试内置包：模型随 APK 分发，正常路径完全不联网
+        if (runCatching { ensureBundled() }.getOrDefault(false) && isModelReady()) return true
         val file = catalog?.files?.firstOrNull { store?.fileFor(it) == modelFile } ?: return isModelReady()
         if (store == null) return isModelReady()
         if (store.isReady(file)) return true

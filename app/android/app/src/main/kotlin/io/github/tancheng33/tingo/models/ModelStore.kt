@@ -54,6 +54,15 @@ class ModelStore(
     /** 校验通过后写下的指纹文件；改模型或删模型时一起消失。 */
     private fun markerFor(file: ModelFile): File = File(dir, "${file.fileName}.verified")
 
+    /**
+     * 写入"这个文件已经校验过"的指纹。
+     *
+     * 内置模型是按清单解包出来的：解包时核对过体积，等价于一次成功校验。
+     */
+    fun markVerified(file: ModelFile) {
+        markerFor(file).writeText(file.sha256 ?: "size-only")
+    }
+
     /** 作废一个模型（校验不符或推理时崩了）：删文件与指纹，下次会重新下载。 */
     fun invalidate(file: ModelFile) {
         fileFor(file).delete()

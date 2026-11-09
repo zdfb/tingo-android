@@ -16,6 +16,9 @@ import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.settings.SharedPrefsStore
+import io.github.tancheng33.tingo.models.AssetModelBundle
+import io.github.tancheng33.tingo.models.ModelBundle
+import io.github.tancheng33.tingo.models.ModelInstaller
 import java.io.File
 
 /**
@@ -49,7 +52,7 @@ class AppContainer(context: Context) {
             UnavailableEngine(IllegalStateException("unsupported abi"))
         }
 
-    /** 端侧模型的清单与仓库：模型不进 APK，按清单下载到 `files/tingo/models`。 */
+    /** 端侧模型的清单与仓库：模型随 APK 内置，解包到 `files/tingo/models`。 */
     val catalog: ModelCatalog = ModelCatalog.parse(
         appContext.assets.open("models.json").bufferedReader().use { it.readText() },
     )
@@ -60,6 +63,46 @@ class AppContainer(context: Context) {
         appContext.assets.open("llm.json").bufferedReader().use { it.readText() },
     )
     val llmFile: File = models.fileFor(llmCatalog.files.single())
+
+    /** 内置模型包（`assets/models/`）。 */
+    private val bundle: ModelBundle = AssetModelBundle(appContext.assets)
+
+    private val installMutex = Any()
+
+    /** 内置模型的解包进度：0..1；null 表示不需要解包。 */
+    private val _installProgress = kotlinx.coroutines.flow.MutableStateFlow<Float?>(null)
+    val installProgress: kotlinx.coroutines.flow.StateFlow<Float?> = _installProgress
+
+    /**
+     * 把内置模型解包到模型目录。
+     *
+     * 幂等：已经解包过就直接返回，所以可以在启动、转写、生成纪要三处都放心调用。
+     * 安装包缺模型（例如开发时没跑 `fetch-models-offline.sh`）时返回 false，
+     * 此时界面仍走原来的下载路径。
+     */
+    fun installBundledModels(): Boolean {
+        synchronized(installMutex) {
+            if (catalog.files.all { models.isReady(it) } && llmCatalog.files.all { models.isReady(it) }) {
+                return true
+            }
+            _installProgress.value = 0f
+            val asrOk = ModelInstaller.install(models, catalog, bundle) { fraction ->
+                _installProgress.value = fraction * 0.45f
+            }
+            val llmOk = ModelInstaller.install(models, llmCatalog, bundle) { fraction ->
+                _installProgress.value = 0.45f + fraction * 0.55f
+            }
+            _installProgress.value = null
+            return asrOk && llmOk
+        }
+    }
+
+    /** 启动时在后台解包内置模型；不阻塞首帧。 */
+    fun installBundledModelsOnStart() {
+        kotlin.concurrent.thread(name = "tingo-models", isDaemon = true) {
+            runCatching { installBundledModels() }
+        }
+    }
 
     /**
      * 启动时修复没来得及收尾的录音（进程被杀 / 服务被系统结束）。

@@ -21,8 +21,10 @@ object ModelDownloads {
     fun catalog(context: Context, asset: String = "models.json"): ModelCatalog =
         ModelCatalog.parse(context.assets.open(asset).bufferedReader().readText())
 
-    /** 确保这些文件都下好；失败会退避重试（下载支持续传，重试很便宜）。 */
+    /** 确保这些文件都下好；优先用 APK 内置的模型，实在没有再走网络。 */
     fun ensure(store: ModelStore, files: List<ModelFile>, attempts: Int = 3) {
+        val bundled = ModelBundleInstaller.installAll(store, files)
+        if (bundled) return
         files.forEach { file ->
             if (store.isReady(file)) return@forEach
             var lastError: Throwable? = null

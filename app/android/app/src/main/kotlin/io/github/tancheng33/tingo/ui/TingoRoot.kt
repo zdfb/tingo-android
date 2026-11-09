@@ -438,6 +438,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
         factory = viewModelFactory {
             initializer {
                 TranscriptionViewModel(
+                    ensureBundled = container::installBundledModels,
                     transcriber = TranscriptionPipeline(container.models, container.catalog),
                     store = container.models,
                     catalog = container.catalog,
@@ -462,6 +463,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                     meetingDir = meetingDir,
                     store = container.models,
                     catalog = container.llmCatalog,
+                    ensureBundled = container::installBundledModels,
                 )
             }
         },
