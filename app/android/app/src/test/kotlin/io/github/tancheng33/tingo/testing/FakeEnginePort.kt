@@ -175,6 +175,11 @@ class FakeEnginePort(
         return "/tmp/$id.srt"
     }
 
+    override fun exportExcalidraw(id: String): List<String> {
+        exportedExcalidraw += id
+        return listOf("/tmp/$id/鱼骨图.excalidraw")
+    }
+
     /** 纪要历史：用例直接塞 */
     var history: List<MinutesVersionInfo> = emptyList()
     var versions: Map<String, String> = emptyMap()
@@ -182,6 +187,7 @@ class FakeEnginePort(
     val deletedVersions = mutableListOf<String>()
     val savedMinutes = mutableListOf<Pair<String, String>>()
     val exportedSrt = mutableListOf<Pair<String, String>>()
+    val exportedExcalidraw = mutableListOf<String>()
 
     /** 说话人列表：用例直接塞 */
     var speakerList: List<SpeakerInfo> = emptyList()

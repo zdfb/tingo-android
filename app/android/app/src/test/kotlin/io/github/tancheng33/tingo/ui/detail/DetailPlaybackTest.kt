@@ -128,6 +128,7 @@ class DetailPlaybackTest {
         override fun deleteMinutesVersion(id: String, versionId: String) = Unit
         override fun saveMinutes(id: String, text: String) = Unit
         override fun exportSrt(id: String, language: String) = ""
+        override fun exportExcalidraw(id: String) = emptyList<String>()
     }
 
     private fun viewModel(dir: File, player: FakePlayer) = DetailViewModel(

@@ -28,10 +28,10 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 18 | 删除到废纸篓 + 恢复 | macOS 废纸篓 | 已有（`.trash/<id>`，可恢复/彻底清除） | — |
 | 19 | 存储空间管理与清理 | `disk.rs` + `/api/storage/cleanup` | 已有（总量/音频/残留 + 清理残留） | — |
 | 20 | 导出 Markdown / ZIP | `/api/meetings/{id}/minutes` | 已有（zip + md 分享） | — |
-| 21 | 导出 Word（docx） | `/api/meetings/{id}/docx` | 无 | 缺 |
+| 21 | 导出 Word（docx） | `/api/meetings/{id}/docx`（macOS `textutil`） | 已有（Android 直接写 OOXML，同一份 Markdown） | 实现不同、结果等价 |
 | 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 已有（命名与桌面一致，导出后走系统分享） | — |
-| 23 | 导出 PDF | `/api/meetings/{id}/pdf` | 无 | 缺 |
-| 24 | 导出 Excalidraw（鱼骨图） | `/api/meetings/{id}/excalidraw` | 无 | 缺 |
+| 23 | 导出 PDF | `/api/meetings/{id}/pdf`（系统 WebKit 打印） | 已有（`PdfDocument` 排 A4） | 实现不同、结果等价 |
+| 24 | 导出 Excalidraw（鱼骨图） | `/api/meetings/{id}/excalidraw` | 已有（复用引擎 `fishbone::excalidraw`，与桌面同一份） | — |
 | 25 | 导入音频 | `/api/import` | 无 | 缺 |
 | 26 | 内置示例会议 / 新手引导 | `/api/demo` + `welcome.ts` | 无 | 缺 |
 | 27 | 检查更新（校验安装包） | `update.rs` | 无（走应用商店，不迁移自更新） | 不做自更新 |

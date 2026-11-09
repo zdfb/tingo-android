@@ -182,4 +182,7 @@
     <string name="home_recent">最近</string>
     <string name="detail_history_preview_title">历史版本（只读）</string>
     <string name="detail_history_delete_confirm">删除后无法恢复，再点一次</string>
+    <string name="detail_export_docx">导出 Word</string>
+    <string name="detail_export_excalidraw">导出 Excalidraw 鱼骨图</string>
+    <string name="detail_export_pdf">导出 PDF</string>
 </resources>

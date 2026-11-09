@@ -98,6 +98,9 @@ fun DetailScreen(
     initialSeekMs: Long? = null,
     onSaveMinutes: (String) -> Unit = {},
     onExportSrt: () -> Unit = {},
+    onExportDocx: () -> Unit = {},
+    onExportPdf: () -> Unit = {},
+    onExportExcalidraw: () -> Unit = {},
     history: List<io.github.tancheng33.tingo.engine.MinutesVersionInfo> = emptyList(),
     /** 正在查看的历史版本全文；非空时盖一层只读面板 */
     preview: VersionPreview? = null,
@@ -221,12 +224,39 @@ fun DetailScreen(
                                     },
                                 )
                             }
+                            if (detail?.minutesText != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_export_docx), color = TingoTheme.colors.text) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onExportDocx()
+                                    },
+                                )
+                            }
+                            if (detail?.minutesText != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_export_pdf), color = TingoTheme.colors.text) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onExportPdf()
+                                    },
+                                )
+                            }
                             if (detail?.transcript != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.detail_export_srt), color = TingoTheme.colors.text) },
                                     onClick = {
                                         menuOpen = false
                                         onExportSrt()
+                                    },
+                                )
+                            }
+                            if (detail?.fishbone != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_export_excalidraw), color = TingoTheme.colors.text) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onExportExcalidraw()
                                     },
                                 )
                             }

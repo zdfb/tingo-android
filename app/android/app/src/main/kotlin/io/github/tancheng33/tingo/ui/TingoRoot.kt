@@ -78,6 +78,8 @@ import io.github.tancheng33.tingo.ui.detail.TranscriptionUiState
 import io.github.tancheng33.tingo.data.MeetingExporter
 import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.BuildConfig
+import io.github.tancheng33.tingo.export.DocxWriter
+import io.github.tancheng33.tingo.export.PdfWriter
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
@@ -718,6 +720,71 @@ private fun DetailRoute(
             onOpenVersion = viewModel::openVersion,
             onRestoreVersion = viewModel::restoreVersion,
             onDeleteVersion = viewModel::deleteVersion,
+            onExportDocx = {
+                val minutesText = state.detail?.minutesText
+                if (!minutesText.isNullOrBlank()) {
+                    exportScope.launch {
+                        // 桌面端是 HTML → macOS textutil；手机上没有那个工具，直接写 OOXML
+                        val shared = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+                                val target = File(dir, "${meetingTitle.ifBlank { meetingId }}.docx")
+                                DocxWriter.write(
+                                    markdown = minutesText,
+                                    title = meetingTitle,
+                                    meta = exportMeta(state.detail),
+                                    target = target,
+                                )
+                                target
+                            }.getOrNull()
+                        }
+                        if (shared != null) {
+                            shareFile(
+                                context,
+                                shared,
+                                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            )
+                        }
+                    }
+                }
+            },
+            onExportPdf = {
+                val minutesText = state.detail?.minutesText
+                if (!minutesText.isNullOrBlank()) {
+                    exportScope.launch {
+                        // 桌面端交给系统 WebKit 打印；手机上用 PdfDocument 直接排
+                        val shared = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+                                val target = File(dir, "${meetingTitle.ifBlank { meetingId }}.pdf")
+                                PdfWriter.write(
+                                    markdown = minutesText,
+                                    title = meetingTitle,
+                                    meta = exportMeta(state.detail),
+                                    target = target,
+                                )
+                                target
+                            }.getOrNull()
+                        }
+                        if (shared != null) shareFile(context, shared, mime = "application/pdf")
+                    }
+                }
+            },
+            onExportExcalidraw = {
+                exportScope.launch {
+                    val paths = viewModel.exportExcalidraw()
+                    val first = paths.firstOrNull()
+                    if (first != null) {
+                        val shared = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+                                File(dir, File(first).name).also { File(first).copyTo(it, overwrite = true) }
+                            }.getOrNull()
+                        }
+                        if (shared != null) shareFile(context, shared, mime = "application/json")
+                    }
+                }
+            },
             onExportSrt = {
                 exportScope.launch {
                     // 导出是引擎写的文件（命名与桌面一致），这里只负责把文件分享出去
@@ -752,6 +819,17 @@ private fun DetailRoute(
             onTogglePlay = viewModel::togglePlayPause,
         )
     }
+}
+
+/** 导出文档的抬头行：日期 时间 · 时长 · 参会人（与桌面 HTML 版同样的信息）。 */
+private fun exportMeta(detail: io.github.tancheng33.tingo.engine.MeetingDetail?): String {
+    val summary = detail?.summary ?: return ""
+    val speakers = summary.speakers.joinToString("、")
+    return listOfNotNull(
+        listOf(summary.date, summary.time).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null },
+        summary.duration.takeIf { it.isNotBlank() },
+        speakers.takeIf { it.isNotBlank() },
+    ).joinToString(" · ")
 }
 
 @Composable

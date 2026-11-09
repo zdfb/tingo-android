@@ -1487,12 +1487,7 @@ async fn post_excalidraw(
 
 /// 第 k 张鱼骨图的文件名：鱼骨图.excalidraw、鱼骨图2.excalidraw / fishbone.excalidraw、fishbone2.excalidraw
 fn excalidraw_name(k: usize, lang: Lang) -> String {
-    let base = lang.pick("鱼骨图", "fishbone");
-    if k == 0 {
-        format!("{base}.excalidraw")
-    } else {
-        format!("{base}{}.excalidraw", k + 1)
-    }
+    fishbone::excalidraw_name(k, lang)
 }
 
 fn no_minutes() -> &'static str {

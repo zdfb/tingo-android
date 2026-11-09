@@ -112,6 +112,9 @@ interface TingoEnginePort {
     /** 导出 SRT 到会议目录，返回文件绝对路径。 */
     fun exportSrt(id: String, language: String): String
 
+    /** 把纪要里的鱼骨图导出成 .excalidraw，返回写出的文件路径（可能有多个）。 */
+    fun exportExcalidraw(id: String): List<String>
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -191,6 +194,9 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun exportSrt(id: String, language: String): String =
         mapEngineCall { engine.exportSrt(id, language) }
+
+    override fun exportExcalidraw(id: String): List<String> =
+        mapEngineCall { engine.exportExcalidraw(id) }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

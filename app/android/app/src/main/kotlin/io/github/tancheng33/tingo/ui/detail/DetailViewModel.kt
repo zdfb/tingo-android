@@ -163,6 +163,16 @@ class DetailViewModel(
         }
     }
 
+    /** 导出鱼骨图 `.excalidraw`；返回写出的路径，失败返回空。 */
+    suspend fun exportExcalidraw(): List<String> = withContext(io) {
+        try {
+            engine.exportExcalidraw(meetingId)
+        } catch (e: TingoFailure) {
+            _state.value = _state.value.copy(failure = e.kind)
+            emptyList()
+        }
+    }
+
     /**
      * 导出 SRT；返回文件路径，失败返回 null。
      *

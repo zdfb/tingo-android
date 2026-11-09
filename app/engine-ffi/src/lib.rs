@@ -675,6 +675,49 @@ impl TingoEngine {
         })
     }
 
+
+    /// 把纪要里的鱼骨图导出成 `.excalidraw`（可拖进 excalidraw.com 或 Obsidian 继续改），
+    /// 返回写出的文件路径。画板文字与文件名跟纪要语言走，与桌面同一套实现。
+    pub fn export_excalidraw(&self, id: String) -> Result<Vec<String>, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("export_excalidraw", move || {
+            let minutes = std::fs::read_to_string(dir.join(meetings::MINUTES)).map_err(|e| {
+                io_error(e, "export_excalidraw")
+            })?;
+            let lang = tingo_engine::i18n::doc_lang(&minutes);
+            let transcript = engine_transcript::Transcript::load(&dir.join("transcript.json"))
+                .ok()
+                .map(|t| t.localized(lang));
+            let turns = transcript.as_ref().map(|t| t.turns()).unwrap_or_default();
+            let duration = transcript.as_ref().map(|t| t.duration_ms).unwrap_or(u64::MAX);
+            let specs: Vec<_> = engine_fishbone::blocks(&minutes)
+                .into_iter()
+                .filter_map(|(_, spec)| spec)
+                .collect();
+            if specs.is_empty() {
+                return Err(EngineError::Missing {
+                    detail: "这份纪要里没有鱼骨图".to_string(),
+                });
+            }
+            let mut paths = Vec::new();
+            for (index, spec) in specs.iter().enumerate() {
+                let grounds: Vec<_> = spec
+                    .branches
+                    .iter()
+                    .map(|branch| engine_fishbone::ground(branch, &turns, duration))
+                    .collect();
+                let path = dir.join(engine_fishbone::excalidraw_name(index, lang));
+                let text = serde_json::to_string_pretty(
+                    &engine_fishbone::excalidraw(spec, &grounds, lang),
+                )
+                .map_err(|e| EngineError::Internal { detail: e.to_string() })?;
+                std::fs::write(&path, text).map_err(|e| io_error(e, "export_excalidraw"))?;
+                paths.push(path.to_string_lossy().into_owned());
+            }
+            Ok(paths)
+        })
+    }
+
     /// 导出 SRT 字幕到会议目录，返回文件绝对路径。命名规则与桌面一致（纪要标题优先）。
     pub fn export_srt(&self, id: String, language: String) -> Result<String, EngineError> {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
@@ -1763,6 +1806,47 @@ mod tests {
         let engine = TingoEngine::new(root.display().to_string());
 
         let result = engine.export_srt("2026-11-05_1000_周会".to_string(), "zh".to_string());
+        assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 导出 Excalidraw ----
+
+    /// 纪要里嵌一块鱼骨图。格式与模型产出一致（```fishbone 代码块里放 JSON）。
+    fn minutes_with_fishbone(dir: &Path) -> std::path::PathBuf {
+        let spec = r#"{"problem":"注册转化率下降","branches":[{"title":"产品","detail":"首屏太慢"},{"title":"技术","detail":"埋点缺失"}]}"#;
+        let md = format!("# 产品复盘\n\n## 一句话总结\n转化率下降。\n\n## 原因分析\n\n```fishbone\n{spec}\n```\n");
+        std::fs::write(dir.join("纪要.md"), md).unwrap();
+        dir.to_path_buf()
+    }
+
+    #[test]
+    fn exports_one_excalidraw_file_per_fishbone() {
+        let root = temp_root("excalidraw");
+        let dir = meeting(&root, "2026-11-07_1000_产品复盘");
+        minutes_with_fishbone(&dir);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let paths = engine.export_excalidraw("2026-11-07_1000_产品复盘".to_string()).unwrap();
+
+        assert_eq!(paths.len(), 1);
+        assert!(paths[0].ends_with("鱼骨图.excalidraw"), "实际：{paths:?}");
+        let body = std::fs::read_to_string(&paths[0]).unwrap();
+        // 是 Excalidraw 认的画板文档，而不是随手写的 JSON
+        assert!(body.contains("\"type\": \"excalidraw\""), "缺少画板类型：{body:.120}");
+        assert!(body.contains("注册转化率下降"), "问题文本没进画板");
+        assert!(body.contains("首屏太慢"), "分支原因没进画板");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn excalidraw_export_without_fishbone_is_missing() {
+        let root = temp_root("excalidraw-none");
+        let dir = meeting(&root, "2026-11-07_1000_产品复盘");
+        std::fs::write(dir.join("纪要.md"), "# 产品复盘\n\n## 一句话总结\n没有鱼骨图。\n").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.export_excalidraw("2026-11-07_1000_产品复盘".to_string());
         assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
         let _ = std::fs::remove_dir_all(&root);
     }

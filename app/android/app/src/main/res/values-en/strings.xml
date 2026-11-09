@@ -182,4 +182,7 @@
     <string name="home_recent">Recent</string>
     <string name="detail_history_preview_title">History version (read-only)</string>
     <string name="detail_history_delete_confirm">Deleted versions cannot be restored — tap again to confirm</string>
+    <string name="detail_export_docx">Export Word</string>
+    <string name="detail_export_excalidraw">Export Excalidraw diagram</string>
+    <string name="detail_export_pdf">Export PDF</string>
 </resources>

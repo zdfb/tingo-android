@@ -154,4 +154,67 @@ class LibraryManageInstrumentedTest {
         val body = srt.readText()
         assertTrue("SRT 缺少序号或时间轴：$body", body.contains("-->") && body.contains("先修首屏"))
     }
+
+    @Test
+    fun exportsExcalidrawForFishboneMinutes() {
+        val (engine, meetingsRoot) = engine()
+        val dir = File(meetingsRoot, "2026-11-08_0900_复盘").apply { mkdirs() }
+        File(dir, "纪要.md").writeText(
+            """# 复盘
+
+## 原因分析
+
+```fishbone
+{"problem":"转化率下降","branches":[{"title":"产品","detail":"首屏太慢"}]}
+```
+""",
+        )
+
+        val paths = engine.exportExcalidraw("2026-11-08_0900_复盘")
+
+        assertEquals(1, paths.size)
+        val body = File(paths[0]).readText()
+        assertTrue("画板类型缺失：$body", body.contains("excalidraw"))
+        assertTrue("问题文本没进画板", body.contains("转化率下降"))
+    }
+
+    @Test
+    fun docxExportProducesARealWordPackage() {
+        val dir = File(context.cacheDir, "docx-export").apply { deleteRecursively(); mkdirs() }
+        val target = File(dir, "周会.docx")
+
+        io.github.tancheng33.tingo.export.DocxWriter.write(
+            markdown = "# 周会\n\n## 决议\n- 先修首屏\n",
+            title = "周会",
+            meta = "2026-11-08 09:00",
+            target = target,
+        )
+
+        java.util.zip.ZipFile(target).use { zip ->
+            assertTrue("缺正文", zip.getEntry("word/document.xml") != null)
+            val doc = zip.getInputStream(zip.getEntry("word/document.xml")).bufferedReader().readText()
+            assertTrue("正文里没有决议：$doc", doc.contains("先修首屏"))
+        }
+    }
+
+    @Test
+    fun pdfExportLooksLikeAPdfWithTheContentInIt() {
+        val dir = File(context.cacheDir, "pdf-export").apply { deleteRecursively(); mkdirs() }
+        val target = File(dir, "周会.pdf")
+        val long = buildString {
+            append("# 周会\n\n## 议题与讨论\n")
+            repeat(60) { append("- 第 ${it + 1} 条讨论内容：这一行故意写长一点，用来触发折行与分页\n") }
+        }
+
+        io.github.tancheng33.tingo.export.PdfWriter.write(
+            markdown = long,
+            title = "周会",
+            meta = "2026-11-08 09:00",
+            target = target,
+        )
+
+        val head = target.readBytes().take(5).toByteArray().toString(Charsets.US_ASCII)
+        assertEquals("%PDF-", head)
+        assertTrue("PDF 太小，可能没写进内容：${target.length()}", target.length() > 3_000)
+    }
 }

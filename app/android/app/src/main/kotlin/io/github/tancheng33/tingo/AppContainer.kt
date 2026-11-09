@@ -191,6 +191,8 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun exportSrt(id: String, language: String): Nothing = fail()
 
+    override fun exportExcalidraw(id: String): Nothing = fail()
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,
