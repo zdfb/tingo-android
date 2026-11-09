@@ -286,18 +286,6 @@ impl Canvas {
 
 /// 画一张经典鱼骨图：主骨水平，问题在鱼头（右侧），分支上下交替斜插在主骨上，
 /// 导出仅包含标题和说明；没有原文依据的分支画成红色。
-/// 第 k 张鱼骨图的文件名：`鱼骨图.excalidraw`、`鱼骨图2.excalidraw` / `fishbone.excalidraw`…
-///
-/// 桌面与 Android 都要按同一套命名落盘，规则放这里共用。
-pub fn excalidraw_name(k: usize, lang: Lang) -> String {
-    let base = lang.pick("鱼骨图", "fishbone");
-    if k == 0 {
-        format!("{base}.excalidraw")
-    } else {
-        format!("{base}{}.excalidraw", k + 1)
-    }
-}
-
 pub fn excalidraw(spec: &Spec, grounds: &[Grounding], _lang: Lang) -> Value {
     const COL: f64 = 300.0; // 每对分支占的宽度
     const RISE: f64 = 150.0; // 斜骨的高度
@@ -360,6 +348,18 @@ pub fn excalidraw(spec: &Spec, grounds: &[Grounding], _lang: Lang) -> Value {
 }
 
 /// Obsidian Excalidraw 插件的 .excalidraw.md 格式：文字元素列在正文里便于搜索，画面数据放在注释里。
+/// 第 k 张鱼骨图的文件名：`鱼骨图.excalidraw`、`鱼骨图2.excalidraw` / `fishbone.excalidraw`…
+///
+/// 桌面与 Android 都要按同一套命名落盘，规则放这里共用。
+pub fn excalidraw_name(k: usize, lang: Lang) -> String {
+    let base = lang.pick("鱼骨图", "fishbone");
+    if k == 0 {
+        format!("{base}.excalidraw")
+    } else {
+        format!("{base}{}.excalidraw", k + 1)
+    }
+}
+
 pub fn excalidraw_md(drawing: &Value) -> String {
     let texts: Vec<String> = drawing["elements"]
         .as_array()

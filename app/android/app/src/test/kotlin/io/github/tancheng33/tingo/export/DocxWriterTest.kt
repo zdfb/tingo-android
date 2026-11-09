@@ -104,6 +104,21 @@ class DocxWriterTest {
     }
 
     @Test
+    fun numberedListsKeepTheirTextAndReferenceRealNumbering() {
+        val docx = write()
+        val doc = entry(docx, "word/document.xml")
+        val names = ZipFile(docx).use { zip -> zip.entries().toList().map { it.name } }
+
+        // 编号列表的正文不能被序号替换掉（曾经 `replace("$1")` 把整句吃了）
+        assertTrue("编号列表丢了正文：$doc", doc.contains("先修首屏") && doc.contains("再补埋点"))
+        // 样式里引用 numId，就必须真的写出 numbering.xml，否则 Word 里没有符号
+        assertTrue("缺 numbering.xml：$names", names.contains("word/numbering.xml"))
+        val numbering = entry(docx, "word/numbering.xml")
+        assertTrue("编号定义里没有 decimal：$numbering", numbering.contains("decimal"))
+        assertTrue("项目符号定义缺失", numbering.contains("bullet"))
+    }
+
+    @Test
     fun inlineBoldBecomesARunWithBoldFlag() {
         val doc = entry(write("## 决议\n\n- 首屏 **太慢**\n"), "word/document.xml")
 

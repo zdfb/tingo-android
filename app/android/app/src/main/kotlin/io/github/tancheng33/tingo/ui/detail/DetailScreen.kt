@@ -224,7 +224,8 @@ fun DetailScreen(
                                     },
                                 )
                             }
-                            if (detail?.minutesText != null) {
+                            // Word 与 PDF 是同一条触发条件：有正文才给（空白纪要导出只会得到空文件）
+                            if (!detail?.minutesText.isNullOrBlank()) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.detail_export_docx), color = TingoTheme.colors.text) },
                                     onClick = {
@@ -232,8 +233,6 @@ fun DetailScreen(
                                         onExportDocx()
                                     },
                                 )
-                            }
-                            if (detail?.minutesText != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.detail_export_pdf), color = TingoTheme.colors.text) },
                                     onClick = {

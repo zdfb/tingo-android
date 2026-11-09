@@ -19,35 +19,103 @@ object PdfWriter {
     private const val MARGIN = 48f
     private val CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 
-    fun write(markdown: String, title: String, meta: String, target: File) {
-        val document = PdfDocument()
-        val layout = Layout()
-        layout.add(title, 20f, bold = true, after = 10f)
-        if (meta.isNotBlank()) layout.add(meta, 10f, color = 0xFF666666.toInt(), after = 18f)
-        markdown.lines().forEach { line ->
+    /** 一行待排文字：纯数据，排版逻辑（Markdown → 行）与绘制分开，便于单测。 */
+    internal data class Row(
+        val text: String,
+        val size: Float,
+        val bold: Boolean = false,
+        val muted: Boolean = false,
+        val indent: Float = 0f,
+        val before: Float = 0f,
+        val after: Float = 2f,
+    )
+
+    /**
+     * Markdown → 待排行。
+     *
+     * 代码块按 `.docx` 同样的取舍：`terms` 丢掉（给模型的，不是给人看的）、
+     * `fishbone` 退化成"问题 + 分支"的文字；行内加粗只保留文字，不把星号印到纸上。
+     */
+    internal fun rows(markdown: String, title: String, meta: String): List<Row> {
+        val out = mutableListOf<Row>()
+        out += Row(title, 20f, bold = true, after = 10f)
+        if (meta.isNotBlank()) out += Row(meta, 10f, muted = true, after = 18f)
+        val lines = markdown.lines()
+        var index = 0
+        while (index < lines.size) {
+            val line = lines[index]
+            if (line.startsWith("```")) {
+                val language = line.removePrefix("```").trim()
+                val block = StringBuilder()
+                index++
+                while (index < lines.size && !lines[index].startsWith("```")) {
+                    block.append(lines[index]).append('\n')
+                    index++
+                }
+                out += fenceRows(language, block.toString())
+                index++
+                continue
+            }
             when {
-                line.startsWith("### ") -> layout.add(line.removePrefix("### "), 12f, bold = true, before = 8f, indent = 0f)
-                line.startsWith("## ") -> layout.add(line.removePrefix("## "), 14f, bold = true, before = 14f, after = 4f)
+                line.startsWith("### ") -> out += Row(line.removePrefix("### "), 12f, bold = true, before = 8f)
+                line.startsWith("## ") -> out += Row(line.removePrefix("## "), 14f, bold = true, before = 14f, after = 4f)
                 line.startsWith("# ") -> if (line.removePrefix("# ").trim() != title) {
-                    layout.add(line.removePrefix("# "), 16f, bold = true, before = 16f, after = 6f)
+                    out += Row(line.removePrefix("# "), 16f, bold = true, before = 16f, after = 6f)
                 }
                 line.startsWith("- ") || line.startsWith("* ") ->
-                    layout.add("• " + line.drop(2), 11f, indent = 12f, after = 2f)
+                    out += Row("• " + plain(line.drop(2)), 11f, indent = 12f, after = 2f)
                 line.startsWith("|") -> {
                     val cells = line.trim().trim('|').split("|").map { it.trim() }
-                    if (cells.all { it.matches(Regex(":?-{2,}:?")) }) return@forEach
-                    layout.add(cells.joinToString("   "), 10f, indent = 8f, after = 1f)
+                    if (!cells.all { it.matches(Regex(":?-{2,}:?")) }) {
+                        out += Row(cells.joinToString("   "), 10f, indent = 8f, after = 1f)
+                    }
                 }
-                line.isBlank() -> layout.add("", 6f, after = 0f)
-                else -> layout.add(line, 11f, after = 4f)
+                line.isBlank() -> out += Row("", 6f, after = 0f)
+                else -> out += Row(plain(line), 11f, after = 4f)
             }
+            index++
         }
+        return out
+    }
+
+    /** 代码块的排法；`terms` 丢弃，`fishbone` 退化成文字，其余原样。 */
+    private fun fenceRows(language: String, block: String): List<Row> {
+        val text = block.trim()
+        if (text.isEmpty()) return emptyList()
+        return when (language) {
+            "terms" -> emptyList()
+            "fishbone" -> {
+                val spec = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return emptyList()
+                val rows = mutableListOf(Row(spec.optString("problem"), 11f, bold = true, after = 2f))
+                val branches = spec.optJSONArray("branches")
+                for (i in 0 until (branches?.length() ?: 0)) {
+                    val branch = branches!!.optJSONObject(i)
+                    val detail = branch?.optString("detail").orEmpty()
+                    val line = if (detail.isBlank()) {
+                        branch?.optString("title").orEmpty()
+                    } else {
+                        "${branch?.optString("title")}：$detail"
+                    }
+                    rows += Row("• $line", 11f, indent = 12f, after = 1f)
+                }
+                rows
+            }
+            else -> text.lines().map { Row(it, 10f, indent = 8f, after = 1f) }
+        }
+    }
+
+    /** 去掉行内加粗标记：PDF 里用同字号，星号不该印在纸上。 */
+    private fun plain(text: String): String = text.replace("**", "")
+
+    fun write(markdown: String, title: String, meta: String, target: File) {
+        val document = PdfDocument()
+        val rows = rows(markdown, title, meta)
 
         var pageNumber = 1
         var page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
         var y = MARGIN
-        for (item in layout.items) {
-            val paint = item.paint()
+        for (item in rows) {
+            val paint = paintFor(item)
             val lines = wrap(item.text, paint, CONTENT_WIDTH - item.indent)
             val needed = item.before + lines.size * paint.textSize * 1.5f + item.after
             if (y + needed > PAGE_HEIGHT - MARGIN) {
@@ -66,8 +134,12 @@ object PdfWriter {
         }
         document.finishPage(page)
         target.parentFile?.mkdirs()
-        target.outputStream().use { document.writeTo(it) }
-        document.close()
+        try {
+            target.outputStream().use { document.writeTo(it) }
+        } finally {
+            // 原生文档不释放会一直占内存；中途抛异常时也要关
+            document.close()
+        }
     }
 
     /** 按可用宽度折行；中文没有空格，逐字量宽度。 */
@@ -90,37 +162,11 @@ object PdfWriter {
         return lines
     }
 
-    /** 一行待排文字：字号、粗体、缩进与上下间距。 */
-    private class Item(
-        val text: String,
-        val size: Float,
-        val bold: Boolean,
-        val color: Int,
-        val indent: Float,
-        val before: Float,
-        val after: Float,
-    ) {
-        fun paint(): Paint = Paint().apply {
-            textSize = size
-            isAntiAlias = true
-            this.color = color
-            typeface = if (bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
-        }
-    }
-
-    private class Layout {
-        val items = mutableListOf<Item>()
-
-        fun add(
-            text: String,
-            size: Float,
-            bold: Boolean = false,
-            color: Int = 0xFF1D1D1F.toInt(),
-            indent: Float = 0f,
-            before: Float = 0f,
-            after: Float = 2f,
-        ) {
-            items += Item(text, size, bold, color, indent, before, after)
-        }
+    /** 行样式 → 画笔：粗体、正文色与次要色。 */
+    private fun paintFor(row: Row): Paint = Paint().apply {
+        textSize = row.size
+        isAntiAlias = true
+        color = if (row.muted) 0xFF666666.toInt() else 0xFF1D1D1F.toInt()
+        typeface = if (row.bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
     }
 }

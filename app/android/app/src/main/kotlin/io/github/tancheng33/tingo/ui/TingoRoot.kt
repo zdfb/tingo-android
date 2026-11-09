@@ -472,6 +472,20 @@ fun TingoRoot(
 }
 
 /** 用系统分享面板把导出的文件交给别的应用；FileProvider 只授权 cache/exports。 */
+private fun shareFiles(context: android.content.Context, files: List<File>, mime: String) {
+    val uris = files.map { file ->
+        androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
+        type = mime
+        putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, ArrayList(uris))
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        android.content.Intent.createChooser(intent, context.getString(R.string.detail_export)),
+    )
+}
+
 private fun shareFile(context: android.content.Context, file: File, mime: String = "text/markdown") {
     val uri = androidx.core.content.FileProvider.getUriForFile(
         context,
@@ -721,68 +735,58 @@ private fun DetailRoute(
             onRestoreVersion = viewModel::restoreVersion,
             onDeleteVersion = viewModel::deleteVersion,
             onExportDocx = {
-                val minutesText = state.detail?.minutesText
-                if (!minutesText.isNullOrBlank()) {
+                val minutesText = state.detail?.minutesText.orEmpty()
+                if (minutesText.isNotBlank()) {
                     exportScope.launch {
                         // 桌面端是 HTML → macOS textutil；手机上没有那个工具，直接写 OOXML
-                        val shared = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-                                val target = File(dir, "${meetingTitle.ifBlank { meetingId }}.docx")
-                                DocxWriter.write(
-                                    markdown = minutesText,
-                                    title = meetingTitle,
-                                    meta = exportMeta(state.detail),
-                                    target = target,
-                                )
-                                target
-                            }.getOrNull()
-                        }
-                        if (shared != null) {
-                            shareFile(
-                                context,
-                                shared,
-                                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        shareExported(
+                            context,
+                            name = "${meetingTitle.ifBlank { meetingId }}.docx",
+                            mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        ) { target ->
+                            DocxWriter.write(
+                                markdown = minutesText,
+                                title = meetingTitle,
+                                meta = exportMeta(state.detail, minutesText),
+                                target = target,
                             )
                         }
                     }
                 }
             },
             onExportPdf = {
-                val minutesText = state.detail?.minutesText
-                if (!minutesText.isNullOrBlank()) {
+                val minutesText = state.detail?.minutesText.orEmpty()
+                if (minutesText.isNotBlank()) {
                     exportScope.launch {
                         // 桌面端交给系统 WebKit 打印；手机上用 PdfDocument 直接排
-                        val shared = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-                                val target = File(dir, "${meetingTitle.ifBlank { meetingId }}.pdf")
-                                PdfWriter.write(
-                                    markdown = minutesText,
-                                    title = meetingTitle,
-                                    meta = exportMeta(state.detail),
-                                    target = target,
-                                )
-                                target
-                            }.getOrNull()
+                        shareExported(
+                            context,
+                            name = "${meetingTitle.ifBlank { meetingId }}.pdf",
+                            mime = "application/pdf",
+                        ) { target ->
+                            PdfWriter.write(
+                                markdown = minutesText,
+                                title = meetingTitle,
+                                meta = exportMeta(state.detail, minutesText),
+                                target = target,
+                            )
                         }
-                        if (shared != null) shareFile(context, shared, mime = "application/pdf")
                     }
                 }
             },
             onExportExcalidraw = {
                 exportScope.launch {
                     val paths = viewModel.exportExcalidraw()
-                    val first = paths.firstOrNull()
-                    if (first != null) {
-                        val shared = withContext(Dispatchers.IO) {
+                    // 一份纪要可能有两张鱼骨图：全都交出去，不能只分享第一张
+                    val shared = withContext(Dispatchers.IO) {
+                        val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+                        paths.mapNotNull { path ->
                             runCatching {
-                                val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-                                File(dir, File(first).name).also { File(first).copyTo(it, overwrite = true) }
+                                File(dir, File(path).name).also { File(path).copyTo(it, overwrite = true) }
                             }.getOrNull()
                         }
-                        if (shared != null) shareFile(context, shared, mime = "application/json")
                     }
+                    if (shared.isNotEmpty()) shareFiles(context, shared, mime = "application/json")
                 }
             },
             onExportSrt = {
@@ -821,15 +825,38 @@ private fun DetailRoute(
     }
 }
 
+/**
+ * 把引擎/本地生成的文件交出去。
+ *
+ * FileProvider 只授权 `cache/exports`，所以先把文件放进那里再分享——
+ * 直接拿会议目录里的路径会让 `getUriForFile` 抛异常。
+ */
+private suspend fun shareExported(context: android.content.Context, name: String, mime: String, produce: (File) -> Unit) {
+    val shared = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+            val target = File(dir, name)
+            produce(target)
+            target
+        }.getOrNull()
+    }
+    if (shared != null) shareFile(context, shared, mime = mime)
+}
+
 /** 导出文档的抬头行：日期 时间 · 时长 · 参会人（与桌面 HTML 版同样的信息）。 */
-private fun exportMeta(detail: io.github.tancheng33.tingo.engine.MeetingDetail?): String {
+private fun exportMeta(detail: io.github.tancheng33.tingo.engine.MeetingDetail?, minutesText: String): String {
     val summary = detail?.summary ?: return ""
-    val speakers = summary.speakers.joinToString("、")
+    // 文案跟纪要语言走（桌面的 `docIsEn` 判断的是同一件事）
+    val english = minutesText.lines().any { it.trim() == "## Summary" }
+    val speakers = summary.speakers
+        .map { name -> if (english) name.replace(Regex("^说话人(\\d+)$"), "Speaker $1") else name }
+        .joinToString(if (english) ", " else "、")
+    val whenText = listOf(summary.date, summary.time).filter { it.isNotBlank() }.joinToString(" ")
     return listOfNotNull(
-        listOf(summary.date, summary.time).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null },
-        summary.duration.takeIf { it.isNotBlank() },
-        speakers.takeIf { it.isNotBlank() },
-    ).joinToString(" · ")
+        whenText.takeIf { it.isNotBlank() }?.let { "${if (english) "Date" else "日期"}：$it" },
+        summary.duration.takeIf { it.isNotBlank() }?.let { "${if (english) "Duration" else "时长"}：$it" },
+        speakers.takeIf { it.isNotBlank() }?.let { "${if (english) "Participants" else "参会人"}：$it" },
+    ).joinToString("　")
 }
 
 @Composable

@@ -28,9 +28,9 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 18 | 删除到废纸篓 + 恢复 | macOS 废纸篓 | 已有（`.trash/<id>`，可恢复/彻底清除） | — |
 | 19 | 存储空间管理与清理 | `disk.rs` + `/api/storage/cleanup` | 已有（总量/音频/残留 + 清理残留） | — |
 | 20 | 导出 Markdown / ZIP | `/api/meetings/{id}/minutes` | 已有（zip + md 分享） | — |
-| 21 | 导出 Word（docx） | `/api/meetings/{id}/docx`（macOS `textutil`） | 已有（Android 直接写 OOXML，同一份 Markdown） | 实现不同、结果等价 |
+| 21 | 导出 Word（docx） | `/api/meetings/{id}/docx`（macOS `textutil`） | 已有（直接写 OOXML；抬头/页脚/鱼骨图文字与桌面同口径） | 实现不同，内容等价 |
 | 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 已有（命名与桌面一致，导出后走系统分享） | — |
-| 23 | 导出 PDF | `/api/meetings/{id}/pdf`（系统 WebKit 打印） | 已有（`PdfDocument` 排 A4） | 实现不同、结果等价 |
+| 23 | 导出 PDF | `/api/meetings/{id}/pdf`（系统 WebKit 打印） | 已有（`PdfDocument` 排 A4） | 实现不同；**尚未画鱼骨图示意，也无品牌页眉页脚** |
 | 24 | 导出 Excalidraw（鱼骨图） | `/api/meetings/{id}/excalidraw` | 已有（复用引擎 `fishbone::excalidraw`，与桌面同一份） | — |
 | 25 | 导入音频 | `/api/import` | 无 | 缺 |
 | 26 | 内置示例会议 / 新手引导 | `/api/demo` + `welcome.ts` | 无 | 缺 |
@@ -71,6 +71,11 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | toast | 各页错误条 | 抽成统一 toast |
 
 顺序：先把首页（新会议）与会议库的视觉对齐，再统一弹层与提示，最后做导入与引导。
+
+已知差距（写在明处，不装作已经一致）：
+
+- 导出仅覆盖"当前版本"，桌面还能导出某个历史版本（`?version=`）
+- Android 的 PDF只有文字排版，没有品牌页眉页脚，也没有鱼骨图示意（桌面用 HTML/CSS 画）
 
 进度：首页的「最近 3 场」与「环境块状态行」已完成（`RecordScreen` 的 `RecentAndStatus`，
 状态由 `AppContainer` 的模型/服务/版本实际状态得出，真机用例 `HomeScreenInstrumentedTest` 把关）。
