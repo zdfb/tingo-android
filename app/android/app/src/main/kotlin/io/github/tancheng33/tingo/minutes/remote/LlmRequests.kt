@@ -28,8 +28,7 @@ object LlmRequests {
                 body = JSONObject()
                     .put("model", config.model)
                     .put("max_tokens", maxTokens)
-                    .put("messages", messages)
-                    .apply { if (system.isNotBlank()) put("messages", withSystem(system, messages)) }
+                    .put("messages", if (system.isNotBlank()) withSystem(system, messages) else messages)
                     .toString(),
             )
 

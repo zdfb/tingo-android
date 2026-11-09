@@ -55,7 +55,7 @@ class SpeakerGuessTest {
 
     /** 只关心说话人相关的几个方法，其余用委托的默认实现。 */
     private class FakeSpeakerEngine(
-        private var speakers: List<SpeakerInfo>,
+        private val speakers: List<SpeakerInfo>,
     ) : TingoEnginePort by io.github.tancheng33.tingo.testing.FakeEnginePort(
         onRead = { id ->
             io.github.tancheng33.tingo.engine.MeetingDetail(
@@ -91,7 +91,11 @@ class SpeakerGuessTest {
         }
 
         override fun speakerPrompt(id: String, language: String) =
-            io.github.tancheng33.tingo.engine.SpeakerPrompt(system = "s", prompt = "p", speakerCount = 2u)
+            io.github.tancheng33.tingo.engine.SpeakerPrompt(
+                system = "s",
+                prompt = "p",
+                speakerCount = speakers.size.toUInt(),
+            )
 
         override fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo> {
             parsed = text
@@ -113,7 +117,72 @@ class SpeakerGuessTest {
         vm.renameSpeaker(0, "林舟")
         advanceUntilIdle()
 
+        // 没动过的李四要原样带上；默认别名"说话人1"不能作为用户名字写回去
         assertEquals(listOf("林舟", "李四"), engine.written)
+    }
+
+    @Test
+    fun renamingDoesNotPersistDefaultAliases() = runTest(dispatcher) {
+        val engine = engine(listOf(SpeakerInfo(0u, "说话人1", "", ""), SpeakerInfo(1u, "说话人2", "", "")))
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        advanceUntilIdle()
+
+        vm.renameSpeaker(0, "林舟")
+        advanceUntilIdle()
+
+        // 空串 = 引擎跳过 = 仍然是默认别名；把"说话人2"发上去就等于给它起了个假名字
+        assertEquals(listOf("林舟", ""), engine.written)
+    }
+
+    @Test
+    fun emptySuggestionsReadAsNoClueInsteadOfSilentSuccess() = runTest(dispatcher) {
+        // 模型答"没把握"：解析结果里一条建议都没有
+        val engine = object : TingoEnginePort by engine(
+            listOf(SpeakerInfo(0u, "说话人1", "", ""), SpeakerInfo(1u, "说话人2", "", "")),
+        ) {
+            override fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo> =
+                listOf(SpeakerInfo(0u, "说话人1", "", ""), SpeakerInfo(1u, "说话人2", "", ""))
+        }
+        val vm = DetailViewModel(
+            engine = engine,
+            meetingId = "m",
+            chat = LlmChat({ config }, FakeClient { """{"choices":[{"message":{"content":"{}"}}]}""" }),
+            io = dispatcher,
+        )
+        advanceUntilIdle()
+
+        vm.guessSpeakers("zh")
+        advanceUntilIdle()
+
+        // 猜完什么都没找到时界面要说一声，否则用户以为按钮没反应
+        assertEquals(GuessNote.NoClue, vm.state.value.guessNote)
+    }
+
+    @Test
+    fun unreadableReplyIsNotReportedAsRejected() = runTest(dispatcher) {
+        val engine = object : TingoEnginePort by engine(listOf(SpeakerInfo(0u, "说话人1", "", ""))) {
+            override fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo> =
+                throw io.github.tancheng33.tingo.engine.TingoFailure(
+                    io.github.tancheng33.tingo.engine.FailureKind.MALFORMED,
+                    "模型输出里没有可解析的 suggestions",
+                )
+        }
+        val vm = DetailViewModel(
+            engine = engine,
+            meetingId = "m",
+            chat = LlmChat({ config }, FakeClient { """{"choices":[{"message":{"content":"抱歉"}}]}""" }),
+            io = dispatcher,
+        )
+        advanceUntilIdle()
+
+        vm.guessSpeakers("zh")
+        advanceUntilIdle()
+
+        // "没读懂回复"和"服务端拒绝"要分开：用户要做的事完全不同
+        assertEquals(
+            io.github.tancheng33.tingo.R.string.err_llm_unreadable,
+            vm.state.value.guessFailure?.reasonRes,
+        )
     }
 
     @Test

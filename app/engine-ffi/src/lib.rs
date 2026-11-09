@@ -670,18 +670,21 @@ impl TingoEngine {
         })
     }
 
-    /// 跨会议术语表：从每场纪要的 ```terms 代码块里收集，按出现次数排序。
+    /// 跨会议术语表：从每场纪要的 ```terms 代码块里收集，按词条本身排序。
     pub fn glossary(&self) -> Result<Vec<GlossaryTerm>, EngineError> {
         let root = self.paths.meetings_root.clone();
         guard("glossary", move || {
             let mut merged: Vec<GlossaryTerm> = Vec::new();
             for summary in meetings::list(&root) {
-                let path = root.join(&summary.id).join("纪要.md");
+                // 与 terms::search 用同一个文件名常量：两处各写一份"纪要.md"迟早漂移
+                let path = root.join(&summary.id).join(meetings::MINUTES);
                 let Ok(text) = std::fs::read_to_string(&path) else {
                     continue;
                 };
                 for term in tingo_engine::terms::parse(&text) {
-                    match merged.iter_mut().find(|t| t.term == term.term) {
+                    // 按归一化形式合并：`历史工单` 与 `歷史工單` 是同一个词
+                    let key = tingo_engine::terms::norm(&term.term);
+                    match merged.iter_mut().find(|t| tingo_engine::terms::norm(&t.term) == key) {
                         Some(existing) => {
                             for variant in term.variants {
                                 if !existing.variants.contains(&variant) {
@@ -1528,6 +1531,29 @@ mod tests {
 
         let result = engine.parse_speaker_suggestions("2026-11-02_1000_周会".to_string(), "抱歉，我不确定".to_string());
         assert!(matches!(result, Err(EngineError::Malformed { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn glossary_merges_case_and_space_variants() {
+        let root = temp_root("glossary-norm");
+        let a = meeting(&root, "2026-11-02_1000_周会");
+        std::fs::write(
+            a.join("纪要.md"),
+            "# 周会\n\n```terms\n{\"terms\": [{\"term\": \"Work Order\", \"variants\": []}]}\n```\n",
+        )
+        .unwrap();
+        let b = meeting(&root, "2026-11-03_1000_复盘");
+        std::fs::write(
+            b.join("纪要.md"),
+            "# 复盘\n\n```terms\n{\"terms\": [{\"term\": \"workorder\", \"variants\": []}]}\n```\n",
+        )
+        .unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        // 大小写与空白不同的写法是同一个词：搜索认得出，合并时也必须认出
+        let glossary = engine.glossary().unwrap();
+        assert_eq!(glossary.len(), 1, "实际：{glossary:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 

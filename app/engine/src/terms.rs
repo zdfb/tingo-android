@@ -128,8 +128,11 @@ pub fn strip_code_blocks(md: &str) -> String {
     out.join("\n")
 }
 
-/// 比较查询词用：忽略大小写、去掉空白
-fn norm(s: &str) -> String {
+/// 比较查询词用：忽略大小写、去掉空白。
+///
+/// 搜索、术语扩展与跨会议术语表合并都要用同一把尺子——各处自己写一遍
+/// 就会出现"搜索认得出、合并认不出"的怪事。
+pub fn norm(s: &str) -> String {
     s.chars()
         .filter(|c| !c.is_whitespace())
         .flat_map(char::to_lowercase)

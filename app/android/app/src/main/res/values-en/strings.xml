@@ -171,4 +171,6 @@
     <string name="detail_speaker_guess">Let AI guess names from the conversation</string>
     <string name="detail_speaker_guessing">Guessing…</string>
     <string name="detail_speaker_apply_guess">Guess: %1$s</string>
+    <string name="err_llm_unreadable">Could not read the model reply: %1$s</string>
+    <string name="detail_speaker_no_clue">No explicit name cues found (self-introductions, being called by name)</string>
 </resources>

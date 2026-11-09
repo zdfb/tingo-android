@@ -657,6 +657,7 @@ private fun DetailRoute(
             speakers = state.speakers,
             guessing = state.guessing,
             guessFailure = state.guessFailure,
+            guessNote = state.guessNote,
             onRenameSpeaker = viewModel::renameSpeaker,
             onApplyGuess = viewModel::applyGuess,
             // 界面语言跟着系统走：提示词里的"说话人N"要和界面一致

@@ -171,4 +171,6 @@
     <string name="detail_speaker_guess">让 AI 根据对话猜名字</string>
     <string name="detail_speaker_guessing">正在猜…</string>
     <string name="detail_speaker_apply_guess">猜是「%1$s」</string>
+    <string name="err_llm_unreadable">模型回复看不懂：%1$s</string>
+    <string name="detail_speaker_no_clue">没有找到明确的名字线索（自我介绍、被点名这类）</string>
 </resources>

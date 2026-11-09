@@ -100,6 +100,7 @@ fun DetailScreen(
     speakers: List<io.github.tancheng33.tingo.engine.SpeakerInfo> = emptyList(),
     guessing: Boolean = false,
     guessFailure: GuessFailure? = null,
+    guessNote: GuessNote? = null,
     onExport: () -> Unit = {},
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
@@ -218,6 +219,7 @@ fun DetailScreen(
                         speakers = speakers,
                         guessing = guessing,
                         failure = guessFailure,
+                        note = guessNote,
                         onRename = onRenameSpeaker,
                         onGuess = onGuessSpeakers,
                         onApplyGuess = onApplyGuess,
@@ -563,6 +565,7 @@ private fun SpeakerBar(
     speakers: List<io.github.tancheng33.tingo.engine.SpeakerInfo>,
     guessing: Boolean,
     failure: GuessFailure?,
+    note: GuessNote?,
     onRename: (Int, String) -> Unit,
     onGuess: () -> Unit,
     onApplyGuess: (Int) -> Unit,
@@ -610,9 +613,10 @@ private fun SpeakerBar(
                             stringResource(R.string.detail_speaker_apply_guess, speaker.suggested),
                             style = MaterialTheme.typography.labelSmall,
                             color = colors.blue,
+                            // 用 role 而不是覆盖 contentDescription：读屏要能念出"猜是「林舟」"
                             modifier = Modifier
-                                .clickable { onApplyGuess(speaker.index.toInt()) }
-                                .semantics { contentDescription = speaker.suggested },
+                                .semantics { role = androidx.compose.ui.semantics.Role.Button }
+                                .clickable { onApplyGuess(speaker.index.toInt()) },
                         )
                     }
                 }
@@ -621,15 +625,33 @@ private fun SpeakerBar(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(
                 label = stringResource(if (guessing) R.string.detail_speaker_guessing else R.string.detail_speaker_guess),
-                onClick = { if (!guessing) onGuess() },
+                onClick = onGuess,
                 kind = PillKind.Ghost,
+                enabled = !guessing,
             )
         }
         failure?.let {
             Text(
-                text = stringResource(it.reasonRes, it.detail),
+                text = failureMessage(it.reasonRes, it.detail),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.red,
+            )
+        }
+        if (note == GuessNote.NoClue) {
+            Text(
+                stringResource(R.string.detail_speaker_no_clue),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.muted,
+            )
+        }
+        // 证据：AI 猜名字的依据（桌面端也把原话摆出来），让用户判断该不该采纳
+        speakers.firstOrNull { it.evidence.isNotBlank() }?.let { speaker ->
+            Text(
+                text = speaker.evidence,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.faint,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }

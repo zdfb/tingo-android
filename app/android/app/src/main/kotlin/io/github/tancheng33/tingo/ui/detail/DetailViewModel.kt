@@ -7,6 +7,7 @@ import io.github.tancheng33.tingo.engine.MeetingDetail
 import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.TingoEnginePort
 import io.github.tancheng33.tingo.R
+import kotlinx.coroutines.CancellationException
 import io.github.tancheng33.tingo.engine.SpeakerInfo
 import io.github.tancheng33.tingo.engine.TingoFailure
 import io.github.tancheng33.tingo.minutes.remote.LlmChat
@@ -30,6 +31,9 @@ import kotlinx.coroutines.launch
  * [minutesFailure] 与 [failure] 分开：纪要解析失败时转写仍然要看得到，
  * 不能因为一个章节解析不了就把整页判死。
  */
+/** 猜名字的结果提示（不是错误）。 */
+enum class GuessNote { NoClue }
+
 /** 猜名字失败：一条已本地化的模板 + 动态部分（服务端原话/异常信息）。 */
 data class GuessFailure(val reasonRes: Int, val detail: String = "")
 
@@ -42,6 +46,8 @@ data class DetailUiState(
     val guessing: Boolean = false,
     /** 猜名字失败的原因；与纪要生成同一套文案 */
     val guessFailure: GuessFailure? = null,
+    /** 猜完了但一条线索都没找到 */
+    val guessNote: GuessNote? = null,
     val minutes: MinutesDoc? = null,
     val minutesFailure: FailureKind? = null,
     val failure: FailureKind? = null,
@@ -78,7 +84,16 @@ class DetailViewModel(
     fun renameSpeaker(index: Int, name: String) {
         val current = _state.value.speakers
         if (current.isEmpty()) return
-        val names = current.map { if (it.index == index.toUInt()) name else it.name }
+        // 引擎是整表覆盖：没动过的说话人要发空串（引擎跳过空值）。
+        // 若把默认别名"说话人2"发上去，它就被当成用户起的名字存进转写，
+        // 以后重新转写时这个陈旧名字会挂到别的编号上。
+        val names = current.map { speaker ->
+            when {
+                speaker.index == index.toUInt() -> name
+                isDefaultSpeakerName(speaker.name, speaker.index.toInt()) -> ""
+                else -> speaker.name
+            }
+        }
         viewModelScope.launch(io) {
             try {
                 engine.setSpeakerNames(meetingId, names)
@@ -97,19 +112,34 @@ class DetailViewModel(
      * 再把答案交回引擎读。
      */
     fun guessSpeakers(language: String) {
+        // 连点两次会并发两次请求、后到的答案覆盖先到的
+        if (_state.value.guessing) return
         val client = chat
         if (client == null) {
             _state.value = _state.value.copy(guessFailure = GuessFailure(R.string.err_llm_not_configured))
             return
         }
-        _state.value = _state.value.copy(guessing = true, guessFailure = null)
+        _state.value = _state.value.copy(guessing = true, guessFailure = null, guessNote = null)
         viewModelScope.launch(io) {
             val failure = try {
                 val prompt = engine.speakerPrompt(meetingId, language)
-                val reply = client.complete(prompt.prompt, maxTokens = 1200, system = prompt.system)
+                // 桌面端猜名字不给 max_tokens 上限（Anthropic 给 16000）：给 1200 会在
+                // 说话人多的会议里被截断，而截断在这里是错误，等于"明明能答却报错"
+                val reply = client.complete(prompt.prompt, maxTokens = 8000, system = prompt.system)
                 val updated = engine.parseSpeakerSuggestions(meetingId, reply)
-                _state.value = _state.value.copy(speakers = updated)
+                _state.value = _state.value.copy(
+                    speakers = updated,
+                    guessNote = if (updated.none { it.suggested.isNotBlank() }) {
+                        GuessNote.NoClue
+                    } else {
+                        null
+                    },
+                )
                 null
+            } catch (e: CancellationException) {
+                // 用户离开页面：不是失败，别在已销毁的界面上留一条错误
+                _state.value = _state.value.copy(guessing = false)
+                throw e
             } catch (e: LlmRejected) {
                 GuessFailure(R.string.err_llm_rejected, e.message.orEmpty())
             } catch (e: LlmUnavailable) {
@@ -117,8 +147,11 @@ class DetailViewModel(
             } catch (e: IllegalArgumentException) {
                 // 提示词为空等情况：属于输入问题，不是网络
                 GuessFailure(R.string.err_llm_not_configured)
-            } catch (e: Exception) {
-                GuessFailure(R.string.err_llm_rejected, e.message.orEmpty())
+            } catch (e: TingoFailure) {
+                // 引擎读不了回复（MALFORMED）是"没读懂"，与"服务端拒绝"是两件事
+                GuessFailure(R.string.err_llm_unreadable, e.detail)
+            } catch (e: IllegalStateException) {
+                GuessFailure(R.string.err_llm_unreadable, e.message.orEmpty())
             } finally {
                 _state.value = _state.value.copy(guessing = false)
             }
@@ -255,4 +288,15 @@ class DetailViewModel(
         player = null
         super.onCleared()
     }
+
+/**
+ * 是不是"没起过名"的默认别名。
+ *
+ * 引擎给的默认名就是这两套（中文界面"说话人N"、英文界面"Speaker N"），
+ * 判定必须和展示一致，否则改名时会把默认值当成用户输入写回去。
+ */
+private fun isDefaultSpeakerName(name: String, index: Int): Boolean {
+    val n = index + 1
+    return name == "说话人$n" || name == "Speaker $n"
+}
 }
