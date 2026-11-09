@@ -129,4 +129,5 @@
     <string name="settings_library_failed">备份/恢复失败，请确认文件可用</string>
     <string name="record_notification_denied">通知权限被关闭：录音仍在进行，但状态栏看不到进度</string>
     <string name="minutes_downloading">正在下载语言模型…</string>
+    <string name="err_low_storage">存储空间不足（至少需要 500 MB）：请清理后再录音</string>
 </resources>

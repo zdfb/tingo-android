@@ -78,6 +78,13 @@ class RecordViewModel(
 
     fun start() {
         if (_state.value is RecordUiState.Recording) return
+        // 录音是"写进去就收不回来"的操作：空间不够就明说，别让用户录到一半被 ENOSPC 打断。
+        // 16 kHz 单声道约 115 MB/小时，双轨（48 kHz 立体声）约 690 MB/小时，留 500 MB 兜底。
+        val free = runCatching { meetingsRoot.usableSpace }.getOrDefault(Long.MAX_VALUE)
+        if (free in 1 until MIN_FREE_BYTES) {
+            _state.value = RecordUiState.Failed(R.string.err_low_storage, null)
+            return
+        }
         val dir = File(meetingsRoot, newMeetingId())
         // 原始音轨先各写各的，结束时合成 录音.wav——和桌面版的文件布局一致
         val file = File(dir, MIC_TRACK)
@@ -240,5 +247,7 @@ class RecordViewModel(
         const val MIC_TRACK = TrackMerger.MIC_TRACK
         const val SYSTEM_TRACK = TrackMerger.SYSTEM_TRACK
         const val TICK_MS = 200L
+        /** 开始录音前至少要有这么多空间（约 20 分钟双轨录音）。 */
+        const val MIN_FREE_BYTES = 500L * 1024 * 1024
     }
 }

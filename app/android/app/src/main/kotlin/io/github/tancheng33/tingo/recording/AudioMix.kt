@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.recording
 
+import io.github.tancheng33.tingo.transcription.WavReader
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -98,23 +99,22 @@ object TrackMerger {
     /**
      * @return 合成后的文件；两路都不存在时返回 null
      */
-    fun mixInto(meetingDir: File, systemSampleRate: Int = 48_000): File? {
+    fun mixInto(meetingDir: File): File? {
         val mic = File(meetingDir, MIC_TRACK)
         val system = File(meetingDir, SYSTEM_TRACK)
         val mixed = File(meetingDir, MIXED)
 
-        val micSamples = mic.takeIf { it.isFile }?.let { readTrack(it, 16_000) }
-        val systemSamples = system.takeIf { it.isFile }?.let { readTrack(it, systemSampleRate) }
-        val tracks = listOfNotNull(micSamples, systemSamples)
-        if (tracks.isEmpty()) return null
+        val sources = listOf(mic, system).filter { it.isFile && it.length() > WavReader.HEADER_BYTES }
+        if (sources.isEmpty()) return null
 
         // 先写临时文件再改名：中途被杀时不会留下一个"头里长度为 0"的 录音.wav，
         // 那种半截文件会盖过旁边完好的 mic.wav / system.wav。
         // 临时名必须唯一：结束录音后的后台混音与转写前的混音可能同时在写同一个目录，
         // 共用一个 .tmp 会互相截断。
         val temp = File.createTempFile("mix-", ".tmp", meetingDir)
+        // 逐块混：一小时双轨整段读入要几百 MB 浮点，必然 OOM（规格明确禁止）
         WavWriter(temp, AudioMix.TARGET_RATE).apply {
-            append(AudioMix.samplesToBytes(AudioMix.mix(tracks)))
+            StreamingMixer.mix(sources, this)
             close()
         }
         if (!temp.renameTo(mixed)) {
@@ -124,10 +124,4 @@ object TrackMerger {
         return mixed
     }
 
-    private fun readTrack(file: File, expectedRate: Int): FloatArray {
-        // 系统音轨是立体声，宽容读取会先降到单声道
-        val pcm = io.github.tancheng33.tingo.transcription.WavReader.readAnyChannels(file)
-        val rate = if (pcm.sampleRate > 0) pcm.sampleRate else expectedRate
-        return AudioMix.resample(pcm.samples, rate)
-    }
 }

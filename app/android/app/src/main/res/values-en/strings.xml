@@ -129,4 +129,5 @@
     <string name="settings_library_failed">Backup/restore failed; check the file</string>
     <string name="record_notification_denied">Notifications are off: recording still runs, but no progress is shown in the status bar</string>
     <string name="minutes_downloading">Downloading language model…</string>
+    <string name="err_low_storage">Not enough storage (500 MB needed): free some space and try again</string>
 </resources>
