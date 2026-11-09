@@ -137,6 +137,35 @@ val syncBundledModels by tasks.registering(Sync::class) {
     include("*.onnx", "*.gguf", "*.txt", "*.mvn")
 }
 
+/**
+ * 打包内置模型前先确认模型真的在。
+ *
+ * 规格要求"模型随 APK 内置、端侧推理不需要网络"：如果 `models/` 空着还照样出包，
+ * 交付出来的 APK 会在离线设备上装不上模型——这类问题不该等到装到手机上才发现。
+ * 只想跑单测/编译时用 `-PtingoSkipBundledModels=true` 显式跳过。
+ */
+val verifyBundledModels by tasks.registering {
+    val modelsDir = layout.projectDirectory.dir("../models")
+    val skip = providers.gradleProperty("tingoSkipBundledModels").map { it.toBoolean() }.orElse(false)
+    doLast {
+        if (skip.get()) {
+            logger.lifecycle("跳过内置模型检查：-PtingoSkipBundledModels=true")
+            return@doLast
+        }
+        val expected = listOf(
+            "paraformer.int8.onnx", "tokens.txt", "am.mvn", "punct.int8.onnx",
+            "campplus.onnx", "silero_vad.onnx", "Qwen3-0.6B-Q4_K_M.gguf",
+        )
+        val missing = expected.filterNot { modelsDir.file(it).asFile.exists() }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "内置模型缺失：${missing.joinToString()}；先跑 ./scripts/fetch-models-offline.sh，" +
+                    "或用 -PtingoSkipBundledModels=true 跳过（产物将不带模型）",
+            )
+        }
+    }
+}
+
 val syncTestFixtures by tasks.registering(Sync::class) {
     from(rootProject.layout.projectDirectory.dir("../engine/tests/fixtures"))
     into(layout.buildDirectory.dir("generated/fixtures/assets/fixtures"))
@@ -233,6 +262,7 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAss
 
 // 主 assets（内置模型）要在合并主资源之前同步好
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") && !it.name.contains("AndroidTest") }.configureEach {
+    dependsOn(verifyBundledModels)
     dependsOn(syncBundledModels)
 }
 

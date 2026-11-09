@@ -112,13 +112,27 @@ class RecordingService : Service() {
      * 麦克风那一路继续录，不因为内录失败而整场作废。
      */
     private fun attachProjection(intent: Intent) {
-        val data = intent.getParcelableExtra(EXTRA_PROJECTION, Intent::class.java) ?: return
+        // 带类型的 getParcelableExtra 是 API 33 才有的：minSdk 26 上直接调用会在
+        // Android 8/9 抛 NoSuchMethodError，每次开始录音都崩在 onStartCommand 里
+        val data: Intent? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(EXTRA_PROJECTION, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_PROJECTION)
+        }
+        if (data == null) return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            // Android 10 以下没有 AudioPlaybackCapture：明确告诉界面"没抓到"，别静默
+            RecordingKeepAlive.onSystemAudioCapture(null)
+            return
+        }
         val manager = ContextCompat.getSystemService(this, MediaProjectionManager::class.java)
         val capture = runCatching {
             val projection = manager?.getMediaProjection(android.app.Activity.RESULT_OK, data)
             projection?.let { SystemAudioCapture(it) }
         }.getOrNull()
         RecordingKeepAlive.onSystemAudioCapture(capture)
+        if (capture == null) runCatching { manager?.getMediaProjection(0, data)?.stop() }
     }
 
     /** 是否同时录系统声音：决定要不要把 mediaProjection 类型一起声明。 */

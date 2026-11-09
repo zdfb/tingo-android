@@ -44,6 +44,8 @@ data class SettingsUiState(
     val deleteFailed: Boolean = false,
     /** 备份/恢复是否在跑，跑了什么结果 */
     val libraryBusy: Boolean = false,
+    /** 内置模型解包进度 0..1；null 表示不需要解包 */
+    val modelInstall: Float? = null,
     val libraryResult: LibraryOpResult? = null,
 )
 
@@ -58,6 +60,8 @@ class SettingsViewModel(
     private val llmCatalog: ModelCatalog,
     /** 会议库根目录：备份从这里打包，恢复往这里写 */
     private val meetingsRoot: java.io.File,
+    /** 内置模型的解包进度；null 表示没有在解包 */
+    installProgress: kotlinx.coroutines.flow.StateFlow<Float?>? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -65,6 +69,12 @@ class SettingsViewModel(
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
     init {
+        // 首启解包 700 MB 模型要几十秒：把进度接到设置页，用户才知道不是在发呆
+        installProgress?.let { flow ->
+            viewModelScope.launch(io) {
+                flow.collect { fraction -> _state.value = _state.value.copy(modelInstall = fraction) }
+            }
+        }
         refresh()
     }
 

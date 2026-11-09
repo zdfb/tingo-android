@@ -23,8 +23,9 @@ object StreamingMixer {
      * @param sink 收到 16 kHz 单声道浮点样本
      */
     fun mix(sources: List<File>, sink: WavWriter, chunkFrames: Int = CHUNK_FRAMES) {
-        val tracks = sources.map { ChunkedTrack(it, chunkFrames) }
+        val tracks = mutableListOf<ChunkedTrack>()
         try {
+            sources.forEach { tracks += ChunkedTrack(it) }
             while (true) {
                 val chunks = tracks.map { it.next(chunkFrames) }
                 if (chunks.all { it.isEmpty() }) break
@@ -48,7 +49,7 @@ object StreamingMixer {
      * 重采样是线性的、跨块连续的：块边界上保留上一个样本参与插值，
      * 否则每小时会多出几十个不连续点（听不出来，但转写的能量特征会抖）。
      */
-    private class ChunkedTrack(file: File, private val chunkFrames: Int) {
+    private class ChunkedTrack(file: File) {
         private val raf = RandomAccessFile(file, "r")
         private val channels: Int
         private val sourceRate: Int

@@ -112,12 +112,18 @@ object TrackMerger {
         // 临时名必须唯一：结束录音后的后台混音与转写前的混音可能同时在写同一个目录，
         // 共用一个 .tmp 会互相截断。
         val temp = File.createTempFile("mix-", ".tmp", meetingDir)
-        // 逐块混：一小时双轨整段读入要几百 MB 浮点，必然 OOM（规格明确禁止）
-        WavWriter(temp, AudioMix.TARGET_RATE).apply {
-            StreamingMixer.mix(sources, this)
-            close()
-        }
-        if (!temp.renameTo(mixed)) {
+        // 逐块混：一小时双轨整段读入要几百 MB 浮点，必然 OOM（规格明确禁止）。
+        // 混音可能中途抛异常（音轨头损坏等）：无论成败都要关掉 writer，并删掉临时文件，
+        // 否则会在会议目录留下一个与录音同样大的孤儿文件。
+        val ok = runCatching {
+            val writer = WavWriter(temp, AudioMix.TARGET_RATE)
+            try {
+                StreamingMixer.mix(sources, writer)
+            } finally {
+                writer.close()
+            }
+        }.isSuccess
+        if (!ok || !temp.renameTo(mixed)) {
             temp.delete()
             return null
         }

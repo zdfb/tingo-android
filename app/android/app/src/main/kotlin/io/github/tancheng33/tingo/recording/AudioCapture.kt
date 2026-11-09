@@ -21,6 +21,9 @@ interface AudioCapture {
     /** 结束并回填 wav 头；返回实际写入的毫秒数。 */
     fun stop(): Long
 
+    /** 采集过程中遇到的致命错误（磁盘满之类）；界面据此提示，而不是假装还在录。 */
+    fun lastFailure(): Throwable? = null
+
     /** 当前电平（0..1），用于界面上的波形/音量提示。 */
     fun level(): Float
 }

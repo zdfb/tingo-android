@@ -220,6 +220,7 @@ fun TingoRoot(
                                 catalog = container.catalog,
                                 llmCatalog = container.llmCatalog,
                                 meetingsRoot = File(container.dataRoot, "meetings"),
+                                installProgress = container.installProgress,
                             )
                         }
                     },

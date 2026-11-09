@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
+import io.github.tancheng33.tingo.recording.SystemAudioTrack
 import io.github.tancheng33.tingo.recording.TrackMerger
 import io.github.tancheng33.tingo.recording.WavWriter
 import java.io.File
@@ -73,7 +74,7 @@ class RecordViewModel(
 
 
     private var currentDir: File? = null
-    private var systemAudio: io.github.tancheng33.tingo.recording.SystemAudioCapture? = null
+    private var systemAudio: SystemAudioTrack? = null
     private var ticker: kotlinx.coroutines.Job? = null
 
     fun start() {
@@ -108,8 +109,13 @@ class RecordViewModel(
      *
      * 必须在 [start] 之后调用：目录是 start 建的。抓不到就算了，麦克风那一路照常录。
      */
-    fun attachSystemAudio(capture: io.github.tancheng33.tingo.recording.SystemAudioCapture) {
-        val dir = currentDir ?: return
+    fun attachSystemAudio(capture: SystemAudioTrack) {
+        val dir = currentDir ?: run {
+            // 录音已经停了（或根本没开始）：这条抓到的投影没人用，必须自己停掉，
+            // 否则系统的"正在录屏"指示会一直亮着
+            runCatching { capture.stop() }
+            return
+        }
         runCatching { capture.start(File(dir, SYSTEM_TRACK)) }
             .onSuccess {
                 systemAudio = capture
@@ -161,6 +167,15 @@ class RecordViewModel(
             systemAudio?.let { runCatching { it.stop() } }
             systemAudio = null
             _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
+            // 采集线程中途死掉（磁盘满、写入被关闭）：文件已写下的部分还在，
+            // 但必须告诉用户"这次录音提前中断了"，不能让计时器继续装作一切正常
+            capture.lastFailure()?.let { failure ->
+                session.fail(failure.message ?: "录音中断")
+                _state.value = RecordUiState.Failed(R.string.err_stop_failed, failure.message)
+                mergeInBackground(dir)
+                currentDir = null
+                return
+            }
             micDuration
         } catch (e: Exception) {
             session.fail(e.message ?: "结束录音失败")
@@ -214,6 +229,22 @@ class RecordViewModel(
         _state.value = RecordUiState.Idle
     }
 
+    /**
+     * 系统内录的"静音检查"。
+     *
+     * 会议软件可以通过 `allowAudioPlaybackCapture=false` 禁止被抓，此时系统不报错，
+     * 只是给一段静音。所以录到 [SILENCE_CHECK_MS] 后看一眼峰值：还是 0 就判定没抓到，
+     * 界面明确告诉用户"这次只有本机的声音"，而不是把静音混进录音让人觉得内录成功了。
+     */
+    private fun checkSystemAudioSilence() {
+        val capture = systemAudio ?: return
+        val elapsed = session.elapsedMs(clock())
+        if (elapsed < SILENCE_CHECK_MS) return
+        if (_systemAudioStatus.value != SystemAudioStatus.ACTIVE) return
+        if (capture.peakLevel() > SILENCE_THRESHOLD) return
+        _systemAudioStatus.value = SystemAudioStatus.MISSING
+    }
+
     private fun startTicker() {
         ticker?.cancel()
         ticker = tickerScope().launch(io) {
@@ -221,6 +252,7 @@ class RecordViewModel(
                 val s = _state.value
                 if (s is RecordUiState.Recording) {
                     _state.value = RecordUiState.Recording(session.elapsedMs(clock()), capture.level())
+                    checkSystemAudioSilence()
                 }
                 delay(TICK_MS)
             }
@@ -249,5 +281,9 @@ class RecordViewModel(
         const val TICK_MS = 200L
         /** 开始录音前至少要有这么多空间（约 20 分钟双轨录音）。 */
         const val MIN_FREE_BYTES = 500L * 1024 * 1024
+        /** 录这么久之后检查系统音轨有没有内容。 */
+        const val SILENCE_CHECK_MS = 5_000L
+        /** 低于这个振幅就当没抓到（16 bit 满量程 1.0）。 */
+        const val SILENCE_THRESHOLD = 0.001f
     }
 }

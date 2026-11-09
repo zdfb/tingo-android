@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -108,6 +109,18 @@ fun SettingsScreen(
                 group = models.llm,
                 onDelete = onDeleteLlmModel,
             )
+            models.modelInstall?.let { fraction ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        stringResource(R.string.settings_models_installing),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
             if (models.deleteFailed) {
                 Text(
                     stringResource(R.string.settings_models_delete_failed),

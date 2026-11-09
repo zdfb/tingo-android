@@ -103,10 +103,13 @@ class TranscriptionViewModel(
                 val missing = catalog.files.filterNot { store.isReady(it) }
                 // 规格要求：校验失败要能重下。文件坏了（引擎报错）就作废再试一次
                 var retried = false
-                if (missing.isNotEmpty()) {
+                // 先试内置包：离线设备上"删了模型只能联网重下"会直接卡死
+                if (missing.isNotEmpty()) runCatching { ensureBundled() }
+                val stillMissing = catalog.files.filterNot { store.isReady(it) }
+                if (stillMissing.isNotEmpty()) {
                     var downloaded = 0L
-                    val total = missing.sumOf { it.bytes }.coerceAtLeast(1)
-                    for (file in missing) {
+                    val total = stillMissing.sumOf { it.bytes }.coerceAtLeast(1)
+                    for (file in stillMissing) {
                         val base = downloaded
                         val result = store.download(
                             file,

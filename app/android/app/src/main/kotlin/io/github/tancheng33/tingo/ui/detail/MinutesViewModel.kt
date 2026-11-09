@@ -144,7 +144,17 @@ class MinutesViewModel(
         return true
     }
 
-    private fun isModelReady(): Boolean = modelFile.isFile && modelFile.length() > 0
+    /**
+     * 模型是否就绪。
+     *
+     * 有清单时按清单判断（体积 + 校验指纹）：只看"文件非空"会让一个被截断的 GGUF
+     * 通过检查，然后死在推理引擎里，用户看到的是"生成失败"而不是"模型不完整"。
+     */
+    private fun isModelReady(): Boolean {
+        val file = catalog?.files?.firstOrNull { store?.fileFor(it) == modelFile }
+        if (file != null && store != null) return store.isReady(file)
+        return modelFile.isFile && modelFile.length() > 0
+    }
 
     fun cancel() {
         job?.cancel()

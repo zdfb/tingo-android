@@ -11,6 +11,17 @@ import java.io.File
 import kotlin.concurrent.thread
 
 /**
+ * 系统音轨的抽象：录音状态机只依赖这五个动作，单测与设备测试可以用假实现。
+ */
+interface SystemAudioTrack {
+    fun start(file: File)
+    fun pause()
+    fun resume()
+    fun peakLevel(): Float
+    fun stop(): Long
+}
+
+/**
  * 抓"手机正在播放的声音"（会议软件的对方说话声）。
  *
  * 用的是 Android 10 起的 `AudioPlaybackCapture`：需要用户先授权屏幕录制，
@@ -23,16 +34,19 @@ import kotlin.concurrent.thread
  */
 class SystemAudioCapture(
     private val projection: MediaProjection,
-) {
+) : SystemAudioTrack {
     private var record: AudioRecord? = null
     private var writer: WavWriter? = null
     @Volatile private var running = false
     @Volatile private var paused = false
+
+    /** 抓到的最大振幅：会议软件禁止被抓时系统给的是**静音**而不是异常。 */
+    @Volatile private var peak = 0f
     private var worker: Thread? = null
 
     /** 开始把系统声音写进 [file]；失败抛异常，由调用方转成界面提示。 */
     @RequiresApi(Build.VERSION_CODES.Q)
-    fun start(file: File) {
+    override fun start(file: File) {
         val config = AudioPlaybackCaptureConfiguration.Builder(projection)
             // 会议软件的对方声音一般走 MEDIA；GAME/UNKNOWN 一并收着，能多抓一点是一点
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -75,6 +89,15 @@ class SystemAudioCapture(
                 }
                 val read = recorder.read(buffer, 0, buffer.size)
                 if (read > 0) {
+                    var localPeak = 0f
+                    var i = 0
+                    while (i + 1 < read) {
+                        val value = ((buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)).toShort()
+                        val amplitude = kotlin.math.abs(value.toInt()) / 32_768f
+                        if (amplitude > localPeak) localPeak = amplitude
+                        i += 2
+                    }
+                    if (localPeak > peak) peak = localPeak
                     runCatching { wav.append(buffer, read) }
                 } else if (read < 0) {
                     // 读失败（通常是投影被系统收回）：停下来，别写垃圾数据
@@ -84,18 +107,29 @@ class SystemAudioCapture(
         }
     }
 
-    /** 暂停：停止消费系统声音（与麦克风同步，别让两路时间轴错开）。 */
-    fun pause() {
+    /** 抓到的最大振幅（0..1）。持续为 0 说明对方的声音根本没被抓到。 */
+    override fun peakLevel(): Float = peak
+
+    /**
+     * 暂停：与麦克风同步，别让两路时间轴错开。
+     *
+     * 只是不读还不够——AudioRecord 内部仍在缓冲，恢复后会把暂停期间的声音一起写进来，
+     * 结果还是错位。所以这里真的停掉采集，恢复时重新开始。
+     */
+    override fun pause() {
         paused = true
+        runCatching { record?.stop() }
     }
 
-    /** 继续。 */
-    fun resume() {
+    /** 继续采集。 */
+    override fun resume() {
+        if (!paused) return
         paused = false
+        runCatching { record?.startRecording() }
     }
 
     /** 结束并回填 wav 头；返回写入的毫秒数。 */
-    fun stop(): Long {
+    override fun stop(): Long {
         running = false
         worker?.join(1_000)
         worker = null

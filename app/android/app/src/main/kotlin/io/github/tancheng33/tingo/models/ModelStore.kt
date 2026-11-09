@@ -47,8 +47,10 @@ class ModelStore(
         if (!f.isFile || f.length() != file.bytes) return false
         val marker = markerFor(file)
         if (!marker.isFile) return false
+        val markerText = marker.readText().trim()
+        if (markerText == bundledMarker) return true
         val expected = file.sha256 ?: return true
-        return marker.readText().trim().equals(expected, ignoreCase = true)
+        return markerText.equals(expected, ignoreCase = true)
     }
 
     /** 校验通过后写下的指纹文件；改模型或删模型时一起消失。 */
@@ -60,8 +62,13 @@ class ModelStore(
      * 内置模型是按清单解包出来的：解包时核对过体积，等价于一次成功校验。
      */
     fun markVerified(file: ModelFile) {
-        markerFor(file).writeText(file.sha256 ?: "size-only")
+        // 内置包解包时只核对过字节数，没有算摘要：指纹要如实写成"体积已核对"，
+        // 不能写成 sha256——否则以后读回来会以为这是一次真摘要校验
+        markerFor(file).writeText(bundledMarker)
     }
+
+    /** 内置解包写下的指纹值。 */
+    private val bundledMarker = "bundled:size-only"
 
     /** 作废一个模型（校验不符或推理时崩了）：删文件与指纹，下次会重新下载。 */
     fun invalidate(file: ModelFile) {

@@ -119,6 +119,8 @@ class MicRecorder : AudioCapture {
         return duration
     }
 
+    override fun lastFailure(): Throwable? = failed
+
     override fun level(): Float = currentLevel
 
     /** 取这一段的峰值电平，映射到 0..1，界面用来画音量条。 */

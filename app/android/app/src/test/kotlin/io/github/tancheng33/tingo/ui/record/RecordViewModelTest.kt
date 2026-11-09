@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -223,5 +224,53 @@ class RecordViewModelTest {
         vm.onInterrupted()
 
         assertEquals(RecordUiState.Idle, vm.state.value)
+    }
+}
+
+/** 系统内录"全是静音"= 没抓到：不能把静音当成抓到了。 */
+class RecordSystemAudioSilenceTest {
+
+    /** 会走完 start/stop 的最小采集实现。 */
+    private class IdleCapture : io.github.tancheng33.tingo.recording.AudioCapture {
+        override fun start(file: File) {}
+        override fun pause() {}
+        override fun resume() {}
+        override fun stop(): Long = 1_000
+        override fun level(): Float = 0f
+    }
+
+    private val dispatcher = StandardTestDispatcher()
+    private fun root(): File = Files.createTempDirectory("tingo-rec-silence").toFile()
+
+    @Test
+    fun silentSystemTrackIsReportedAsMissing() = runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val vm = RecordViewModel(
+            capture = IdleCapture(),
+            meetingsRoot = root(),
+            io = dispatcher,
+            clock = { testScheduler.currentTime },
+        )
+        vm.start()
+        vm.attachSystemAudio(SilentSystemAudio())
+
+        // 录音期间有个 200 ms 的 ticker 在跑：不能用 advanceUntilIdle（它会一直推进虚拟时间），
+        // 只推进到静音检查之后，再断言状态
+        advanceTimeBy(RecordViewModel.SILENCE_CHECK_MS + 1_000)
+        runCurrent()
+
+        assertEquals(RecordViewModel.SystemAudioStatus.MISSING, vm.systemAudioStatus.value)
+        vm.stop()
+        advanceUntilIdle()
+        Dispatchers.resetMain()
+    }
+
+    /** 完全不发声的系统音轨：会议软件禁止被抓时就是这个表现。 */
+    private class SilentSystemAudio : io.github.tancheng33.tingo.recording.SystemAudioTrack {
+        override fun start(file: File) {}
+        override fun pause() {}
+        override fun resume() {}
+        override fun peakLevel(): Float = 0f
+        override fun stop(): Long = 0
     }
 }
