@@ -286,6 +286,66 @@ fun TingoRoot(
         }
     }
 
+    val onboardViewModel: io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel(
+                    settings = container.settings,
+                    store = container.models,
+                    catalog = container.catalog,
+                    demo = io.github.tancheng33.tingo.importing.DemoMeeting(container.engine, recordContext),
+                )
+            }
+        },
+    )
+    val onboardState by onboardViewModel.state.collectAsStateWithLifecycle()
+    var showOnboarding by rememberSaveable { mutableStateOf(false) }
+    val hasMeetings = (libraryState as? LibraryUiState.Content)?.items?.isNotEmpty() == true
+    // 第一次打开、而且库里还没有会议时才拦人：老用户升级上来不该被引导一次
+    androidx.compose.runtime.LaunchedEffect(hasMeetings, libraryState) {
+        if (libraryState is LibraryUiState.Content && onboardViewModel.shouldOnboard(hasMeetings)) {
+            onboardViewModel.refreshModel()
+            showOnboarding = true
+        }
+    }
+    // 装好示例会议：收起引导，直接进那场会议（与桌面"看完示例就进详情"一致）
+    androidx.compose.runtime.LaunchedEffect(onboardState.demoMeetingId) {
+        val id = onboardState.demoMeetingId
+        if (id != null) {
+            onboardViewModel.consumeDemo()
+            showOnboarding = false
+            // 引导可能在任何页面之上；跳转与别处一致：宽屏选右侧，窄屏压栈
+            if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
+            libraryViewModel.refresh()
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(onboardState.finished) {
+        if (onboardState.finished) showOnboarding = false
+    }
+
+    if (showOnboarding) {
+        io.github.tancheng33.tingo.ui.onboard.OnboardingScreen(
+            state = onboardState,
+            steps = onboardViewModel.steps,
+            modelReady = onboardState.modelReady,
+            llmConfigured = container.settings.llm.isConfigured,
+            micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                recordContext,
+                android.Manifest.permission.RECORD_AUDIO,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            systemAudioSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
+            onNext = onboardViewModel::next,
+            onBack = onboardViewModel::back,
+            onSkip = onboardViewModel::skip,
+            onInstallDemo = { onboardViewModel.installDemo(container.uiLanguage() == "en") },
+            onOpenSettings = {
+                onboardViewModel.skip()
+                navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true }
+            },
+        )
+        return
+    }
+
     androidx.compose.material3.Scaffold(
         containerColor = TingoTheme.colors.bg,
         bottomBar = {
@@ -514,6 +574,11 @@ fun TingoRoot(
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
                     onFetchModels = settingsViewModel::fetchModels,
                     onSaveHotwords = settingsViewModel::saveHotwords,
+                    onReplayOnboarding = {
+                        onboardViewModel.restart()
+                        showOnboarding = true
+                        navController.popBackStack()
+                    },
                     onCleanupLeftovers = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
                         {
                             runCatching { container.engine.cleanupLeftovers() }

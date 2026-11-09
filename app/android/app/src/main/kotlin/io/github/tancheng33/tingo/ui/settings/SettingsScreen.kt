@@ -63,6 +63,7 @@ fun SettingsScreen(
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
     onFetchModels: (LlmConfig) -> Unit = {},
     onSaveHotwords: (List<String>) -> Unit = {},
+    onReplayOnboarding: () -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
     libraryBusy: Boolean = false,
@@ -124,6 +125,17 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
+
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+
+        // 引导走完就不再自动弹；想再看一遍得有个入口（桌面放在"运行环境"里）
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton(
+                label = stringResource(R.string.settings_replay_onboarding),
+                onClick = onReplayOnboarding,
+                kind = PillKind.Ghost,
+            )
+        }
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 

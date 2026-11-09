@@ -735,6 +735,29 @@ impl TingoEngine {
         })
     }
 
+
+    /// 把示例会议装进会议库（已经有了就直接返回那个），返回会议 id。
+    ///
+    /// 素材由宿主解出来（桌面在 App 资源里，Android 在 assets 里），
+    /// "怎么装进库、叫什么名字"由引擎决定，两个平台不会各写一套。
+    pub fn install_demo_meeting(&self, source_dir: String, english: bool) -> Result<ImportedMeeting, EngineError> {
+        let source = PathBuf::from(&source_dir);
+        guard("install_demo_meeting", move || {
+            let dir = tingo_engine::meetings::install_demo(&self.paths.meetings_root, &source, english)
+                .map_err(|e| io_error(e, "install_demo_meeting"))?;
+            let id = dir
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .ok_or_else(|| EngineError::Internal {
+                    detail: "示例会议文件夹没有名字".to_string(),
+                })?;
+            Ok(ImportedMeeting {
+                id,
+                dir: dir.to_string_lossy().into_owned(),
+            })
+        })
+    }
+
     /// 纪要的历史版本，按保存时间从新到旧。
     pub fn minutes_history(&self, id: String) -> Result<Vec<MinutesVersionInfo>, EngineError> {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
@@ -2095,6 +2118,82 @@ mod tests {
 
         let result = engine.import_audio("/nonexistent/x.wav".to_string(), "x".to_string(), 0);
         assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 示例会议 ----
+
+    fn sample_dir(root: &Path, en: bool) -> PathBuf {
+        let dir = root.join("sample");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("transcript.json"),
+            r#"{"source":"录音.m4a","durationMs":120000,"sentences":[{"speaker":0,"startMs":0,"endMs":2000,"text":"今天复盘注册转化。"}],"speakerNames":{}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("纪要.md"), "# 示例会议\n\n## 一句话总结\n转化率下降。\n").unwrap();
+        if en {
+            std::fs::write(dir.join("纪要.en.md"), "# Sample meeting\n\n## Summary\nConversion dropped.\n").unwrap();
+        }
+        std::fs::write(dir.join("录音.m4a"), vec![0u8; 128]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn demo_meeting_lands_in_the_library_and_is_idempotent() {
+        let root = temp_root("demo");
+        let sample = sample_dir(&root, false);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let first = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), false)
+            .unwrap();
+        let second = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), false)
+            .unwrap();
+
+        // 装两次不该出现两个示例会议
+        assert_eq!(first.id, second.id);
+        assert_eq!(first.id, "2026-10-28_1400_示例·注册转化复盘");
+        let dir = std::path::Path::new(&first.dir);
+        assert!(dir.join("transcript.json").is_file());
+        assert!(dir.join("纪要.md").is_file());
+        assert!(dir.join("录音.m4a").is_file(), "示例的音频要一起装进去");
+        // 扫库能看见（引导里点"看示例会议"直接进详情靠这个）
+        assert!(engine.scan_library().unwrap().iter().any(|m| m.id == first.id));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn english_demo_uses_the_english_minutes() {
+        let root = temp_root("demo-en");
+        let sample = sample_dir(&root, true);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let demo = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), true)
+            .unwrap();
+
+        let minutes = std::fs::read_to_string(std::path::Path::new(&demo.dir).join("纪要.md")).unwrap();
+        assert!(minutes.contains("Summary"), "英文界面要装英文纪要：{minutes}");
+        assert!(demo.id.contains("Sample"), "实际：{}", demo.id);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn incomplete_sample_is_reported_and_leaves_nothing_behind() {
+        let root = temp_root("demo-incomplete");
+        let sample = root.join("sample");
+        std::fs::create_dir_all(&sample).unwrap();
+        std::fs::write(sample.join("transcript.json"), "{}").unwrap();
+        // 没有纪要：素材不全
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.install_demo_meeting(sample.to_string_lossy().into_owned(), false);
+
+        assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
+        // 半装出来的示例会议会出现在列表里但打不开，比没有更糟
+        assert!(!root.join("meetings").join("2026-10-28_1400_示例·注册转化复盘").exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

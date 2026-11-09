@@ -124,6 +124,9 @@ interface TingoEnginePort {
     /** 导入一段已解码的 wav：建会议文件夹、写 `录音.wav`，返回会议 id 与目录。 */
     fun importAudio(wavPath: String, title: String, modifiedMs: Long): ImportedMeeting
 
+    /** 把示例会议装进会议库（幂等），返回会议 id 与目录。 */
+    fun installDemoMeeting(sourceDir: String, english: Boolean): ImportedMeeting
+
     /** 提示词里"专有名词"那段句子（不带编号）；没有热词时为空串。 */
     fun minutesGlossary(language: String): String
 
@@ -216,6 +219,9 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun importAudio(wavPath: String, title: String, modifiedMs: Long): ImportedMeeting =
         mapEngineCall { engine.importAudio(wavPath, title, modifiedMs) }
+
+    override fun installDemoMeeting(sourceDir: String, english: Boolean): ImportedMeeting =
+        mapEngineCall { engine.installDemoMeeting(sourceDir, english) }
 
     override fun minutesGlossary(language: String): String =
         mapEngineCall { engine.minutesGlossary(language) }

@@ -65,7 +65,18 @@ class AppSettings(private val store: KeyValueStore) {
             store.putString(KEY_LLM_PROTOCOL, value.protocol.wire)
         }
 
+    /**
+     * 新手引导走完了没有。
+     *
+     * 桌面端记在 localStorage（拿不到就当已走过）；这里记在应用私有偏好里，
+     * 拿不到时同样按"已走过"处理——宁可少弹一次引导，也不要每次都拦人。
+     */
+    var onboarded: Boolean
+        get() = store.getString(KEY_ONBOARDED) == "1"
+        set(value) = store.putString(KEY_ONBOARDED, if (value) "1" else "0")
+
     private companion object {
+        const val KEY_ONBOARDED = "onboarded"
         const val KEY_LANGUAGE = "ui_language"
         const val KEY_LLM_BASE_URL = "llm_base_url"
         const val KEY_LLM_API_KEY = "llm_api_key"

@@ -1631,50 +1631,29 @@ async fn search(State(s): State<Shared>, Query(p): Query<SearchQuery>) -> ApiRes
     Ok(Json(v))
 }
 
-/// 示例会议的文件夹名：示例素材是 2026-10-28 14:00 的会
-fn demo_folder(en: bool) -> String {
-    let title = if en {
-        "Sample · Signup conversion review"
-    } else {
-        "示例·注册转化复盘"
-    };
-    format!("2026-10-28_1400_{}", meetings::folder_title(title))
-}
-
 /// 把内置的示例会议复制进会议目录（已经有了就直接返回）
 async fn post_demo(State(s): State<Shared>) -> ApiResult<Json<Value>> {
     let en = i18n::is_en();
-    let name = demo_folder(en);
-    let dir = s.root().join(&name);
-    if dir.exists() {
-        return Ok(Json(json!({"id": name})));
-    }
-    let src = &s.opt.sample_dir;
-    let minutes = src.join(if en { "纪要.en.md" } else { MINUTES });
-    if !src.join(TRANSCRIPT_JSON).is_file() || !minutes.is_file() {
-        return Err(ApiError(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            tr(
-                "找不到示例会议的素材",
-                "The sample meeting files are missing",
-            )
-            .into(),
-        ));
-    }
-    let copy = || -> std::io::Result<()> {
-        std::fs::create_dir_all(&dir)?;
-        std::fs::copy(src.join(TRANSCRIPT_JSON), dir.join(TRANSCRIPT_JSON))?;
-        std::fs::copy(&minutes, dir.join(MINUTES))?;
-        if src.join(AUDIO).is_file() {
-            std::fs::copy(src.join(AUDIO), dir.join(AUDIO))?;
-        }
-        Ok(())
-    };
-    if let Err(e) = copy() {
-        let _ = std::fs::remove_dir_all(&dir);
-        return Err(ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
-    }
-    Ok(Json(json!({"id": name})))
+    let src = s.opt.sample_dir.clone();
+    let root = s.root();
+    let dir = tokio::task::spawn_blocking(move || {
+        meetings::install_demo(&root, &src, en)
+    })
+    .await
+    .map_err(|e| bad(e.to_string()))?
+    .map_err(|e| {
+        let message = if e.kind() == std::io::ErrorKind::NotFound {
+            tr("找不到示例会议的素材", "The sample meeting files are missing").to_string()
+        } else {
+            e.to_string()
+        };
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, message)
+    })?;
+    let id = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(Json(json!({"id": id})))
 }
 
 async fn reveal(State(s): State<Shared>, UrlPath(id): UrlPath<String>) -> ApiResult<Json<Value>> {
@@ -3136,9 +3115,9 @@ mod tests {
 
     #[test]
     fn demo_folder_names() {
-        assert_eq!(demo_folder(false), "2026-10-28_1400_示例·注册转化复盘");
+        assert_eq!(meetings::demo_folder(false), "2026-10-28_1400_示例·注册转化复盘");
         assert_eq!(
-            demo_folder(true),
+            meetings::demo_folder(true),
             "2026-10-28_1400_Sample_·_Signup_conversion_review"
         );
     }

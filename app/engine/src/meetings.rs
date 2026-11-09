@@ -94,6 +94,66 @@ pub fn local_time_from_millis(ms: i64) -> chrono::NaiveDateTime {
         .unwrap_or_else(|| chrono::Local::now().naive_local())
 }
 
+/// 示例会议的文件夹名：素材是 2026-10-28 14:00 的会（桌面与 Android 同一套命名）。
+pub fn demo_folder(en: bool) -> String {
+    let title = if en {
+        "Sample · Signup conversion review"
+    } else {
+        "示例·注册转化复盘"
+    };
+    format!("2026-10-28_1400_{}", folder_title(title))
+}
+
+/// 把示例素材安装进会议库；已经有了就直接返回那个目录（幂等）。
+///
+/// `source` 里必须有 `transcript.json` 与纪要（`纪要.md` 或英文版），音频可选。
+/// 桌面从 App 资源里取素材，Android 从 assets 里解出来——两边都要同一套"装进库"的逻辑。
+pub fn install_demo(root: &Path, source: &Path, en: bool) -> std::io::Result<PathBuf> {
+    // 文件夹名固定（带示例的日期）：装过一次就不再重复装
+    let dir = root.join(demo_folder(en));
+    if dir.is_dir() {
+        return Ok(dir);
+    }
+    let minutes = if en {
+        source.join("纪要.en.md")
+    } else {
+        source.join(MINUTES)
+    };
+    if !source.join(TRANSCRIPT_JSON).is_file() || !minutes.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "示例会议的素材不全",
+        ));
+    }
+    let install = || -> std::io::Result<()> {
+        std::fs::create_dir_all(&dir)?;
+        std::fs::copy(source.join(TRANSCRIPT_JSON), dir.join(TRANSCRIPT_JSON))?;
+        std::fs::copy(&minutes, dir.join(MINUTES))?;
+        // 音频可选：没有音频的示例也能看纪要，只是不能回放
+        if let Ok(entries) = std::fs::read_dir(source) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or_default()
+                    .to_lowercase();
+                if AUDIO_EXTS.contains(&ext.as_str()) {
+                    let target = dir.join(path.file_name().unwrap());
+                    std::fs::copy(&path, target)?;
+                }
+            }
+        }
+        Ok(())
+    };
+    if let Err(e) = install() {
+        // 半装出来的示例会议比没有更糟：它会出现在列表里但打不开
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
+    Ok(dir)
+}
+
 pub fn new_folder(root: &Path, title: &str, when: NaiveDateTime) -> PathBuf {
     let safe = folder_title(title);
     let base = format!("{}_{safe}", when.format("%Y-%m-%d_%H%M"));

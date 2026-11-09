@@ -185,6 +185,14 @@ class FakeEnginePort(
     /** 导入过的录音（用例据此断言解码产物真的交到了引擎） */
     val importedAudio = mutableListOf<Triple<String, String, Long>>()
 
+    override fun installDemoMeeting(sourceDir: String, english: Boolean): ImportedMeeting {
+        demoInstalls += english
+        return ImportedMeeting(id = "2026-10-28_1400_示例", dir = "/fake/tingo/meetings/2026-10-28_1400_示例")
+    }
+
+    /** 示例会议被装过几次、什么语言（用例据此断言"幂等"与语言选择） */
+    val demoInstalls = mutableListOf<Boolean>()
+
     override fun hotwords(): List<String> = hotwordList
 
     override fun setHotwords(words: List<String>): List<String> {
