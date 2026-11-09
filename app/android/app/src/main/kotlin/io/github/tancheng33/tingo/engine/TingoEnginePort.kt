@@ -80,6 +80,21 @@ interface TingoEnginePort {
     /** 清理残留文件（合成后遗留的音轨、part 与 tmp 文件），返回释放的字节数。 */
     fun cleanupLeftovers(): ULong
 
+    /** 说话人列表（按首次发言顺序），带 AI 建议的位置。 */
+    fun speakers(id: String): List<SpeakerInfo>
+
+    /** 批量设置说话人名字；空字符串表示不改。 */
+    fun setSpeakerNames(id: String, names: List<String>)
+
+    /** 猜名字要发给模型的提示词；调用模型由页面层负责。 */
+    fun speakerPrompt(id: String, language: String): SpeakerPrompt
+
+    /** 解析模型回复，返回填好建议的说话人列表；输出不合法时抛 MALFORMED。 */
+    fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo>
+
+    /** 跨会议术语表（来自各场纪要的 terms 代码块）。 */
+    fun glossary(): List<GlossaryTerm>
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -129,6 +144,19 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
     override fun purgeTrash(id: String): ULong = mapEngineCall { engine.purgeTrash(id) }
 
     override fun cleanupLeftovers(): ULong = mapEngineCall { engine.cleanupLeftovers() }
+
+    override fun speakers(id: String): List<SpeakerInfo> = mapEngineCall { engine.speakers(id) }
+
+    override fun setSpeakerNames(id: String, names: List<String>) =
+        mapEngineCall { engine.setSpeakerNames(id, names) }
+
+    override fun speakerPrompt(id: String, language: String): SpeakerPrompt =
+        mapEngineCall { engine.speakerPrompt(id, language) }
+
+    override fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo> =
+        mapEngineCall { engine.parseSpeakerSuggestions(id, text) }
+
+    override fun glossary(): List<GlossaryTerm> = mapEngineCall { engine.glossary() }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

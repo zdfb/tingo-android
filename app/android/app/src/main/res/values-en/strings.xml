@@ -166,4 +166,9 @@
     <string name="library_trash_entry">Recently deleted</string>
     <string name="settings_storage_cleanup">Clean up leftovers</string>
     <string name="library_trash_empty_all">Empty trash</string>
+    <string name="detail_speaker_rename">Rename speaker</string>
+    <string name="detail_speaker_rename_hint">Leave empty to go back to "Speaker N"</string>
+    <string name="detail_speaker_guess">Let AI guess names from the conversation</string>
+    <string name="detail_speaker_guessing">Guessing…</string>
+    <string name="detail_speaker_apply_guess">Guess: %1$s</string>
 </resources>

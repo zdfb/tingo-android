@@ -224,6 +224,34 @@ pub struct TrashItem {
 }
 
 
+
+/// 读会议目录里的转写；没有转写时报 `Missing`（界面据此提示"先生成转写"）。
+fn load_transcript(dir: &Path) -> Result<engine_transcript::Transcript, EngineError> {
+    let path = dir.join("transcript.json");
+    if !path.is_file() {
+        return Err(EngineError::Missing { detail: "还没有转写".to_string() });
+    }
+    engine_transcript::Transcript::load(&path).map_err(|e| io_error(e, "load_transcript"))
+}
+
+/// 写回转写（`meetings::save_transcript` 会顺带更新 meta 里的说话人信息）。
+fn save_transcript(tr: &engine_transcript::Transcript, dir: &Path) -> Result<(), EngineError> {
+    meetings::save_transcript(tr, dir).map_err(|e| io_error(e, "save_transcript"))
+}
+
+/// 说话人列表：按首次发言顺序，带上 AI 建议的位置（解析后再填）。
+fn speaker_infos(tr: &engine_transcript::Transcript) -> Vec<SpeakerInfo> {
+    tr.speakers_in_order()
+        .into_iter()
+        .enumerate()
+        .map(|(index, speaker)| SpeakerInfo {
+            index: index as u32,
+            name: tr.name_of(speaker),
+            suggested: String::new(),
+            evidence: String::new(),
+        })
+        .collect()
+}
 /// 回收站目录名。
 ///
 /// 引擎判定"是不是会议目录"看的是内容（有没有纪要/录音/转写），不是名字，
@@ -356,6 +384,33 @@ fn parse_storage(value: &serde_json::Value) -> StorageStats {
         leftover_bytes: num("leftover_bytes"),
         largest,
     }
+}
+
+/// 一位说话人：编号（按首次发言顺序，0 起）、当前显示名、建议的名字（AI 猜的）。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SpeakerInfo {
+    pub index: u32,
+    pub name: String,
+    /// AI 猜出来的名字；没有建议时为空串
+    pub suggested: String,
+    /// 支持判断的原话
+    pub evidence: String,
+}
+
+/// 猜名字要发给模型的两段文本：system 与 user。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SpeakerPrompt {
+    pub system: String,
+    pub prompt: String,
+    /// 转写里有几位说话人；解析结果时用来过滤越界编号
+    pub speaker_count: u32,
+}
+
+/// 术语表里的一条：标准写法 + 可能的识别错写。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct GlossaryTerm {
+    pub term: String,
+    pub variants: Vec<String>,
 }
 /// 引擎实例：持有注入的目录，所有用例函数都是它的方法。
 #[derive(uniffi::Object)]
@@ -542,6 +597,107 @@ impl TingoEngine {
                 .collect();
             items.sort_by(|a, b| a.id.cmp(&b.id));
             Ok(items)
+        })
+    }
+
+
+    /// 当前会议的说话人列表：编号、显示名、AI 建议（没猜过时为空）。
+    pub fn speakers(&self, id: String) -> Result<Vec<SpeakerInfo>, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("speakers", move || {
+            let tr = load_transcript(&dir)?;
+            Ok(speaker_infos(&tr))
+        })
+    }
+
+    /// 批量设置说话人名字：`names` 与 [Self::speakers] 的顺序一一对应，空字符串表示"不改"。
+    pub fn set_speaker_names(&self, id: String, names: Vec<String>) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("set_speaker_names", move || {
+            let mut tr = load_transcript(&dir)?;
+            tr.speaker_names = tr
+                .speakers_in_order()
+                .into_iter()
+                .zip(names)
+                .filter(|(_, name)| !name.trim().is_empty())
+                .map(|(speaker, name)| (speaker, name.trim().to_string()))
+                .collect();
+            // 与桌面 put_speakers 一致：直接覆盖 speaker_names，不做增量合并
+            save_transcript(&tr, &dir)
+        })
+    }
+
+    /// 猜名字用的提示词。模型调用由宿主完成（Android 走用户配置的 API），
+    /// 引擎只负责"该怎么问"与"怎么读答案"。
+    pub fn speaker_prompt(&self, id: String, language: String) -> Result<SpeakerPrompt, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("speaker_prompt", move || {
+            let tr = load_transcript(&dir)?;
+            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let (system, prompt) = tingo_engine::speakers::prompt(&tr, lang);
+            Ok(SpeakerPrompt {
+                system: system.to_string(),
+                prompt,
+                speaker_count: tr.speakers_in_order().len() as u32,
+            })
+        })
+    }
+
+    /// 解析模型返回的猜名字结果；不是合法 JSON 时返回 `Malformed`。
+    pub fn parse_speaker_suggestions(
+        &self,
+        id: String,
+        text: String,
+    ) -> Result<Vec<SpeakerInfo>, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("parse_speaker_suggestions", move || {
+            let tr = load_transcript(&dir)?;
+            let order = tr.speakers_in_order();
+            let suggestions = tingo_engine::speakers::parse(&text, order.len()).ok_or_else(|| {
+                EngineError::Malformed {
+                    detail: "模型输出里没有可解析的 suggestions".to_string(),
+                }
+            })?;
+            let mut infos = speaker_infos(&tr);
+            for suggestion in suggestions {
+                let Some(info) = infos.iter_mut().find(|i| i.index as usize == suggestion.index) else {
+                    continue;
+                };
+                info.suggested = suggestion.name;
+                info.evidence = suggestion.evidence;
+            }
+            Ok(infos)
+        })
+    }
+
+    /// 跨会议术语表：从每场纪要的 ```terms 代码块里收集，按出现次数排序。
+    pub fn glossary(&self) -> Result<Vec<GlossaryTerm>, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("glossary", move || {
+            let mut merged: Vec<GlossaryTerm> = Vec::new();
+            for summary in meetings::list(&root) {
+                let path = root.join(&summary.id).join("纪要.md");
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                for term in tingo_engine::terms::parse(&text) {
+                    match merged.iter_mut().find(|t| t.term == term.term) {
+                        Some(existing) => {
+                            for variant in term.variants {
+                                if !existing.variants.contains(&variant) {
+                                    existing.variants.push(variant);
+                                }
+                            }
+                        }
+                        None => merged.push(GlossaryTerm {
+                            term: term.term,
+                            variants: term.variants,
+                        }),
+                    }
+                }
+            }
+            merged.sort_by(|a, b| a.term.cmp(&b.term));
+            Ok(merged)
         })
     }
 
@@ -1279,6 +1435,124 @@ mod tests {
         assert!(!dir.join("mic.wav").exists());
         assert!(!dir.join("system.part").exists());
         assert_eq!(engine.storage_stats().unwrap().leftover_bytes, 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 说话人与术语表 ----
+
+    /// 造一场带转写的会议：两位说话人。
+    fn meeting_with_transcript(root: &Path, id: &str) -> PathBuf {
+        let dir = root.join("meetings").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("transcript.json"),
+            r#"{"source":"录音.wav","duration_ms":20000,"sentences":[
+                {"speaker":0,"start_ms":0,"end_ms":3000,"text":"我是林舟，今天过一下进度"},
+                {"speaker":1,"start_ms":4000,"end_ms":7000,"text":"林舟你说一下注册页"},
+                {"speaker":0,"start_ms":8000,"end_ms":11000,"text":"注册页改完了"}
+            ]}"#,
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn speakers_lists_in_first_speech_order() {
+        let root = temp_root("speakers");
+        meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let speakers = engine.speakers("2026-11-02_1000_周会".to_string()).unwrap();
+
+        assert_eq!(speakers.len(), 2);
+        assert_eq!(speakers[0].index, 0);
+        assert_eq!(speakers[0].name, "说话人1");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn set_speaker_names_persists_and_skips_blanks() {
+        let root = temp_root("speakers-set");
+        let dir = meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        engine
+            .set_speaker_names("2026-11-02_1000_周会".to_string(), vec!["  林舟 ".to_string(), String::new()])
+            .unwrap();
+
+        let speakers = engine.speakers("2026-11-02_1000_周会".to_string()).unwrap();
+        assert_eq!(speakers[0].name, "林舟");
+        assert_eq!(speakers[1].name, "说话人2", "空名字表示不改");
+        // 真的落到 transcript.json 里了
+        let text = std::fs::read_to_string(dir.join("transcript.json")).unwrap();
+        assert!(text.contains("林舟"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn speaker_prompt_mentions_every_speaker() {
+        let root = temp_root("speakers-prompt");
+        meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let prompt = engine.speaker_prompt("2026-11-02_1000_周会".to_string(), "zh".to_string()).unwrap();
+
+        assert!(!prompt.system.trim().is_empty());
+        assert!(prompt.prompt.contains("说话人1") && prompt.prompt.contains("说话人2"));
+        assert_eq!(prompt.speaker_count, 2);
+        assert!(prompt.prompt.contains("我是林舟"), "提示词要带上转写内容");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parses_speaker_suggestions_and_ignores_out_of_range() {
+        let root = temp_root("speakers-parse");
+        meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let reply = r#"{"suggestions":[{"index":0,"name":"林舟","evidence":"[00:00] 说话人1：我是林舟"},{"index":9,"name":"幽灵","evidence":"x"}]}"#;
+        let infos = engine
+            .parse_speaker_suggestions("2026-11-02_1000_周会".to_string(), reply.to_string())
+            .unwrap();
+
+        assert_eq!(infos[0].suggested, "林舟");
+        assert!(infos.iter().all(|i| i.suggested != "幽灵"), "越界编号应被丢弃");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unparsable_speaker_reply_is_malformed() {
+        let root = temp_root("speakers-bad");
+        meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.parse_speaker_suggestions("2026-11-02_1000_周会".to_string(), "抱歉，我不确定".to_string());
+        assert!(matches!(result, Err(EngineError::Malformed { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn glossary_merges_terms_across_meetings() {
+        let root = temp_root("glossary");
+        let a = meeting(&root, "2026-11-02_1000_周会");
+        std::fs::write(
+            a.join("纪要.md"),
+            "# 周会\n\n```terms\n{\"terms\": [{\"term\": \"历史工单\", \"variants\": [\"历史中单\"]}]}\n```\n",
+        )
+        .unwrap();
+        let b = meeting(&root, "2026-11-03_1000_复盘");
+        std::fs::write(
+            b.join("纪要.md"),
+            "# 复盘\n\n```terms\n{\"terms\": [{\"term\": \"历史工单\", \"variants\": [\"历史公单\"]}]}\n```\n",
+        )
+        .unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let glossary = engine.glossary().unwrap();
+
+        assert_eq!(glossary.len(), 1, "同一个词要合并成一条：{glossary:?}");
+        assert_eq!(glossary[0].term, "历史工单");
+        assert_eq!(glossary[0].variants.len(), 2);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

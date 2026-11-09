@@ -84,4 +84,43 @@ class LibraryManageInstrumentedTest {
         assertTrue("应按识别错字模糊命中，实际：${result.hits}", result.hits.isNotEmpty())
         assertEquals("2026-11-03_1400_复盘", result.hits.first().meetingId)
     }
+
+    @Test
+    fun speakerNamesAndGlossaryWorkOnRealFiles() {
+        val (engine, meetingsRoot) = engine()
+        val dir = File(meetingsRoot, "2026-11-04_0900_周会").apply { mkdirs() }
+        File(dir, "transcript.json").writeText(
+            """{"source":"录音.wav","duration_ms":20000,"sentences":[
+                {"speaker":0,"start_ms":0,"end_ms":3000,"text":"我是林舟"},
+                {"speaker":1,"start_ms":4000,"end_ms":7000,"text":"林舟你说一下"}
+            ]}""",
+        )
+        File(dir, "纪要.md").writeText(
+            "# 周会\n\n```terms\n{\"terms\": [{\"term\": \"历史工单\", \"variants\": [\"历史中单\"]}]}\n```\n",
+        )
+
+        val before = engine.speakers("2026-11-04_0900_周会")
+        assertEquals(2, before.size)
+        assertEquals("说话人1", before[0].name)
+
+        engine.setSpeakerNames("2026-11-04_0900_周会", listOf("林舟", ""))
+        val after = engine.speakers("2026-11-04_0900_周会")
+        assertEquals("林舟", after[0].name)
+        assertEquals("空名字表示不改", "说话人2", after[1].name)
+
+        // 提示词要能带上转写内容，模型才知道该猜谁
+        val prompt = engine.speakerPrompt("2026-11-04_0900_周会", "zh")
+        assertTrue(prompt.prompt.contains("我是林舟"))
+        assertEquals(2, prompt.speakerCount.toInt())
+
+        val parsed = engine.parseSpeakerSuggestions(
+            "2026-11-04_0900_周会",
+            """{"suggestions":[{"index":0,"name":"林舟","evidence":"[00:00] 说话人1：我是林舟"}]}""",
+        )
+        assertEquals("林舟", parsed[0].suggested)
+
+        val glossary = engine.glossary()
+        assertEquals(1, glossary.size)
+        assertEquals("历史工单", glossary[0].term)
+    }
 }

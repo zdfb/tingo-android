@@ -6,7 +6,12 @@ import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.MeetingDetail
 import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.TingoEnginePort
+import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.engine.SpeakerInfo
 import io.github.tancheng33.tingo.engine.TingoFailure
+import io.github.tancheng33.tingo.minutes.remote.LlmChat
+import io.github.tancheng33.tingo.minutes.remote.LlmRejected
+import io.github.tancheng33.tingo.minutes.remote.LlmUnavailable
 import io.github.tancheng33.tingo.audio.AudioPlayer
 import io.github.tancheng33.tingo.audio.MediaPlayerAudioPlayer
 import io.github.tancheng33.tingo.audio.WavHeader
@@ -25,9 +30,18 @@ import kotlinx.coroutines.launch
  * [minutesFailure] 与 [failure] 分开：纪要解析失败时转写仍然要看得到，
  * 不能因为一个章节解析不了就把整页判死。
  */
+/** 猜名字失败：一条已本地化的模板 + 动态部分（服务端原话/异常信息）。 */
+data class GuessFailure(val reasonRes: Int, val detail: String = "")
+
 data class DetailUiState(
     val loading: Boolean = true,
     val detail: MeetingDetail? = null,
+    /** 说话人列表；没有转写时为空 */
+    val speakers: List<SpeakerInfo> = emptyList(),
+    /** AI 猜名字的进行状态 */
+    val guessing: Boolean = false,
+    /** 猜名字失败的原因；与纪要生成同一套文案 */
+    val guessFailure: GuessFailure? = null,
     val minutes: MinutesDoc? = null,
     val minutesFailure: FailureKind? = null,
     val failure: FailureKind? = null,
@@ -36,6 +50,8 @@ data class DetailUiState(
 
 class DetailViewModel(
     private val engine: TingoEnginePort,
+    /** 猜说话人名字要问模型服务；null 表示当前没有可用的调用通道（测试或未配置） */
+    private val chat: LlmChat? = null,
     private val meetingId: String,
     /** 录音文件；不存在时播放相关操作全部是空操作 */
     private val audioFile: File? = null,
@@ -52,6 +68,69 @@ class DetailViewModel(
 
     init {
         load()
+    }
+
+    /**
+     * 给某位说话人改名。空名字表示恢复默认（"说话人N"）。
+     *
+     * 引擎接口是整表覆盖，所以要把其他人的名字原样带上，否则会被清空。
+     */
+    fun renameSpeaker(index: Int, name: String) {
+        val current = _state.value.speakers
+        if (current.isEmpty()) return
+        val names = current.map { if (it.index == index.toUInt()) name else it.name }
+        viewModelScope.launch(io) {
+            try {
+                engine.setSpeakerNames(meetingId, names)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            load()
+        }
+    }
+
+    /**
+     * 让模型根据转写里的线索猜名字。
+     *
+     * 提示词与解析都在引擎里（与桌面同一份），这里只负责把两段文本送去模型、
+     * 再把答案交回引擎读。
+     */
+    fun guessSpeakers(language: String) {
+        val client = chat
+        if (client == null) {
+            _state.value = _state.value.copy(guessFailure = GuessFailure(R.string.err_llm_not_configured))
+            return
+        }
+        _state.value = _state.value.copy(guessing = true, guessFailure = null)
+        viewModelScope.launch(io) {
+            val failure = try {
+                val prompt = engine.speakerPrompt(meetingId, language)
+                val reply = client.complete(prompt.prompt, maxTokens = 1200, system = prompt.system)
+                val updated = engine.parseSpeakerSuggestions(meetingId, reply)
+                _state.value = _state.value.copy(speakers = updated)
+                null
+            } catch (e: LlmRejected) {
+                GuessFailure(R.string.err_llm_rejected, e.message.orEmpty())
+            } catch (e: LlmUnavailable) {
+                GuessFailure(R.string.err_llm_unreachable, e.message.orEmpty())
+            } catch (e: IllegalArgumentException) {
+                // 提示词为空等情况：属于输入问题，不是网络
+                GuessFailure(R.string.err_llm_not_configured)
+            } catch (e: Exception) {
+                GuessFailure(R.string.err_llm_rejected, e.message.orEmpty())
+            } finally {
+                _state.value = _state.value.copy(guessing = false)
+            }
+            if (failure != null) _state.value = _state.value.copy(guessFailure = failure)
+        }
+    }
+
+    /** 采纳 AI 的建议：直接把建议的名字写进去。 */
+    fun applyGuess(index: Int) {
+        val suggestion = _state.value.speakers.firstOrNull { it.index == index.toUInt() }?.suggested.orEmpty()
+        if (suggestion.isBlank()) return
+        renameSpeaker(index, suggestion)
     }
 
     /** 改标题；空标题由引擎归一化。失败时保留旧标题并记下原因。 */
@@ -85,15 +164,21 @@ class DetailViewModel(
         viewModelScope.launch(io) {
             val next = try {
                 val detail = engine.readMeeting(meetingId)
+                val speakers = runCatching { engine.speakers(meetingId) }.getOrDefault(emptyList())
                 val minutesText = detail.minutesText
                 if (minutesText.isNullOrBlank()) {
-                    DetailUiState(loading = false, detail = detail)
+                    DetailUiState(loading = false, detail = detail, speakers = speakers)
                 } else {
                     try {
-                        DetailUiState(loading = false, detail = detail, minutes = engine.parseMinutes(minutesText))
+                        DetailUiState(
+                            loading = false,
+                            detail = detail,
+                            speakers = speakers,
+                            minutes = engine.parseMinutes(minutesText),
+                        )
                     } catch (e: TingoFailure) {
                         // 纪要坏了只降级这一栏，转写照常展示
-                        DetailUiState(loading = false, detail = detail, minutesFailure = e.kind)
+                        DetailUiState(loading = false, detail = detail, speakers = speakers, minutesFailure = e.kind)
                     }
                 }
             } catch (e: TingoFailure) {

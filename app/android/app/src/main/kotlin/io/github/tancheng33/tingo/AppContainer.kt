@@ -160,6 +160,16 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun cleanupLeftovers(): Nothing = fail()
 
+    override fun speakers(id: String): Nothing = fail()
+
+    override fun setSpeakerNames(id: String, names: List<String>): Nothing = fail()
+
+    override fun speakerPrompt(id: String, language: String): Nothing = fail()
+
+    override fun parseSpeakerSuggestions(id: String, text: String): Nothing = fail()
+
+    override fun glossary(): Nothing = fail()
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,

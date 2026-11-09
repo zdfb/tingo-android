@@ -166,4 +166,9 @@
     <string name="library_trash_entry">最近删除</string>
     <string name="settings_storage_cleanup">清理残留文件</string>
     <string name="library_trash_empty_all">清空回收站</string>
+    <string name="detail_speaker_rename">改说话人名字</string>
+    <string name="detail_speaker_rename_hint">留空恢复"说话人N"</string>
+    <string name="detail_speaker_guess">让 AI 根据对话猜名字</string>
+    <string name="detail_speaker_guessing">正在猜…</string>
+    <string name="detail_speaker_apply_guess">猜是「%1$s」</string>
 </resources>

@@ -114,6 +114,13 @@ class DetailPlaybackTest {
         override fun listTrash(): List<io.github.tancheng33.tingo.engine.TrashItem> = emptyList()
         override fun purgeTrash(id: String): ULong = 0uL
         override fun cleanupLeftovers(): ULong = 0uL
+        override fun speakers(id: String) = emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
+        override fun setSpeakerNames(id: String, names: List<String>) = Unit
+        override fun speakerPrompt(id: String, language: String) =
+            io.github.tancheng33.tingo.engine.SpeakerPrompt("", "", 0u)
+        override fun parseSpeakerSuggestions(id: String, text: String) =
+            emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
+        override fun glossary() = emptyList<io.github.tancheng33.tingo.engine.GlossaryTerm>()
     }
 
     private fun viewModel(dir: File, player: FakePlayer) = DetailViewModel(

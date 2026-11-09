@@ -10,6 +10,9 @@ import io.github.tancheng33.tingo.engine.BatchOutcome
 import io.github.tancheng33.tingo.engine.SearchResults
 import io.github.tancheng33.tingo.engine.StorageStats
 import io.github.tancheng33.tingo.engine.TingoFailure
+import io.github.tancheng33.tingo.engine.GlossaryTerm
+import io.github.tancheng33.tingo.engine.SpeakerInfo
+import io.github.tancheng33.tingo.engine.SpeakerPrompt
 import io.github.tancheng33.tingo.engine.TrashItem
 
 /** 会议列表项构造器：字段太多，测试里用命名参数写一次省得每处重复。 */
@@ -133,6 +136,31 @@ class FakeEnginePort(
         purged += id
         return 1uL
     }
+
+    override fun speakers(id: String): List<SpeakerInfo> = speakerList
+
+    override fun setSpeakerNames(id: String, names: List<String>) {
+        speakerNames += id to names
+    }
+
+    override fun speakerPrompt(id: String, language: String): SpeakerPrompt =
+        SpeakerPrompt(system = "system", prompt = "prompt", speakerCount = speakerList.size.toUInt())
+
+    override fun parseSpeakerSuggestions(id: String, text: String): List<SpeakerInfo> {
+        parseCalls += text
+        return speakerList
+    }
+
+    override fun glossary(): List<GlossaryTerm> = glossaryTerms
+
+    /** 说话人列表：用例直接塞 */
+    var speakerList: List<SpeakerInfo> = emptyList()
+
+    /** 术语表：用例直接塞 */
+    var glossaryTerms: List<GlossaryTerm> = emptyList()
+
+    val speakerNames = mutableListOf<Pair<String, List<String>>>()
+    val parseCalls = mutableListOf<String>()
 
     override fun cleanupLeftovers(): ULong {
         cleaned += 1

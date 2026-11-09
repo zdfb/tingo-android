@@ -78,6 +78,7 @@ import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
+import io.github.tancheng33.tingo.minutes.remote.LlmChat
 import io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator
 import io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient
 import io.github.tancheng33.tingo.minutes.MinutesService
@@ -553,6 +554,12 @@ private fun DetailRoute(
             initializer {
                 DetailViewModel(
                     engine = container.engine,
+                    // 猜说话人名字要问同一个模型服务：没配置就是 null，界面会提示去配置
+                    chat = if (container.settings.llm.isConfigured) {
+                        LlmChat(configProvider = { container.settings.llm }, client = UrlHttpJsonClient())
+                    } else {
+                        null
+                    },
                     meetingId = meetingId,
                     audioFile = io.github.tancheng33.tingo.recording.RecordingTracks
                         .find(container.meetingDir(meetingId)),
@@ -647,6 +654,15 @@ private fun DetailRoute(
             onOpenSettings = onOpenSettings,
             initialSeekMs = seekMs,
             onPlayFrom = viewModel::playFrom,
+            speakers = state.speakers,
+            guessing = state.guessing,
+            guessFailure = state.guessFailure,
+            onRenameSpeaker = viewModel::renameSpeaker,
+            onApplyGuess = viewModel::applyGuess,
+            // 界面语言跟着系统走：提示词里的"说话人N"要和界面一致
+            onGuessSpeakers = {
+                viewModel.guessSpeakers(if (java.util.Locale.getDefault().language == "en") "en" else "zh")
+            },
             onRename = { title ->
                 viewModel.rename(title)
                 onChanged()

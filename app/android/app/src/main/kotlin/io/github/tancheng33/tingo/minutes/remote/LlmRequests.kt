@@ -16,7 +16,7 @@ object LlmRequests {
     /** 一次请求的完整描述：单测与真实请求共用同一份，避免"测的和跑的不是一回事"。 */
     data class Request(val url: String, val headers: Map<String, String>, val body: String)
 
-    fun build(config: LlmConfig, prompt: String, maxTokens: Int): Request {
+    fun build(config: LlmConfig, prompt: String, maxTokens: Int, system: String = ""): Request {
         val base = config.baseUrl.trimEnd('/').removeSuffix("/v1")
         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", prompt))
         return when (config.protocol) {
@@ -29,6 +29,7 @@ object LlmRequests {
                     .put("model", config.model)
                     .put("max_tokens", maxTokens)
                     .put("messages", messages)
+                    .apply { if (system.isNotBlank()) put("messages", withSystem(system, messages)) }
                     .toString(),
             )
 
@@ -42,10 +43,16 @@ object LlmRequests {
                     .put("model", config.model)
                     .put("max_tokens", maxTokens)
                     .put("messages", messages)
+                    // Anthropic 把 system 放顶层字段，不放 messages 里
+                    .apply { if (system.isNotBlank()) put("system", system) }
                     .toString(),
             )
         }
     }
+
+    /** OpenAI 兼容协议里 system 是 messages 的第一条。 */
+    private fun withSystem(system: String, messages: JSONArray): JSONArray =
+        JSONArray().put(JSONObject().put("role", "system").put("content", system)).put(messages.get(0))
 
     /** 取正文；两种协议的字段位置不同。 */
     fun parseText(config: LlmConfig, raw: String): String? = when (config.protocol) {

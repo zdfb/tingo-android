@@ -55,6 +55,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import io.github.tancheng33.tingo.ui.components.PillButton
+import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.Fishbone
@@ -92,6 +94,12 @@ fun DetailScreen(
     onSetTags: (List<String>) -> Unit = {},
     /** 从搜索命中进来时，打开就跳到这句话 */
     initialSeekMs: Long? = null,
+    onRenameSpeaker: (Int, String) -> Unit = { _, _ -> },
+    onGuessSpeakers: () -> Unit = {},
+    onApplyGuess: (Int) -> Unit = {},
+    speakers: List<io.github.tancheng33.tingo.engine.SpeakerInfo> = emptyList(),
+    guessing: Boolean = false,
+    guessFailure: GuessFailure? = null,
     onExport: () -> Unit = {},
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
@@ -203,6 +211,16 @@ fun DetailScreen(
                             tagsOpen = false
                             onSetTags(text.split(",", "，").map { it.trim() }.filter { it.isNotEmpty() })
                         },
+                    )
+                }
+                if (speakers.isNotEmpty()) {
+                    SpeakerBar(
+                        speakers = speakers,
+                        guessing = guessing,
+                        failure = guessFailure,
+                        onRename = onRenameSpeaker,
+                        onGuess = onGuessSpeakers,
+                        onApplyGuess = onApplyGuess,
                     )
                 }
                 if (playback.available) {
@@ -532,4 +550,87 @@ private fun TextInputDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
         },
     )
+}
+
+/**
+ * 说话人一排：每人一个可点的 chip（点开改名），右边是"让 AI 猜名字"。
+ *
+ * 名字是本机会议数据的一部分，改完立刻写回 transcript；AI 建议只作提示，
+ * 不自动应用——猜错了会把转写稿改花，用户点一下才采纳。
+ */
+@Composable
+private fun SpeakerBar(
+    speakers: List<io.github.tancheng33.tingo.engine.SpeakerInfo>,
+    guessing: Boolean,
+    failure: GuessFailure?,
+    onRename: (Int, String) -> Unit,
+    onGuess: () -> Unit,
+    onApplyGuess: (Int) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    var editing by remember { mutableStateOf<Int?>(null) }
+    val editingSpeaker = editing?.let { index -> speakers.firstOrNull { it.index == index.toUInt() } }
+
+    if (editingSpeaker != null) {
+        TextInputDialog(
+            title = stringResource(R.string.detail_speaker_rename),
+            initial = editingSpeaker.name,
+            hint = stringResource(R.string.detail_speaker_rename_hint),
+            onDismiss = { editing = null },
+            onConfirm = { name ->
+                editing = null
+                onRename(editingSpeaker.index.toInt(), name)
+            },
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            speakers.forEach { speaker ->
+                Row(
+                    modifier = Modifier
+                        .background(colors.seg, TingoDimens.cardShape)
+                        .clickable { editing = speaker.index.toInt() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(speaker.name, style = MaterialTheme.typography.labelMedium, color = colors.text)
+                    if (speaker.suggested.isNotBlank()) {
+                        // 建议只作提示：用户点它才写进转写
+                        Text(
+                            stringResource(R.string.detail_speaker_apply_guess, speaker.suggested),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.blue,
+                            modifier = Modifier
+                                .clickable { onApplyGuess(speaker.index.toInt()) }
+                                .semantics { contentDescription = speaker.suggested },
+                        )
+                    }
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton(
+                label = stringResource(if (guessing) R.string.detail_speaker_guessing else R.string.detail_speaker_guess),
+                onClick = { if (!guessing) onGuess() },
+                kind = PillKind.Ghost,
+            )
+        }
+        failure?.let {
+            Text(
+                text = stringResource(it.reasonRes, it.detail),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.red,
+            )
+        }
+    }
 }
