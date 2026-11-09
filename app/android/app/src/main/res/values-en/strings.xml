@@ -173,4 +173,10 @@
     <string name="detail_speaker_apply_guess">Guess: %1$s</string>
     <string name="err_llm_unreadable">Could not read the model reply: %1$s</string>
     <string name="detail_speaker_no_clue">No explicit name cues found (self-introductions, being called by name)</string>
+    <string name="detail_edit_minutes">Edit minutes</string>
+    <string name="detail_history">History (%1$d)</string>
+    <string name="detail_history_empty">No versions yet. Each save keeps the previous one here.</string>
+    <string name="detail_history_open">View</string>
+    <string name="detail_history_restore">Restore this version</string>
+    <string name="detail_export_srt">Export SRT subtitles</string>
 </resources>

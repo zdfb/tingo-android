@@ -11,6 +11,7 @@ import io.github.tancheng33.tingo.engine.SearchResults
 import io.github.tancheng33.tingo.engine.StorageStats
 import io.github.tancheng33.tingo.engine.TingoFailure
 import io.github.tancheng33.tingo.engine.GlossaryTerm
+import io.github.tancheng33.tingo.engine.MinutesVersionInfo
 import io.github.tancheng33.tingo.engine.SpeakerInfo
 import io.github.tancheng33.tingo.engine.SpeakerPrompt
 import io.github.tancheng33.tingo.engine.TrashItem
@@ -152,6 +153,35 @@ class FakeEnginePort(
     }
 
     override fun glossary(): List<GlossaryTerm> = glossaryTerms
+
+    override fun minutesHistory(id: String): List<MinutesVersionInfo> = history
+
+    override fun minutesVersion(id: String, versionId: String): String = versions[versionId].orEmpty()
+
+    override fun restoreMinutesVersion(id: String, versionId: String) {
+        restoredVersions += versionId
+    }
+
+    override fun deleteMinutesVersion(id: String, versionId: String) {
+        deletedVersions += versionId
+    }
+
+    override fun saveMinutes(id: String, text: String) {
+        savedMinutes += id to text
+    }
+
+    override fun exportSrt(id: String, language: String): String {
+        exportedSrt += id to language
+        return "/tmp/$id.srt"
+    }
+
+    /** 纪要历史：用例直接塞 */
+    var history: List<MinutesVersionInfo> = emptyList()
+    var versions: Map<String, String> = emptyMap()
+    val restoredVersions = mutableListOf<String>()
+    val deletedVersions = mutableListOf<String>()
+    val savedMinutes = mutableListOf<Pair<String, String>>()
+    val exportedSrt = mutableListOf<Pair<String, String>>()
 
     /** 说话人列表：用例直接塞 */
     var speakerList: List<SpeakerInfo> = emptyList()

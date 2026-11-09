@@ -14,7 +14,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 4 | 转写（Paraformer + 标点 + 声纹聚类） | `asr.rs` + `cluster.rs` | 已有（sherpa-onnx） | — |
 | 5 | Apple Speech 可选后端 | `apple_speech.rs` | 不适用（macOS 专有） | 不迁移 |
 | 6 | 纪要生成 | `summarize.rs`（LLM API） | 已有（本轮改为远端 API） | — |
-| 7 | 纪要历史版本 | `/api/meetings/{id}/minutes/history` | 无 | 缺 |
+| 7 | 纪要历史版本（含手工编辑纪要） | `/api/meetings/{id}/minutes/history` | 已有（详情页溢出菜单：编辑 / 历史 / 恢复 / 删除） | — |
 | 8 | 纪要自检与重试 | `validate` + retry | 已有 | — |
 | 9 | 鱼骨图 | `fishbone.rs` | 已有（解析 + 卡片） | — |
 | 10 | 说话人命名（手改） | `/api/meetings/{id}/speakers` | 已有（详情页说话人 chip 点开改名） | — |
@@ -29,7 +29,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 19 | 存储空间管理与清理 | `disk.rs` + `/api/storage/cleanup` | 已有（总量/音频/残留 + 清理残留） | — |
 | 20 | 导出 Markdown / ZIP | `/api/meetings/{id}/minutes` | 已有（zip + md 分享） | — |
 | 21 | 导出 Word（docx） | `/api/meetings/{id}/docx` | 无 | 缺 |
-| 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 无 | 缺 |
+| 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 已有（命名与桌面一致，导出后走系统分享） | — |
 | 23 | 导出 PDF | `/api/meetings/{id}/pdf` | 无 | 缺 |
 | 24 | 导出 Excalidraw（鱼骨图） | `/api/meetings/{id}/excalidraw` | 无 | 缺 |
 | 25 | 导入音频 | `/api/import` | 无 | 缺 |

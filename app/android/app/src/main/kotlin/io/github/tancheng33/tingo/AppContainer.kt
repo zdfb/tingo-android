@@ -170,6 +170,18 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun glossary(): Nothing = fail()
 
+    override fun minutesHistory(id: String): Nothing = fail()
+
+    override fun minutesVersion(id: String, versionId: String): Nothing = fail()
+
+    override fun restoreMinutesVersion(id: String, versionId: String): Nothing = fail()
+
+    override fun deleteMinutesVersion(id: String, versionId: String): Nothing = fail()
+
+    override fun saveMinutes(id: String, text: String): Nothing = fail()
+
+    override fun exportSrt(id: String, language: String): Nothing = fail()
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,

@@ -121,6 +121,13 @@ class DetailPlaybackTest {
         override fun parseSpeakerSuggestions(id: String, text: String) =
             emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
         override fun glossary() = emptyList<io.github.tancheng33.tingo.engine.GlossaryTerm>()
+        override fun minutesHistory(id: String) =
+            emptyList<io.github.tancheng33.tingo.engine.MinutesVersionInfo>()
+        override fun minutesVersion(id: String, versionId: String) = ""
+        override fun restoreMinutesVersion(id: String, versionId: String) = Unit
+        override fun deleteMinutesVersion(id: String, versionId: String) = Unit
+        override fun saveMinutes(id: String, text: String) = Unit
+        override fun exportSrt(id: String, language: String) = ""
     }
 
     private fun viewModel(dir: File, player: FakePlayer) = DetailViewModel(

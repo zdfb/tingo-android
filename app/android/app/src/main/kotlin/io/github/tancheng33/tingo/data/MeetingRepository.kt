@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.data
 
 import io.github.tancheng33.tingo.engine.BatchOutcome
+import io.github.tancheng33.tingo.engine.MinutesVersionInfo
 import io.github.tancheng33.tingo.engine.MeetingSummary
 import io.github.tancheng33.tingo.engine.SearchResults
 import io.github.tancheng33.tingo.engine.StorageStats
@@ -74,6 +75,22 @@ class MeetingRepository(
     suspend fun listTrash(): List<TrashItem> = withContext(io) { engine.listTrash() }
 
     suspend fun purgeTrash(id: String): ULong = withContext(io) { engine.purgeTrash(id) }
+
+    suspend fun minutesHistory(id: String): List<MinutesVersionInfo> = withContext(io) { engine.minutesHistory(id) }
+
+    suspend fun minutesVersion(id: String, versionId: String): String =
+        withContext(io) { engine.minutesVersion(id, versionId) }
+
+    suspend fun restoreMinutesVersion(id: String, versionId: String) =
+        withContext(io) { engine.restoreMinutesVersion(id, versionId) }
+
+    suspend fun deleteMinutesVersion(id: String, versionId: String) =
+        withContext(io) { engine.deleteMinutesVersion(id, versionId) }
+
+    suspend fun saveMinutes(id: String, text: String) = withContext(io) { engine.saveMinutes(id, text) }
+
+    suspend fun exportSrt(id: String, language: String): String =
+        withContext(io) { engine.exportSrt(id, language) }
 
     /** 清理残留文件（合成后遗留的音轨、part 与 tmp）；返回释放的字节数。 */
     suspend fun cleanupLeftovers(): ULong = withContext(io) { engine.cleanupLeftovers() }

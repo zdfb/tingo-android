@@ -123,4 +123,33 @@ class LibraryManageInstrumentedTest {
         assertEquals(1, glossary.size)
         assertEquals("历史工单", glossary[0].term)
     }
+
+    @Test
+    fun editingMinutesKeepsHistoryAndExportsSrt() {
+        val (engine, meetingsRoot) = engine()
+        val dir = File(meetingsRoot, "2026-11-06_0900_周会").apply { mkdirs() }
+        File(dir, "纪要.md").writeText("# 周会\n\n## 决议\n- 先修首屏\n")
+        File(dir, "transcript.json").writeText(
+            """{"source":"录音.wav","duration_ms":9000,"sentences":[
+                {"speaker":0,"start_ms":0,"end_ms":3000,"text":"先修首屏"},
+                {"speaker":1,"start_ms":4000,"end_ms":8000,"text":"好"}
+            ]}""",
+        )
+
+        engine.saveMinutes("2026-11-06_0900_周会", "# 周会\n\n## 决议\n- 先修首屏\n- 再看注册页")
+        val history = engine.minutesHistory("2026-11-06_0900_周会")
+        assertEquals(1, history.size)
+        assertTrue("历史里应当是改之前那一版：${history[0].preview}", history[0].preview.contains("先修首屏"))
+
+        // 恢复旧版：当前那版会再进历史，所以"恢复"本身也可退回
+        assertTrue(engine.minutesVersion("2026-11-06_0900_周会", history[0].id).contains("先修首屏"))
+        engine.restoreMinutesVersion("2026-11-06_0900_周会", history[0].id)
+        val current = File(dir, "纪要.md").readText()
+        assertTrue("恢复后应当是旧版内容：$current", current.contains("先修首屏"))
+
+        val srt = File(engine.exportSrt("2026-11-06_0900_周会", "zh"))
+        assertTrue("SRT 没落盘：$srt", srt.isFile)
+        val body = srt.readText()
+        assertTrue("SRT 缺少序号或时间轴：$body", body.contains("-->") && body.contains("先修首屏"))
+    }
 }

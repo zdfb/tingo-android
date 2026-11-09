@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.components.PillTabs
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
@@ -94,6 +95,12 @@ fun DetailScreen(
     onSetTags: (List<String>) -> Unit = {},
     /** 从搜索命中进来时，打开就跳到这句话 */
     initialSeekMs: Long? = null,
+    onSaveMinutes: (String) -> Unit = {},
+    onExportSrt: () -> Unit = {},
+    history: List<io.github.tancheng33.tingo.engine.MinutesVersionInfo> = emptyList(),
+    onOpenVersion: (String) -> Unit = {},
+    onRestoreVersion: (String) -> Unit = {},
+    onDeleteVersion: (String) -> Unit = {},
     onRenameSpeaker: (Int, String) -> Unit = { _, _ -> },
     onGuessSpeakers: () -> Unit = {},
     onApplyGuess: (Int) -> Unit = {},
@@ -135,6 +142,8 @@ fun DetailScreen(
             var renameOpen by remember { mutableStateOf(false) }
             var tagsOpen by remember { mutableStateOf(false) }
             var menuOpen by remember { mutableStateOf(false) }
+            var editOpen by remember { mutableStateOf(false) }
+            var historyOpen by remember { mutableStateOf(false) }
             Column(modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -187,8 +196,57 @@ fun DetailScreen(
                                     tagsOpen = true
                                 },
                             )
+                            if (detail?.minutesText != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_edit_minutes), color = TingoTheme.colors.text) },
+                                    onClick = {
+                                        menuOpen = false
+                                        editOpen = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(R.string.detail_history, history.size),
+                                            color = TingoTheme.colors.text,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        historyOpen = true
+                                    },
+                                )
+                            }
+                            if (detail?.transcript != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_export_srt), color = TingoTheme.colors.text) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onExportSrt()
+                                    },
+                                )
+                            }
                         }
                     }
+                }
+                if (editOpen && detail?.minutesText != null) {
+                    MinutesEditor(
+                        initial = detail.minutesText.orEmpty(),
+                        onDismiss = { editOpen = false },
+                        onSave = { text ->
+                            editOpen = false
+                            onSaveMinutes(text)
+                        },
+                    )
+                }
+                if (historyOpen) {
+                    HistorySheet(
+                        versions = history,
+                        onOpen = onOpenVersion,
+                        onRestore = onRestoreVersion,
+                        onDelete = onDeleteVersion,
+                        onDismiss = { historyOpen = false },
+                    )
                 }
                 if (renameOpen) {
                     TextInputDialog(
@@ -655,4 +713,113 @@ private fun SpeakerBar(
             )
         }
     }
+}
+
+/**
+ * 纪要多行编辑器。
+ *
+ * 桌面端有"编辑纪要"（改完保存，旧版自动进历史），手机上同样需要：
+ * 模型写完总要人过一遍，直接在手机上改比导出再改回更实际。
+ */
+@Composable
+private fun MinutesEditor(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val colors = TingoTheme.colors
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.card,
+        title = { Text(stringResource(R.string.detail_edit_minutes), color = colors.text) },
+        text = {
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 160.dp, max = 360.dp)
+                    .background(colors.seg, TingoDimens.controlShape)
+                    .padding(12.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .semantics { contentDescription = "minutes-editor" },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) {
+                Text(stringResource(R.string.action_save), color = colors.blue)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
+        },
+    )
+}
+
+/** 纪要历史：预览、恢复、删除。恢复本身也可退回，所以不弹二次确认。 */
+@Composable
+private fun HistorySheet(
+    versions: List<io.github.tancheng33.tingo.engine.MinutesVersionInfo>,
+    onOpen: (String) -> Unit,
+    onRestore: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = TingoTheme.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.card,
+        title = { Text(stringResource(R.string.detail_history, versions.size), color = colors.text) },
+        text = {
+            if (versions.isEmpty()) {
+                Text(stringResource(R.string.detail_history_empty), color = colors.muted)
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    items(versions, key = { it.id }) { version ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .semantics { contentDescription = version.id },
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = formatSavedAt(version.savedAt),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.text,
+                            )
+                            Text(
+                                text = version.preview.replace('\n', ' ').take(120),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.muted,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { onOpen(version.id) }) {
+                                    Text(stringResource(R.string.detail_history_open), color = colors.blue)
+                                }
+                                TextButton(onClick = { onRestore(version.id) }) {
+                                    Text(stringResource(R.string.detail_history_restore), color = colors.blue)
+                                }
+                                TextButton(onClick = { onDelete(version.id) }) {
+                                    Text(stringResource(R.string.library_delete), color = colors.red)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = colors.blue) }
+        },
+    )
+}
+
+/** 历史条目的时间：本地时区的"月-日 时:分"，手机上看年代没意义。 */
+private fun formatSavedAt(millis: ULong): String {
+    val zone = java.util.TimeZone.getDefault()
+    val fmt = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+    fmt.timeZone = zone
+    return fmt.format(java.util.Date(millis.toLong()))
 }

@@ -672,6 +672,21 @@ private fun DetailRoute(
                 viewModel.setTags(tags)
                 onChanged()
             },
+            history = state.history,
+            onSaveMinutes = viewModel::saveMinutes,
+            onOpenVersion = viewModel::openVersion,
+            onRestoreVersion = viewModel::restoreVersion,
+            onDeleteVersion = viewModel::deleteVersion,
+            onExportSrt = {
+                exportScope.launch {
+                    // 导出是引擎写的文件（命名与桌面一致），这里只负责把文件分享出去
+                    // 界面语言：转写里的"说话人N/Speaker N"要跟界面一致
+                    val path = viewModel.exportSrt(
+                        if (java.util.Locale.getDefault().language == "en") "en" else "zh",
+                    )
+                    if (path != null) shareFile(context, File(path))
+                }
+            },
             onExportBundle = {
                 pendingBundleTitle.value = meetingTitle
                 bundleLauncher.launch(

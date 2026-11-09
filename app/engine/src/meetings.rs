@@ -13,6 +13,23 @@ use crate::minutes::SectionKind;
 use crate::transcript::{fmt_ts, Transcript};
 
 pub const AUDIO: &str = "录音.m4a";
+
+/// 文件名里不能出现的字符（Obsidian 链接也不认 # ^ [ ] |）。
+///
+/// 导出 SRT / 笔记时用；放在这里而不是 obsidian 模块，是因为两个平台都要用。
+pub fn safe_name(s: &str) -> String {
+    let s: String = s
+        .chars()
+        .map(|c| {
+            if "/\\:*?\"<>|#^[]".contains(c) || c.is_control() {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
 pub const MINUTES: &str = "纪要.md";
 pub const TRANSCRIPT_MD: &str = "转写.md";
 pub const TRANSCRIPT_JSON: &str = "transcript.json";

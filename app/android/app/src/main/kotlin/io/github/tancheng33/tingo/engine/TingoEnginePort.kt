@@ -95,6 +95,23 @@ interface TingoEnginePort {
     /** 跨会议术语表（来自各场纪要的 terms 代码块）。 */
     fun glossary(): List<GlossaryTerm>
 
+    /** 纪要历史版本，按时间从新到旧。 */
+    fun minutesHistory(id: String): List<MinutesVersionInfo>
+
+    /** 某个历史版本的全文。 */
+    fun minutesVersion(id: String, versionId: String): String
+
+    /** 用某个版本覆盖当前纪要（当前版本先进历史）。 */
+    fun restoreMinutesVersion(id: String, versionId: String)
+
+    fun deleteMinutesVersion(id: String, versionId: String)
+
+    /** 手工编辑纪要；旧版本自动进历史。 */
+    fun saveMinutes(id: String, text: String)
+
+    /** 导出 SRT 到会议目录，返回文件绝对路径。 */
+    fun exportSrt(id: String, language: String): String
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -157,6 +174,23 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
         mapEngineCall { engine.parseSpeakerSuggestions(id, text) }
 
     override fun glossary(): List<GlossaryTerm> = mapEngineCall { engine.glossary() }
+
+    override fun minutesHistory(id: String): List<MinutesVersionInfo> =
+        mapEngineCall { engine.minutesHistory(id) }
+
+    override fun minutesVersion(id: String, versionId: String): String =
+        mapEngineCall { engine.minutesVersion(id, versionId) }
+
+    override fun restoreMinutesVersion(id: String, versionId: String) =
+        mapEngineCall { engine.restoreMinutesVersion(id, versionId) }
+
+    override fun deleteMinutesVersion(id: String, versionId: String) =
+        mapEngineCall { engine.deleteMinutesVersion(id, versionId) }
+
+    override fun saveMinutes(id: String, text: String) = mapEngineCall { engine.saveMinutes(id, text) }
+
+    override fun exportSrt(id: String, language: String): String =
+        mapEngineCall { engine.exportSrt(id, language) }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

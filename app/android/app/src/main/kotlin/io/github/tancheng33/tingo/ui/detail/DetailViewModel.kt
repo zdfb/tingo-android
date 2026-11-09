@@ -8,6 +8,7 @@ import io.github.tancheng33.tingo.engine.MinutesDoc
 import io.github.tancheng33.tingo.engine.TingoEnginePort
 import io.github.tancheng33.tingo.R
 import kotlinx.coroutines.CancellationException
+import io.github.tancheng33.tingo.engine.MinutesVersionInfo
 import io.github.tancheng33.tingo.engine.SpeakerInfo
 import io.github.tancheng33.tingo.engine.TingoFailure
 import io.github.tancheng33.tingo.minutes.remote.LlmChat
@@ -31,6 +32,9 @@ import kotlinx.coroutines.launch
  * [minutesFailure] 与 [failure] 分开：纪要解析失败时转写仍然要看得到，
  * 不能因为一个章节解析不了就把整页判死。
  */
+/** 正在查看的历史版本：全文 + 是否只读预览。 */
+data class VersionPreview(val id: String, val text: String)
+
 /** 猜名字的结果提示（不是错误）。 */
 enum class GuessNote { NoClue }
 
@@ -48,6 +52,10 @@ data class DetailUiState(
     val guessFailure: GuessFailure? = null,
     /** 猜完了但一条线索都没找到 */
     val guessNote: GuessNote? = null,
+    /** 纪要历史版本（列表，含预览） */
+    val history: List<MinutesVersionInfo> = emptyList(),
+    /** 正在查看的历史版本全文；null 表示没在预览 */
+    val preview: VersionPreview? = null,
     val minutes: MinutesDoc? = null,
     val minutesFailure: FailureKind? = null,
     val failure: FailureKind? = null,
@@ -74,6 +82,89 @@ class DetailViewModel(
 
     init {
         load()
+    }
+
+    /** 读一遍纪要历史（列表只需要预览，不搬全文）。 */
+    fun loadHistory() {
+        viewModelScope.launch(io) {
+            val versions = try {
+                engine.minutesHistory(meetingId)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            _state.value = _state.value.copy(history = versions)
+        }
+    }
+
+    /** 打开某个历史版本看全文。 */
+    fun openVersion(versionId: String) {
+        viewModelScope.launch(io) {
+            val text = try {
+                engine.minutesVersion(meetingId, versionId)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            _state.value = _state.value.copy(preview = VersionPreview(versionId, text))
+        }
+    }
+
+    fun closePreview() {
+        _state.value = _state.value.copy(preview = null)
+    }
+
+    /**
+     * 用某个版本覆盖当前纪要。
+     *
+     * 引擎会先把"当前这版"归档，所以恢复本身也能再退回去——界面不需要额外的撤销。
+     */
+    fun restoreVersion(versionId: String) {
+        viewModelScope.launch(io) {
+            try {
+                engine.restoreMinutesVersion(meetingId, versionId)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            _state.value = _state.value.copy(preview = null)
+            load()
+            loadHistory()
+        }
+    }
+
+    fun deleteVersion(versionId: String) {
+        viewModelScope.launch(io) {
+            try {
+                engine.deleteMinutesVersion(meetingId, versionId)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            loadHistory()
+        }
+    }
+
+    /** 手工编辑纪要：与模型生成同一条保存路径，旧版自动进历史。 */
+    fun saveMinutes(text: String) {
+        viewModelScope.launch(io) {
+            try {
+                engine.saveMinutes(meetingId, text)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            load()
+            loadHistory()
+        }
+    }
+
+    /** 导出 SRT；返回文件路径，失败返回 null。 */
+    suspend fun exportSrt(language: String): String? = try {
+        engine.exportSrt(meetingId, language)
+    } catch (e: TingoFailure) {
+        _state.value = _state.value.copy(failure = e.kind)
+        null
     }
 
     /**
@@ -228,6 +319,7 @@ class DetailViewModel(
             }
             _state.value = next.copy(playback = _state.value.playback)
             preparePlayback()
+            loadHistory()
         }
     }
 

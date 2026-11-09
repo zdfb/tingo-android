@@ -40,20 +40,11 @@ pub fn vaults() -> Vec<(String, String)> {
     out.into_iter().map(|(_, n, p)| (n, p)).collect()
 }
 
-/// 文件名里不能出现的字符（Obsidian 链接也不认 # ^ [ ] |）
-pub fn safe_name(s: &str) -> String {
-    let s: String = s
-        .chars()
-        .map(|c| {
-            if "/\\:*?\"<>|#^[]".contains(c) || c.is_control() {
-                ' '
-            } else {
-                c
-            }
-        })
-        .collect();
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
-}
+/// 文件名里不能出现的字符（Obsidian 链接也不认 # ^ [ ] |）。
+///
+/// 实现放在 [`crate::meetings`]：Android 导出 SRT 也要用同一套规则，
+/// 而 obsidian 模块是桌面专有的。
+pub use crate::meetings::safe_name;
 
 fn yaml_str(s: &str) -> String {
     serde_json::to_string(s).unwrap() // JSON 字符串也是合法的 YAML 字符串

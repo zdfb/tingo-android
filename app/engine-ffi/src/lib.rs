@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tingo_engine::fishbone as engine_fishbone;
 use tingo_engine::meetings;
 use tingo_engine::minutes as engine_minutes;
+use tingo_engine::minutes_history;
 use tingo_engine::paths::EnginePaths;
 use tingo_engine::transcript as engine_transcript;
 
@@ -225,6 +226,30 @@ pub struct TrashItem {
 
 
 
+
+/// 列表用的版本摘要：只取前 200 字，避免把整篇纪要搬过 FFI 边界。
+fn version_info(v: &minutes_history::Version) -> MinutesVersionInfo {
+    MinutesVersionInfo {
+        id: v.id.clone(),
+        saved_at: v.saved_at,
+        preview: v.text.trim().chars().take(200).collect(),
+        chars: v.text.chars().count() as u32,
+    }
+}
+
+/// 导出文件名的主干：纪要标题 → 会议主题；与桌面 `export_stem` 一致。
+fn export_stem(dir: &Path, id: &str) -> String {
+    let minutes = std::fs::read_to_string(dir.join(meetings::MINUTES)).unwrap_or_default();
+    let topic = id.splitn(3, '_').nth(2).unwrap_or(id);
+    let name = meetings::safe_name(
+        &meetings::minutes_title(&minutes).unwrap_or_else(|| topic.to_string()),
+    );
+    if name.is_empty() {
+        meetings::safe_name(topic)
+    } else {
+        name
+    }
+}
 /// 读会议目录里的转写；没有转写时报 `Missing`（界面据此提示"先生成转写"）。
 fn load_transcript(dir: &Path) -> Result<engine_transcript::Transcript, EngineError> {
     let path = dir.join("transcript.json");
@@ -411,6 +436,17 @@ pub struct SpeakerPrompt {
 pub struct GlossaryTerm {
     pub term: String,
     pub variants: Vec<String>,
+}
+
+/// 纪要的一个历史版本（列表用，只带预览）。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MinutesVersionInfo {
+    pub id: String,
+    /// 保存时间（毫秒时间戳）
+    pub saved_at: u64,
+    /// 前 200 字，列表里当摘要用
+    pub preview: String,
+    pub chars: u32,
 }
 /// 引擎实例：持有注入的目录，所有用例函数都是它的方法。
 #[derive(uniffi::Object)]
@@ -600,6 +636,71 @@ impl TingoEngine {
         })
     }
 
+
+
+    /// 纪要的历史版本，按保存时间从新到旧。
+    pub fn minutes_history(&self, id: String) -> Result<Vec<MinutesVersionInfo>, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("minutes_history", move || {
+            minutes_history::list(&dir)
+                .map_err(|e| io_error(e, "minutes_history"))
+                .map(|versions| versions.iter().map(version_info).collect())
+        })
+    }
+
+    /// 某个历史版本的全文。
+    pub fn minutes_version(&self, id: String, version_id: String) -> Result<String, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("minutes_version", move || {
+            minutes_history::read(&dir, &version_id)
+                .map(|v| v.text)
+                .map_err(|e| io_error(e, "minutes_version"))
+        })
+    }
+
+    /// 用某个历史版本覆盖当前纪要（当前版本会先被归档，所以"恢复"也能再退回去）。
+    pub fn restore_minutes_version(
+        &self,
+        id: String,
+        version_id: String,
+    ) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("restore_minutes_version", move || {
+            let version = minutes_history::read(&dir, &version_id)
+                .map_err(|e| io_error(e, "restore_minutes_version"))?;
+            minutes_history::save(&dir, &version.text).map_err(|e| io_error(e, "restore_minutes_version"))
+        })
+    }
+
+    /// 删除一个历史版本。
+    pub fn delete_minutes_version(&self, id: String, version_id: String) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("delete_minutes_version", move || {
+            minutes_history::delete(&dir, &version_id).map_err(|e| io_error(e, "delete_minutes_version"))
+        })
+    }
+
+    /// 手工编辑纪要：与模型生成走同一条保存路径，旧版本自动进历史。
+    pub fn save_minutes(&self, id: String, text: String) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("save_minutes", move || {
+            minutes_history::save(&dir, &format!("{}\n", text.trim_end()))
+                .map_err(|e| io_error(e, "save_minutes"))
+        })
+    }
+
+    /// 导出 SRT 字幕到会议目录，返回文件绝对路径。命名规则与桌面一致（纪要标题优先）。
+    pub fn export_srt(&self, id: String, language: String) -> Result<String, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("export_srt", move || {
+            let tr = load_transcript(&dir)?;
+            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let stem = export_stem(&dir, &id);
+            let out = dir.join(format!("{stem}.srt"));
+            std::fs::write(&out, tr.to_srt(lang)).map_err(|e| io_error(e, "export_srt"))?;
+            Ok(out.to_string_lossy().into_owned())
+        })
+    }
 
     /// 当前会议的说话人列表：编号、显示名、AI 建议（没猜过时为空）。
     pub fn speakers(&self, id: String) -> Result<Vec<SpeakerInfo>, EngineError> {
@@ -826,6 +927,10 @@ fn io_error(err: std::io::Error, what: &str) -> EngineError {
     let detail = format!("{what}: {err}");
     match err.kind() {
         std::io::ErrorKind::PermissionDenied => EngineError::PermissionDenied { detail },
+        std::io::ErrorKind::NotFound => EngineError::Missing { detail },
+        // 引擎自己抛的 InvalidInput（版本号不合法、路径越界一类）属于调用方用错，
+        // 不是"数据坏了"：界面能据此提示"参数不对"，而不是让用户以为文件损坏
+        std::io::ErrorKind::InvalidInput => EngineError::InvalidInput { detail },
         _ => EngineError::Malformed { detail },
     }
 }
@@ -1579,6 +1684,100 @@ mod tests {
         assert_eq!(glossary.len(), 1, "同一个词要合并成一条：{glossary:?}");
         assert_eq!(glossary[0].term, "历史工单");
         assert_eq!(glossary[0].variants.len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 纪要历史与导出 ----
+
+    #[test]
+    fn saving_minutes_archives_the_previous_version() {
+        let root = temp_root("minutes-archive");
+        let dir = meeting(&root, "2026-11-05_1000_周会");
+        std::fs::write(dir.join("纪要.md"), "# 周会\n\n旧的内容\n").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        engine.save_minutes("2026-11-05_1000_周会".to_string(), "# 周会\n\n新的内容".to_string()).unwrap();
+
+        // 当前文件是新内容，旧内容进了历史
+        let current = std::fs::read_to_string(dir.join("纪要.md")).unwrap();
+        assert!(current.contains("新的内容"));
+        let history = engine.minutes_history("2026-11-05_1000_周会".to_string()).unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].preview.contains("旧的内容"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restoring_a_version_also_archives_what_it_replaces() {
+        let root = temp_root("minutes-restore");
+        let dir = meeting(&root, "2026-11-05_1000_周会");
+        std::fs::write(dir.join("纪要.md"), "# 周会\n\nv1\n").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.save_minutes("2026-11-05_1000_周会".to_string(), "# 周会\n\nv2".to_string()).unwrap();
+
+        let first = engine.minutes_history("2026-11-05_1000_周会".to_string()).unwrap()[0].id.clone();
+        engine.restore_minutes_version("2026-11-05_1000_周会".to_string(), first).unwrap();
+
+        // 恢复之后当前是 v1，而 v2 也进了历史——"恢复"本身也能再退回去
+        assert!(std::fs::read_to_string(dir.join("纪要.md")).unwrap().contains("v1"));
+        let versions = engine.minutes_history("2026-11-05_1000_周会".to_string()).unwrap();
+        assert_eq!(versions.len(), 2);
+        assert!(versions.iter().any(|v| v.preview.contains("v2")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn every_version_can_be_read_and_deleted() {
+        let root = temp_root("minutes-delete");
+        let dir = meeting(&root, "2026-11-05_1000_周会");
+        std::fs::write(dir.join("纪要.md"), "# 周会\n\n第一版\n").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.save_minutes("2026-11-05_1000_周会".to_string(), "# 周会\n\n第二版".to_string()).unwrap();
+
+        let id = engine.minutes_history("2026-11-05_1000_周会".to_string()).unwrap()[0].id.clone();
+        assert!(engine.minutes_version("2026-11-05_1000_周会".to_string(), id.clone()).unwrap().contains("第一版"));
+
+        engine.delete_minutes_version("2026-11-05_1000_周会".to_string(), id).unwrap();
+        assert!(engine.minutes_history("2026-11-05_1000_周会".to_string()).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn history_rejects_foreign_version_ids() {
+        let root = temp_root("minutes-badid");
+        meeting(&root, "2026-11-05_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        // 版本号只允许数字与连字符：`../../x` 这种必须拒绝，不能拿它当路径
+        let result = engine.minutes_version("2026-11-05_1000_周会".to_string(), "../meta.json".to_string());
+        assert!(matches!(result, Err(EngineError::InvalidInput { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn export_srt_writes_a_file_named_after_the_minutes_title() {
+        let root = temp_root("export-srt");
+        let dir = meeting_with_transcript(&root, "2026-11-05_1000_产品复盘");
+        std::fs::write(dir.join("纪要.md"), "# 产品复盘会\n\n## 决议\n- 先修首屏\n").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let path = engine.export_srt("2026-11-05_1000_产品复盘".to_string(), "zh".to_string()).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(path.ends_with("产品复盘会.srt"), "实际：{path}");
+        assert!(text.contains("1\n"), "SRT 应有序号：{text}");
+        assert!(text.contains("-->"), "SRT 应有时间轴：{text}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn export_srt_without_transcript_is_missing_not_empty_file() {
+        let root = temp_root("export-srt-none");
+        meeting(&root, "2026-11-05_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.export_srt("2026-11-05_1000_周会".to_string(), "zh".to_string());
+        assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
