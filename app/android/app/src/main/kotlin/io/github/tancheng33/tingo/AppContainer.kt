@@ -52,17 +52,11 @@ class AppContainer(context: Context) {
             UnavailableEngine(IllegalStateException("unsupported abi"))
         }
 
-    /** 端侧模型的清单与仓库：模型随 APK 内置，解包到 `files/tingo/models`。 */
+    /** 语音模型的清单与仓库：模型随 APK 内置，解包到 `files/tingo/models`。 */
     val catalog: ModelCatalog = ModelCatalog.parse(
         appContext.assets.open("models.json").bufferedReader().use { it.readText() },
     )
     val models: ModelStore = ModelStore(File(dataRoot, "models"), UrlFetcher())
-
-    /** 纪要用的语言模型：与语音模型分开列出，两套不要求同时驻留内存。 */
-    val llmCatalog: ModelCatalog = ModelCatalog.parse(
-        appContext.assets.open("llm.json").bufferedReader().use { it.readText() },
-    )
-    val llmFile: File = models.fileFor(llmCatalog.files.single())
 
     /** 内置模型包（`assets/models/`）。 */
     private val bundle: ModelBundle = AssetModelBundle(appContext.assets)
@@ -76,24 +70,21 @@ class AppContainer(context: Context) {
     /**
      * 把内置模型解包到模型目录。
      *
-     * 幂等：已经解包过就直接返回，所以可以在启动、转写、生成纪要三处都放心调用。
+     * 幂等：已经解包过就直接返回，所以可以在启动与转写两处都放心调用。
      * 安装包缺模型（例如开发时没跑 `fetch-models-offline.sh`）时返回 false，
      * 此时界面仍走原来的下载路径。
      */
     fun installBundledModels(): Boolean {
         synchronized(installMutex) {
-            if (catalog.files.all { models.isReady(it) } && llmCatalog.files.all { models.isReady(it) }) {
+            if (catalog.files.all { models.isReady(it) }) {
                 return true
             }
             _installProgress.value = 0f
             val asrOk = ModelInstaller.install(models, catalog, bundle) { fraction ->
-                _installProgress.value = fraction * 0.45f
-            }
-            val llmOk = ModelInstaller.install(models, llmCatalog, bundle) { fraction ->
-                _installProgress.value = 0.45f + fraction * 0.55f
+                _installProgress.value = fraction
             }
             _installProgress.value = null
-            return asrOk && llmOk
+            return asrOk
         }
     }
 

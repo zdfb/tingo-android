@@ -6,11 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
-import io.github.tancheng33.tingo.ui.theme.TingoDimens
-import io.github.tancheng33.tingo.ui.theme.TingoTheme
-import io.github.tancheng33.tingo.ui.components.PillButton
-import io.github.tancheng33.tingo.ui.components.PillFilter
-import io.github.tancheng33.tingo.ui.components.PillKind
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,24 +13,40 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.Alignment
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.settings.AppLanguage
+import io.github.tancheng33.tingo.settings.LlmConfig
+import io.github.tancheng33.tingo.settings.LlmProtocol
+import io.github.tancheng33.tingo.ui.components.PillButton
+import io.github.tancheng33.tingo.ui.components.PillFilter
+import io.github.tancheng33.tingo.ui.components.PillKind
+import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
 /**
  * 设置页（地基版）：界面语言、会议库位置、引擎版本。
@@ -51,7 +62,7 @@ fun SettingsScreen(
     onLanguageChange: (AppLanguage) -> Unit,
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
-    onDeleteLlmModel: () -> Unit = {},
+    onSaveLlmConfig: (LlmConfig) -> Unit = {},
     libraryBusy: Boolean = false,
     libraryResult: LibraryOpResult? = null,
     onBackupLibrary: () -> Unit = {},
@@ -96,6 +107,10 @@ fun SettingsScreen(
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
+        LlmServiceSection(config = models.llmConfig, onSave = onSaveLlmConfig)
+
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(
@@ -107,11 +122,6 @@ fun SettingsScreen(
                 label = stringResource(R.string.settings_models_asr),
                 group = models.asr,
                 onDelete = onDeleteAsrModels,
-            )
-            ModelRow(
-                label = stringResource(R.string.settings_models_llm),
-                group = models.llm,
-                onDelete = onDeleteLlmModel,
             )
             models.modelInstall?.let { fraction ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -240,3 +250,107 @@ private fun ModelRow(label: String, group: ModelGroup, onDelete: () -> Unit) {
 
 /** 字节 → MB，界面只显示整数兆，够用且不啰嗦。 */
 private const val MB = 1_000_000L
+
+/**
+ * 模型服务设置：地址、密钥、协议、模型名。
+ *
+ * 四项全空是默认状态——应用不预置任何服务商。密钥用密码输入框，
+ * 避免别人站在旁边就能看全。
+ */
+@Composable
+private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
+    var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
+    var apiKey by remember(config) { mutableStateOf(config.apiKey) }
+    var model by remember(config) { mutableStateOf(config.model) }
+    var protocol by remember(config) { mutableStateOf(config.protocol) }
+    val draft = LlmConfig(baseUrl = baseUrl, apiKey = apiKey, model = model, protocol = protocol)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.settings_llm_section), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
+        Text(
+            stringResource(R.string.settings_llm_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = TingoTheme.colors.muted,
+        )
+        SettingsField(
+            label = stringResource(R.string.settings_llm_base_url),
+            value = baseUrl,
+            placeholder = stringResource(R.string.settings_llm_base_url_hint),
+            onValueChange = { baseUrl = it },
+        )
+        SettingsField(
+            label = stringResource(R.string.settings_llm_api_key),
+            value = apiKey,
+            placeholder = "",
+            secret = true,
+            onValueChange = { apiKey = it },
+        )
+        SettingsField(
+            label = stringResource(R.string.settings_llm_model),
+            value = model,
+            placeholder = stringResource(R.string.settings_llm_model_hint),
+            onValueChange = { model = it },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LlmProtocol.entries.forEach { option ->
+                PillFilter(
+                    label = option.wire,
+                    selected = option == protocol,
+                    onClick = { protocol = option },
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(
+                label = stringResource(R.string.action_save),
+                onClick = { onSave(draft) },
+                enabled = draft.isConfigured,
+            )
+            if (!draft.isConfigured) {
+                Text(
+                    stringResource(R.string.settings_llm_incomplete),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TingoTheme.colors.muted,
+                )
+            }
+        }
+    }
+}
+
+/** 一个带标签的输入框；[secret] 为真时用密码样式并隐藏已输入内容。 */
+@Composable
+private fun SettingsField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    secret: Boolean = false,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = TingoTheme.colors.muted)
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = TingoTheme.colors.text),
+            cursorBrush = SolidColor(TingoTheme.colors.blue),
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+            decorationBox = { inner ->
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(TingoDimens.radiusControl))
+                        .background(TingoTheme.colors.seg)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                ) {
+                    if (value.isEmpty() && placeholder.isNotEmpty()) {
+                        Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = TingoTheme.colors.faint)
+                    }
+                    inner()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+        )
+    }
+}

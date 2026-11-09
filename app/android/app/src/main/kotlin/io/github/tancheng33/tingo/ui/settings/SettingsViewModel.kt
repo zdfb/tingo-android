@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.data.LibraryBackup
 import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.settings.AppSettings
+import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.models.ModelStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -12,8 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * 一组模型（识别用的四个文件、或纪要用的一个 GGUF）在磁盘上的情况。
+/** 一组模型（识别用的四个文件）在磁盘上的情况。
  *
  * [readyCount] 与 [fileCount] 分开是为了区分"没下过"和"下了一半"：
  * 前者可以放心删、后者删掉就是浪费已下的流量，界面要说清楚。
@@ -39,7 +40,8 @@ sealed interface LibraryOpResult {
 data class SettingsUiState(
     val loading: Boolean = true,
     val asr: ModelGroup = ModelGroup(),
-    val llm: ModelGroup = ModelGroup(),
+    /** 纪要用的模型服务配置；默认全空 */
+    val llmConfig: LlmConfig = LlmConfig(),
     /** 删除失败时给出原因，而不是静默什么都不发生 */
     val deleteFailed: Boolean = false,
     /** 备份/恢复是否在跑，跑了什么结果 */
@@ -57,7 +59,8 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val store: ModelStore,
     private val catalog: ModelCatalog,
-    private val llmCatalog: ModelCatalog,
+    /** 模型服务配置的读写入口；测试里用内存实现 */
+    private val settings: AppSettings,
     /** 会议库根目录：备份从这里打包，恢复往这里写 */
     private val meetingsRoot: java.io.File,
     /** 内置模型的解包进度；null 表示没有在解包 */
@@ -86,8 +89,11 @@ class SettingsViewModel(
     /** 删掉识别模型（四个文件一起，缺一个也用不了）。 */
     fun deleteAsr() = delete(catalog)
 
-    /** 删掉纪要模型。 */
-    fun deleteLlm() = delete(llmCatalog)
+    /** 保存模型服务配置；空字段保持为空由界面负责提示，这里不做静默纠正。 */
+    fun saveLlmConfig(config: LlmConfig) {
+        settings.llm = config
+        _state.value = _state.value.copy(llmConfig = settings.llm)
+    }
 
     /** 把整库写进 [open] 给出的流（SAF 的 `OutputStream` 可以直接接）。 */
     fun backupTo(open: () -> java.io.OutputStream) {
@@ -133,7 +139,7 @@ class SettingsViewModel(
         // 只刷新"模型占用"这几个字段：整块重建会把解包进度、备份结果一起抹掉，
         // 出现"刚显示进度条又消失""备份结果闪一下没了"
         val next = try {
-            _state.value.copy(loading = false, asr = groupOf(catalog), llm = groupOf(llmCatalog))
+            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm)
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading
             _state.value.copy(loading = false)

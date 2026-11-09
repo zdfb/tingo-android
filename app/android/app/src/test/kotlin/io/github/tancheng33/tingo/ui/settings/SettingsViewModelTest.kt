@@ -2,6 +2,9 @@ package io.github.tancheng33.tingo.ui.settings
 
 import io.github.tancheng33.tingo.models.HttpFetcher
 import io.github.tancheng33.tingo.models.ModelCatalog
+import io.github.tancheng33.tingo.settings.AppSettings
+import io.github.tancheng33.tingo.settings.KeyValueStore
+import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.models.ModelFile
 import io.github.tancheng33.tingo.models.ModelStore
 import java.io.File
@@ -62,9 +65,20 @@ class SettingsViewModelTest {
     private fun viewModel(
         store: ModelStore,
         asr: ModelCatalog,
-        llm: ModelCatalog,
+        settings: AppSettings = AppSettings(InMemoryStore()),
         meetingsRoot: File = root,
-    ) = SettingsViewModel(store, asr, llm, meetingsRoot = meetingsRoot, io = dispatcher)
+    ) = SettingsViewModel(store, asr, settings, meetingsRoot = meetingsRoot, io = dispatcher)
+
+    /** 内存版的键值存储：只验证设置读写，不碰 Android 运行时。 */
+    private class InMemoryStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override fun getString(key: String): String? = values[key]
+
+        override fun putString(key: String, value: String) {
+            values[key] = value
+        }
+    }
 
     private fun meeting(id: String, file: String = "纪要.md", content: String = "# 一"): File {
         val dir = File(root, id).apply { mkdirs() }
@@ -76,7 +90,7 @@ class SettingsViewModelTest {
     fun backupWritesEveryMeetingIntoTheZip() = runTest(dispatcher) {
         meeting("2026-11-01_0900_周会")
         meeting("2026-11-02_1000_复盘")
-        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val vm = viewModel(store(), catalog(1_000))
         val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
 
         vm.backupTo { zip.outputStream() }
@@ -90,14 +104,14 @@ class SettingsViewModelTest {
     @Test
     fun restoreReportsWhatItDid() = runTest(dispatcher) {
         meeting("2026-11-01_0900_周会", "纪要.md", "备份内容")
-        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val vm = viewModel(store(), catalog(1_000))
         val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
         vm.backupTo { zip.outputStream() }
         advanceUntilIdle()
 
         // 换一个空的会议库来还原
         root = Files.createTempDirectory("tingo-meetings-2").toFile()
-        val vm2 = viewModel(store(), catalog(1_000), catalog("gguf", 3_000), meetingsRoot = root)
+        val vm2 = viewModel(store(), catalog(1_000), meetingsRoot = root)
         vm2.restoreFrom { zip.inputStream() }
         advanceUntilIdle()
 
@@ -110,12 +124,12 @@ class SettingsViewModelTest {
     @Test
     fun restoreDoesNotOverwriteExistingMeetings() = runTest(dispatcher) {
         meeting("2026-11-01_0900_周会", "纪要.md", "备份内容")
-        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val vm = viewModel(store(), catalog(1_000))
         val zip = File(Files.createTempDirectory("tingo-zip").toFile(), "library.zip")
         vm.backupTo { zip.outputStream() }
         advanceUntilIdle()
 
-        val vm2 = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val vm2 = viewModel(store(), catalog(1_000))
         vm2.restoreFrom { zip.inputStream() }
         advanceUntilIdle()
 
@@ -127,7 +141,7 @@ class SettingsViewModelTest {
 
     @Test
     fun brokenZipReportsFailure() = runTest(dispatcher) {
-        val vm = viewModel(store(), catalog(1_000), catalog("gguf", 3_000))
+        val vm = viewModel(store(), catalog(1_000))
         val broken = File(Files.createTempDirectory("tingo-zip").toFile(), "broken.zip").apply {
             writeText("这不是 zip")
         }
@@ -141,7 +155,7 @@ class SettingsViewModelTest {
     @Test
     fun reportsNothingDownloadedInitially() = runTest(dispatcher) {
         val store = store()
-        val vm = viewModel(store, catalog(1_000, 2_000), catalog("gguf", 3_000))
+        val vm = viewModel(store, catalog(1_000, 2_000))
         advanceUntilIdle()
 
         val state = vm.state.value
@@ -155,7 +169,7 @@ class SettingsViewModelTest {
         val store = store()
         val asr = catalog(1_000, 2_000)
         asr.files.forEach { ready(store, it) }
-        val vm = viewModel(store, asr, catalog("gguf", 3_000))
+        val vm = viewModel(store, asr)
         advanceUntilIdle()
 
         val state = vm.state.value
@@ -171,7 +185,7 @@ class SettingsViewModelTest {
         ready(store, asr.files.first())
         // 第二个只下了一半：没有校验指纹，也不完整
         store.fileFor(asr.files[1]).writeBytes(ByteArray(500))
-        val vm = viewModel(store, asr, catalog("gguf", 3_000))
+        val vm = viewModel(store, asr)
         advanceUntilIdle()
 
         val group = vm.state.value.asr
@@ -188,7 +202,7 @@ class SettingsViewModelTest {
         val llm = catalog("gguf", 3_000)
         asr.files.forEach { ready(store, it) }
         llm.files.forEach { ready(store, it) }
-        val vm = viewModel(store, asr, llm)
+        val vm = viewModel(store, asr)
         advanceUntilIdle()
 
         vm.deleteAsr()
@@ -197,23 +211,7 @@ class SettingsViewModelTest {
         val state = vm.state.value
         assertTrue("识别模型应被清空", state.asr.isEmpty)
         assertEquals(0L, state.asr.bytes)
-        assertTrue("删识别模型不该动纪要模型", state.llm.isReady)
-        assertEquals(3_000L, state.llm.bytes)
-    }
 
-    @Test
-    fun deletingLlmFreesItsBytes() = runTest(dispatcher) {
-        val store = store()
-        val llm = catalog("gguf", 3_000)
-        llm.files.forEach { ready(store, it) }
-        val vm = viewModel(store, catalog(1_000), llm)
-        advanceUntilIdle()
-
-        vm.deleteLlm()
-        advanceUntilIdle()
-
-        assertTrue(vm.state.value.llm.isEmpty)
-        assertFalse(store.fileFor(llm.files.single()).isFile)
     }
 
     @Test
@@ -221,7 +219,7 @@ class SettingsViewModelTest {
         val store = store()
         val asr = catalog(1_000)
         ready(store, asr.files.single())
-        val vm = viewModel(store, asr, catalog("gguf", 3_000))
+        val vm = viewModel(store, asr)
         advanceUntilIdle()
 
         vm.deleteAsr()
@@ -230,5 +228,18 @@ class SettingsViewModelTest {
         val marker = File(store.fileFor(asr.files.single()).parentFile, "m0.bin.verified")
         assertFalse("校验指纹也要删掉，否则会留下'已就绪'的假象", marker.isFile)
         assertFalse(store.isReady(asr.files.single()))
+    }
+
+    @Test
+    fun savingLlmConfigShowsUpInState() = runTest(dispatcher) {
+        val settings = AppSettings(InMemoryStore())
+        val vm = viewModel(store(), catalog(1_000), settings)
+        advanceUntilIdle()
+
+        vm.saveLlmConfig(LlmConfig(baseUrl = "https://api.example.com", apiKey = "sk-1", model = "m"))
+        advanceUntilIdle()
+
+        assertEquals("https://api.example.com", vm.state.value.llmConfig.baseUrl)
+        assertEquals("m", settings.llm.model)
     }
 }

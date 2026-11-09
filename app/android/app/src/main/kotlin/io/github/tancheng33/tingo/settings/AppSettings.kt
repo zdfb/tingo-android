@@ -41,15 +41,35 @@ class SharedPrefsStore(context: Context) : KeyValueStore {
 }
 
 /**
- * 应用级设置。目前只有界面语言——会议与引擎配置由引擎负责，
- * 放在这里只会有两个真相。
+ * 应用级设置：界面语言 + 纪要用的模型服务。
+ *
+ * 会议与引擎配置仍由引擎负责，放在这里只会有两个真相。
  */
 class AppSettings(private val store: KeyValueStore) {
     var language: AppLanguage
         get() = AppLanguage.fromTag(store.getString(KEY_LANGUAGE))
         set(value) = store.putString(KEY_LANGUAGE, value.tag)
 
+    /** 模型服务配置；默认全空，由用户自己填。 */
+    var llm: LlmConfig
+        get() = LlmConfig(
+            baseUrl = store.getString(KEY_LLM_BASE_URL).orEmpty(),
+            apiKey = store.getString(KEY_LLM_API_KEY).orEmpty(),
+            model = store.getString(KEY_LLM_MODEL).orEmpty(),
+            protocol = LlmProtocol.fromWire(store.getString(KEY_LLM_PROTOCOL)),
+        )
+        set(value) {
+            store.putString(KEY_LLM_BASE_URL, value.baseUrl.trim())
+            store.putString(KEY_LLM_API_KEY, value.apiKey.trim())
+            store.putString(KEY_LLM_MODEL, value.model.trim())
+            store.putString(KEY_LLM_PROTOCOL, value.protocol.wire)
+        }
+
     private companion object {
         const val KEY_LANGUAGE = "ui_language"
+        const val KEY_LLM_BASE_URL = "llm_base_url"
+        const val KEY_LLM_API_KEY = "llm_api_key"
+        const val KEY_LLM_MODEL = "llm_model"
+        const val KEY_LLM_PROTOCOL = "llm_protocol"
     }
 }

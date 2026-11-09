@@ -88,92 +88,53 @@ class MinutesViewModelTest {
         return dir
     }
 
-    private fun readyModel(): File =
-        Files.createTempFile("tingo-model", ".gguf").toFile().apply { writeBytes(ByteArray(16)); deleteOnExit() }
-
     private fun viewModel(
         dir: File,
         generator: MinutesGenerator,
-        model: File = readyModel(),
+        configured: Boolean = true,
     ) = MinutesViewModel(
         serviceFactory = { MinutesService(generator) },
-        modelFile = model,
+        isConfigured = { configured },
         meetingDir = dir,
         io = dispatcher,
     )
 
     @Test
-    fun prepareAsksForModelWhenMissing() = runTest(dispatcher) {
-        val vm = viewModel(meeting(), FakeGenerator(good), model = File("/nonexistent/x.gguf"))
+    fun prepareMarksNotConfiguredWhenServiceIsMissing() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good), configured = false)
 
         vm.prepare()
-        advanceUntilIdle() // prepare 现在在 IO 协程里读 transcript.json
+        advanceUntilIdle() // prepare 在 IO 协程里读 transcript.json
 
-        assertTrue(vm.state.value is MinutesUiState.NeedModel)
+        assertEquals(MinutesUiState.NotConfigured, vm.state.value)
     }
 
-    /** 新装的设备没有语言模型：点"生成纪要"应自己下载，而不是永远提示"还没下载好"。 */
     @Test
-    fun startDownloadsTheModelWhenMissing() = runTest(dispatcher) {
-        val models = Files.createTempDirectory("tingo-llm-models").toFile()
-        val store = io.github.tancheng33.tingo.models.ModelStore(models, FakeHttp(16))
-        val catalog = io.github.tancheng33.tingo.models.ModelCatalog(
-            listOf(
-                io.github.tancheng33.tingo.models.ModelFile(
-                    id = "qwen3-0.6b",
-                    fileName = "Qwen3-0.6B-Q4_K_M.gguf",
-                    url = "https://hf-mirror.com/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
-                    bytes = 16,
-                ),
-            ),
-        )
-        val model = store.fileFor(catalog.files.single())
-        val vm = MinutesViewModel(
-            serviceFactory = { MinutesService(FakeGenerator(good)) },
-            modelFile = model,
-            meetingDir = meeting(),
-            store = store,
-            catalog = catalog,
-            io = dispatcher,
-        )
+    fun startRefusesToRunWithoutConfiguration() = runTest(dispatcher) {
+        val vm = viewModel(meeting(), FakeGenerator(good), configured = false)
 
         vm.start()
         advanceUntilIdle()
 
-        assertTrue("下载后应生成纪要：${vm.state.value}", vm.state.value is MinutesUiState.Done)
+        // 没配就明确告诉用户去设置，而不是发一个注定失败的请求
+        assertEquals(MinutesUiState.NotConfigured, vm.state.value)
     }
 
     @Test
-    fun startReportsDownloadFailure() = runTest(dispatcher) {
-        val models = Files.createTempDirectory("tingo-llm-models-fail").toFile()
-        val catalog = io.github.tancheng33.tingo.models.ModelCatalog(
-            listOf(
-                io.github.tancheng33.tingo.models.ModelFile(
-                    id = "qwen3-0.6b",
-                    fileName = "Qwen3-0.6B-Q4_K_M.gguf",
-                    url = "https://example.invalid/x.gguf",
-                    bytes = 16,
-                ),
-            ),
-        )
-        val failing = io.github.tancheng33.tingo.models.ModelStore(
-            Files.createTempDirectory("tingo-llm-fail").toFile(),
-            FakeHttp(16, fail = true),
-        )
-        val vm = MinutesViewModel(
-            serviceFactory = { MinutesService(FakeGenerator(good)) },
-            modelFile = failing.fileFor(catalog.files.single()),
-            meetingDir = meeting(),
-            store = failing,
-            catalog = catalog,
-            io = dispatcher,
+    fun unreachableServiceGetsItsOwnMessage() = runTest(dispatcher) {
+        val vm = viewModel(
+            meeting(),
+            object : MinutesGenerator {
+                override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String =
+                    error("连不上模型服务，请检查网络或服务地址（timeout）")
+            },
         )
 
         vm.start()
         advanceUntilIdle()
 
         val state = vm.state.value as MinutesUiState.Failed
-        assertEquals(R.string.err_model_download_failed, state.reasonRes)
+        assertEquals(R.string.err_llm_unreachable, state.reasonRes)
     }
 
     @Test
@@ -188,7 +149,7 @@ class MinutesViewModelTest {
 
     @Test
     fun prepareDoesNothingWithoutTranscript() = runTest(dispatcher) {
-        val vm = viewModel(meeting(withTranscript = false), FakeGenerator(good), model = File("/nonexistent"))
+        val vm = viewModel(meeting(withTranscript = false), FakeGenerator(good))
 
         vm.prepare()
         advanceUntilIdle()
@@ -217,22 +178,6 @@ class MinutesViewModelTest {
         advanceUntilIdle()
 
         assertEquals(R.string.err_no_transcript, (vm.state.value as MinutesUiState.Failed).reasonRes)
-    }
-
-    @Test
-    fun outOfMemoryDegradesToUnsupportedMessage() = runTest(dispatcher) {
-        val generator = object : MinutesGenerator {
-            override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String =
-                throw OutOfMemoryError("装不下 0.6B")
-        }
-        val vm = viewModel(meeting(), generator, model = readyModel())
-
-        vm.start()
-        advanceUntilIdle()
-
-        val failed = vm.state.value as MinutesUiState.Failed
-        // 低内存设备上 0.6B 可能装不下：说清楚"本机暂不支持"，转写稿仍然保留
-        assertEquals(R.string.err_llm_unsupported, failed.reasonRes)
     }
 
     @Test

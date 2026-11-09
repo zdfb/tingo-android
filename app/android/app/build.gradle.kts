@@ -134,7 +134,7 @@ fun hostLibPath(): String {
 val syncBundledModels by tasks.registering(Sync::class) {
     from(layout.projectDirectory.dir("../models"))
     into(layout.buildDirectory.dir("generated/models/assets/models"))
-    include("*.onnx", "*.gguf", "*.txt", "*.mvn")
+    include("*.onnx", "*.txt", "*.mvn")
 }
 
 /**
@@ -153,12 +153,11 @@ val verifyBundledModels by tasks.registering {
             return@doLast
         }
         // 文件名以 assets 里的清单为准，别在这里再抄一份（抄一份就会和清单漂移）
-        val expected = listOf("models.json", "llm.json").flatMap { manifest ->
+        val expected = listOf("models.json").flatMap { manifest ->
             val text = rootProject.file("app/src/main/assets/$manifest").readText()
             Regex("\"file_?[Nn]ame\"\\s*:\\s*\"([^\"]+)\"").findAll(text).map { it.groupValues[1] }.toList()
         }
-        check(expected.isNotEmpty()) { "assets 清单里没解析到文件名，检查 models.json/llm.json 格式" }
-        // 语言模型与语音模型同目录，文件名不重复
+        check(expected.isNotEmpty()) { "assets 清单里没解析到文件名，检查 models.json 格式" }
         val missing = expected.distinct().filterNot { modelsDir.file(it).asFile.exists() }
         if (missing.isNotEmpty()) {
             throw GradleException(
@@ -180,12 +179,6 @@ android {
 
     // 与 Rust 交叉编译用同一个 NDK，避免两套工具链打架
     ndkVersion = "30.0.16248370"
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-    }
 
     defaultConfig {
         applicationId = "io.github.tancheng33.tingo"
@@ -219,7 +212,7 @@ android {
 
     androidResources {
         // 模型是二进制大文件：压缩只会让 APK 更大、首次解包更慢
-        noCompress += listOf("onnx", "gguf", "mvn", "txt")
+        noCompress += listOf("onnx", "mvn", "txt")
     }
 
     defaultConfig {

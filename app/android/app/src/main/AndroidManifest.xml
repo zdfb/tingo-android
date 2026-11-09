@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 录音是核心功能；INTERNET 只用于按需下载模型（转写/纪要都在本机跑） -->
+    <!-- 录音与转写都在本机跑；INTERNET 用于下载语音模型与调用用户自己配置的纪要服务 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 录音期间挂前台服务，避免切后台／锁屏被系统回收；通知权限只用于这条状态通知 -->
@@ -11,9 +11,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        允许明文 HTTP：用户可能把纪要服务指向局域网里的自建网关或本地 ollama（http://192.168.x.x:11434）。
+        应用只会往用户填的地址发请求，不存在"顺手把别的东西发到明文通道"的路径。
+    -->
     <application
         android:name=".TingoApplication"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Tingo">

@@ -1,7 +1,10 @@
 # Tingo for Android
 
-听过（Tingo）的 Android 客户端。**当前进度：录音（含尽力而为的系统内录）、离线转写（含说话人区分）、端侧纪要生成、
-回听播放、搜索/归档/删除/导出、设置页模型管理都已可用**；会议库位置切换仍待补。
+听过（Tingo）的 Android 客户端。**当前进度：录音（含尽力而为的系统内录）、离线转写（含说话人区分）、
+远端 API 纪要生成、回听播放、搜索/归档/删除/导出、设置页都已可用**；会议库位置切换仍待补。
+
+**分工**：录音与转写全部在本机完成（音频不出设备）；只有"把转写稿写成纪要"这一步
+走用户自己配置的模型服务——API 地址、密钥、模型名都由用户在设置页填，应用不预置任何服务商。
 
 ## 结构
 
@@ -51,34 +54,20 @@ cd app/android && echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 
-# 首次构建先交叉编译 llama.cpp（libllama/libggml*，约 6 MB，产物不进仓库）
-./scripts/build-llama-android.sh arm64-v8a x86_64
-
 ./gradlew :app:assembleDebug            # 产出 app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:testDebugUnitTest        # JVM 单测（仓库、ViewModel、工具函数、权限清单）
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
 
-**端侧模型吞吐（实测，REDMI Turbo 4 / Dimensity，Qwen3-0.6B Q4_K_M，597 token 提示词，生成 128 token，三轮取中位数）**
+**为什么纪要不再跑在手机上**：端侧 0.6B（Qwen3-0.6B Q4_K_M）在本机实测，一小时会议的提示词
+裁剪到 2k token 时首字要等 41 秒；不裁剪（6.3k token）首字 149 秒、解码掉到 4.9 tok/s，
+输出还常缺章节。调参（flash-attn、KV q8_0、8/8 线程、更低比特量化）能把解码从 23 tok/s
+提到 33 tok/s，但改不了"长上下文预填充动辄几十秒"这个量级。既然用户要的是点了就有结果，
+这一步改走远端 API；语音模型仍在本机，转写依旧离线可用。
 
-| 线程数 | 预填充 | 生成（解码） | 说明 |
-|---|---|---|---|
-| 4 | 82.7 tok/s | **23.6 tok/s** | 默认档位 |
-| 8 | 75.7 tok/s | 25.2 tok/s | 生成略快、预填充更慢，差距在噪声量级 |
-
-**上下文越长，解码越慢**（同一台机器、同一模型，实测）：
-
-| 上下文 token 数 | 解码速度 | 生成 512 token 的耗时 |
-|---|---|---|
-| ~600 | 23.6 tok/s | 约 22 秒 |
-| ~3300（一小时会议裁剪后的量） | 4.9 tok/s | **约 105 秒** |
-
-所以"一场两小时的会，点完纪要要等一分多钟"是正常量级，不是卡死。首字延迟约等于预填充耗时
-（597 token 约 7 秒）。生成过程可取消：`nativeCancel` 会让原生解码在下一个 token 处停下。
-
-当前状态（2026-11-09 实机验收）：**JVM 单测 213 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
-arm64）在**飞行模式下**跑通 17 个设备级用例（引擎桥接 10、备份恢复与 sherpa 运行时 4、
-中文识别 / 双人流水线 / llama 生成 3），证明内置模型确实离线可用。
+当前状态（2026-11-09 实机验收）：**JVM 单测 232 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
+arm64）跑通 19 个设备级用例（引擎桥接、备份恢复、sherpa 运行时、中文识别、双人流水线、
+远端纪要端到端、设置页），其中转写相关用例在**飞行模式下**同样通过，证明语音链路离线可用。
 Compose UI 测试（16 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
 系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
 完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除四个
@@ -89,18 +78,17 @@ Compose UI 测试（16 个）在 HyperOS 上被系统拦截——instrumentation
   -Pandroid.testInstrumentationRunnerArguments.notClass=\
 io.github.tancheng33.tingo.PipelineInstrumentedTest,\
 io.github.tancheng33.tingo.RecognitionInstrumentedTest,\
-io.github.tancheng33.tingo.LlamaInstrumentedTest,\
 io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 ```
 
-只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`（此时
-llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
+只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`。
 
-**模型随 APK 内置**：语音模型（Paraformer int8 227 MB + 标点 76 MB + CAM++ 28 MB + VAD 0.6 MB）
-与语言模型（Qwen3-0.6B Q4_K_M 397 MB）都打进 `assets/models/`，APK 约 **746 MB**。
-安装后首次启动由 `ModelInstaller` 解包到应用私有目录（幂等、带进度），**端侧推理全程不需要网络**。
+**语音模型随 APK 内置**：Paraformer int8（227 MB）+ 标点（76 MB）+ CAM++（28 MB）+ VAD（0.6 MB）
+打进 `assets/models/`，APK 约 **361 MB**。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
+（幂等、带进度），**转写全程不需要网络**。（内置 GGUF 与 llama.cpp 已随本变更一并移除，
+APK 因此从 746 MB 降到 361 MB。）
 
-模型不进仓库（700+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：
+模型不进仓库（300+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：
 
 ```bash
 ./scripts/fetch-models-offline.sh              # 优先从已连接设备取，其次走镜像
@@ -108,25 +96,29 @@ llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 ```
 
 网络下载路径仍然保留作兜底（开发构建没内置模型时可用），但正常安装包里不需要它。
-验证"真的离线可用"：把手机调成飞行模式，跑 `RecognitionInstrumentedTest` /
-`PipelineInstrumentedTest` / `LlamaInstrumentedTest` —— 本轮实机（REDMI Turbo 4）在断网下
-这三个用例全绿。
+验证"转写真的离线可用"：把手机调成飞行模式，跑 `RecognitionInstrumentedTest` /
+`PipelineInstrumentedTest` —— 本轮实机（REDMI Turbo 4）在断网下这两个用例全绿。
+纪要需要网络，这是有意的取舍：`RemoteMinutesInstrumentedTest` 用本机回环的假服务端验证
+请求报文、鉴权头与响应解析，不依赖任何外部服务。
 
-**校验强度**：四个语音模型都带 sha256，下载后校验摘要；语言模型这一版 `sha256` 留空
-（镜像不稳定，多次下载中断，没能稳定取到摘要），此时只校验体积与校验指纹——这一点在
-`assets/llm.json` 的 note 里也写了，换到稳定源后应补上真实摘要。
+**校验强度**：四个语音模型都带 sha256，下载后校验摘要。
 
-**关于"再量化"这件事的诚实说明**：`spike/on-device-models/RESULTS.md` 里的 Q4_K_M / Q4_0 是
-我们用 `llama-quantize --allow-requantize` 从官方 Q8_0 再量化出来的，用来回答"能不能再压一档、
-速度与格式可靠性如何"。App 实际下载的是 unsloth 官方发布的 Q4_K_M：同样的量化档位、体积略大
-（397 MB vs 378 MB），但它是别人校验过、有稳定下载地址的产物——把这一个 397 MB 的文件挂在自己
-仓库里分发并不合适。也就是说：**实验结论指导了选型，但没有把实验产物当产品分发**。
+**内存**：转写时 sherpa 与四个模型常驻，按权重体积估算峰值约 1 GB；纪要不再占用本机内存。
+十万级会议的转写已在 10 分钟双轨混音用例里验过堆增长 < 80 MB。
 
-**内存门槛（估算，未在真机上实测）**：转写时 sherpa 与四个模型常驻，按权重体积估算峰值
-约 1 GB；纪要生成时加载 Q4_K_M 权重 397 MB + KV cache，同样是数百兆量级。两条链路不同时驻留，
-所以 6 GB 机型理论上够用——但这是估算，`spike/on-device-models/RESULTS.md` 的"端侧运行的剩余工作"
-里列着"真机实测速度与内存"，尚未做。加载失败（内存不足）时按设计降级为
-"本机暂不支持本地纪要生成"，录音与转写不受影响。
+## 配置纪要服务
+
+设置页 → **模型服务**，四项全手填（应用不预置任何服务商）：
+
+| 字段 | 例子 | 说明 |
+|---|---|---|
+| 接口地址 | `https://api.deepseek.com` | 也可以填到 `/v1`，两种写法等价 |
+| API Key | `sk-...` | 存在应用私有 SharedPreferences，不进日志、不进导出包 |
+| 模型名 | `deepseek-chat` | 由服务商决定 |
+| 接口协议 | `openai` / `anthropic` | `openai` 走 `{地址}/v1/chat/completions`，`anthropic` 走 `{地址}/v1/messages` |
+
+三项（地址、密钥、模型名）没填全时，详情页的"生成纪要"会置灰并给"去设置"的入口——
+不让人点一个只会失败的按钮。明文 HTTP 地址是允许的，方便指向局域网自建网关或本地 ollama。
 
 **模型来源与许可**（都在各自上游仓库的许可下使用，App 不打包、不转售）：
 
@@ -136,7 +128,6 @@ llama 只需编对应 ABI：`./scripts/build-llama-android.sh arm64-v8a`）。
 | `punct.int8.onnx`（CT-Transformer） | 断句标点 | `sherpa-onnx` 官方标点模型（Apache-2.0） |
 | `campplus.onnx` | 说话人声纹 | 3D-Speaker CAM++（Apache-2.0） |
 | `silero_vad.onnx` | 语音活动检测 | Silero VAD（MIT） |
-| `Qwen3-0.6B-Q4_K_M.gguf`（397 MB） | 纪要生成（实验） | `unsloth/Qwen3-0.6B-GGUF` 官方 Q4_K_M（Apache-2.0）。我们自 Q8_0 再量化的那一份只用于可行性验证（`spike/on-device-models/RESULTS.md`），没有分发——见下文说明 |
 
 ### 在模拟器上验证
 

@@ -40,7 +40,7 @@ class SettingsInstrumentedTest {
         val vm = SettingsViewModel(
             store = store,
             catalog = oneFile,
-            llmCatalog = ModelCatalog(listOf()),
+            settings = io.github.tancheng33.tingo.settings.AppSettings(io.github.tancheng33.tingo.settings.SharedPrefsStore(context)),
             meetingsRoot = File(context.cacheDir, "models-settings-meetings"),
         )
         // 走 ViewModel 自己的路径：等它统计完、再让它删除，断言状态与磁盘都归零

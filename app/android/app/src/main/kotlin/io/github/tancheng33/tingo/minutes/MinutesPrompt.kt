@@ -54,14 +54,18 @@ object MinutesPrompt {
 
 转写：
 {transcript}
+
+以上是全部转写内容（到此为止，后面没有更多转写）。现在请按要求输出会议纪要。
 """
 
     /**
      * 拼提示词时把转写压成「[mm:ss] 说话人：内容」，与桌面版一致。
      *
-     * @param maxChars 提示词里最多放多少字符；超出时截断并明确告知模型（避免它以为全文都在）
+     * @param maxChars 提示词里最多放多少字符。远端模型的上下文比手机上的 0.6B 宽得多，
+     *   所以给到 48k 字符（约两小时的会）；真遇到超长会议再截断，并明确告诉模型"后面没了"，
+     *   否则它会当成全文都在、编出不存在的内容。
      */
-    fun build(transcript: Transcript, maxChars: Int = 12_000): String {
+    fun build(transcript: Transcript, maxChars: Int = 48_000): String {
         val body = buildString {
             transcript.sentences.forEach { sentence ->
                 append('[').append(Transcript.mmss(sentence.startMs)).append("] ")
@@ -76,71 +80,6 @@ object MinutesPrompt {
         }
         return TEMPLATE.replace("{transcript}", clipped)
     }
-
-    /**
-     * 把提示词里的转写裁到预算以内。
-     *
-     * 三条硬要求，之前都踩过：
-     * 1. 只裁转写这一段。提示词后面可能还挂着重试指令（[retryPrompt] 会追加），
-     *    整段尾巴一刀切会把补救说明删掉，重试变成拿一模一样的提示词再跑一次。
-     * 2. 裁完必须告诉用户。模型看到的"已省略"是给模型看的，用户也需要知道这份纪要
-     *    只覆盖了会议的一部分，否则会把残缺的纪要当成全部。
-     * 3. 装不下时不能假装成功。头部加省略标记都超预算时返回 null，由调用方如实报错，
-     *    而不是把一个超上下文的提示词喂给引擎（那条路只会得到空结果）。
-     */
-    fun trimToTokenBudget(
-        prompt: String,
-        budgetTokens: Int,
-        countTokens: (String) -> Int,
-    ): TrimResult {
-        val total = countTokens(prompt)
-        if (budgetTokens <= 0 || total <= budgetTokens) return TrimResult(prompt, keptLines = 0, droppedLines = 0)
-
-        val bodyStart = prompt.indexOf(TRANSCRIPT_HEADER)
-        if (bodyStart < 0) return TrimResult(prompt, keptLines = 0, droppedLines = 0)
-        val bodyFrom = bodyStart + TRANSCRIPT_HEADER.length
-        // 转写块到下一个空行分隔的段落为止；重试指令在它后面，必须保住
-        val tailAt = prompt.indexOf("\n\n上一次的输出不符合要求", bodyFrom)
-        val bodyTo = if (tailAt >= 0) tailAt else prompt.length
-        val head = prompt.substring(0, bodyFrom)
-        val tail = prompt.substring(bodyTo)
-
-        // 上一次可能已经留下过省略标记：先摘掉，避免"省略"后面还跟着内容、再跟一个省略
-        val bodyLines = prompt.substring(bodyFrom, bodyTo)
-            .trimEnd('\n')
-            .lines()
-            .filterNot { it.contains(OMITTED_MARKER.trim()) }
-
-        var low = 0
-        var high = bodyLines.size
-        var best = -1
-        while (low <= high) {
-            val mid = (low + high) / 2
-            val candidate = head + bodyLines.take(mid).joinToString("\n") + OMITTED_MARKER + tail
-            if (countTokens(candidate) <= budgetTokens) {
-                best = mid
-                low = mid + 1
-            } else {
-                high = mid - 1
-            }
-        }
-        // best = -1 表示连"头部 + 省略标记 + 尾巴"都装不下：如实返回，让调用方报错
-        if (best < 0) return TrimResult(null, keptLines = 0, droppedLines = bodyLines.size)
-        val kept = bodyLines.take(best)
-        return TrimResult(
-            prompt = head + kept.joinToString("\n") + OMITTED_MARKER + tail,
-            keptLines = best,
-            droppedLines = bodyLines.size - best,
-        )
-    }
-
-    /** 裁剪结果：null 表示连最小提示词都装不下，调用方必须如实报错。 */
-    data class TrimResult(val prompt: String?, val keptLines: Int, val droppedLines: Int) {
-        val trimmed: Boolean get() = droppedLines > 0
-    }
-
-    /** 给模型看、也给用户看的省略说明。 */
-    const val OMITTED_MARKER = "\n（转写过长，后续内容已省略）\n"
 
     /** 模板里转写块的标题，裁剪靠它定位。 */
     private const val TRANSCRIPT_HEADER = "转写：\n"

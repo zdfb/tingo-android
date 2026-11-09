@@ -78,7 +78,8 @@ import io.github.tancheng33.tingo.AppContainer
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
-import io.github.tancheng33.tingo.minutes.LlamaMinutesGenerator
+import io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator
+import io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient
 import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.transcription.TranscriptionPipeline
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
@@ -337,7 +338,13 @@ fun TingoRoot(
 
             composable("$DETAIL_ROUTE/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
-                DetailRoute(container, id, wide = false, onBack = { navController.popBackStack() })
+                DetailRoute(
+                    container,
+                    id,
+                    wide = false,
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } },
+                )
             }
 
             composable(TopDestination.SETTINGS.route) {
@@ -347,7 +354,7 @@ fun TingoRoot(
                             io.github.tancheng33.tingo.ui.settings.SettingsViewModel(
                                 store = container.models,
                                 catalog = container.catalog,
-                                llmCatalog = container.llmCatalog,
+                                settings = container.settings,
                                 meetingsRoot = File(container.dataRoot, "meetings"),
                                 installProgress = container.installProgress,
                             )
@@ -386,7 +393,7 @@ fun TingoRoot(
                     onLanguageChange = onLanguageChange,
                     models = models,
                     onDeleteAsrModels = settingsViewModel::deleteAsr,
-                    onDeleteLlmModel = settingsViewModel::deleteLlm,
+                    onSaveLlmConfig = settingsViewModel::saveLlmConfig,
                     libraryBusy = models.libraryBusy,
                     libraryResult = models.libraryResult,
                     onBackupLibrary = { backupLauncher.launch("tingo-会议库备份.zip") },
@@ -446,7 +453,13 @@ private fun RecordRoute(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolean, onBack: () -> Unit) {
+private fun DetailRoute(
+    container: AppContainer,
+    meetingId: String,
+    wide: Boolean,
+    onBack: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
     // 归档 zip 的标题在"点导出"那一刻才知道（标题来自纪要），用持有者跨过 launcher 的声明顺序
@@ -523,13 +536,15 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
                 val meetingDir = container.meetingDir(meetingId)
                 MinutesViewModel(
                     serviceFactory = {
-                        MinutesService(LlamaMinutesGenerator(container.llmFile))
+                        MinutesService(
+                            RemoteMinutesGenerator(
+                                configProvider = { container.settings.llm },
+                                client = UrlHttpJsonClient(),
+                            ),
+                        )
                     },
-                    modelFile = container.llmFile,
+                    isConfigured = { container.settings.llm.isConfigured },
                     meetingDir = meetingDir,
-                    store = container.models,
-                    catalog = container.llmCatalog,
-                    ensureBundled = container::installBundledModels,
                 )
             }
         },
@@ -571,6 +586,7 @@ private fun DetailRoute(container: AppContainer, meetingId: String, wide: Boolea
             minutesGeneration = minutesState,
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
+            onOpenSettings = onOpenSettings,
             onExportBundle = {
                 pendingBundleTitle.value = meetingTitle
                 bundleLauncher.launch(

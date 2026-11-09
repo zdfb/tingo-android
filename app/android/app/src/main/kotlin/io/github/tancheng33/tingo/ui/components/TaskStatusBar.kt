@@ -35,6 +35,14 @@ sealed interface TaskStatus {
 
     /** @param hint 可选的第二行（例如"草稿已保留，可手动编辑"） */
     data class Failed(val message: String, val hint: String? = null) : TaskStatus
+
+    /**
+     * 前提没满足（例如还没配模型服务）。
+     *
+     * 与 [Failed] 的区别是"重试不会有结果"：按钮给的是下一步动作（去设置），
+     * 而不是把同一个请求再发一次。
+     */
+    data class Blocked(val message: String, val actionLabelRes: Int) : TaskStatus
 }
 
 /**
@@ -97,6 +105,14 @@ fun TaskStatusBar(
                 Text(it, style = MaterialTheme.typography.bodySmall)
             }
             Button(onClick = onAction) { Text(actionLabel) }
+        }
+
+        is TaskStatus.Blocked -> Column(
+            modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(status.message, style = MaterialTheme.typography.bodyMedium)
+            Button(onClick = onAction) { Text(stringResource(status.actionLabelRes)) }
         }
     }
 }

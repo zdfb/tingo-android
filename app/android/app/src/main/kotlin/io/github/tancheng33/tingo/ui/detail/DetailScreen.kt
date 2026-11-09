@@ -79,6 +79,8 @@ fun DetailScreen(
     minutesGeneration: MinutesUiState = MinutesUiState.Idle,
     onGenerateMinutes: () -> Unit = {},
     onCancelMinutes: () -> Unit = {},
+    /** "还没配模型服务"时按钮跳设置页 */
+    onOpenSettings: () -> Unit = {},
     onExport: () -> Unit = {},
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
@@ -164,6 +166,7 @@ fun DetailScreen(
                         generation = minutesGeneration,
                         onGenerate = onGenerateMinutes,
                         onCancel = onCancelMinutes,
+                        onOpenSettings = onOpenSettings,
                     )
                 } else {
                     TranscriptPane(
@@ -187,8 +190,14 @@ private fun MinutesPane(
     generation: MinutesUiState,
     onGenerate: () -> Unit,
     onCancel: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
-    MinutesGenerationBar(state = generation, onGenerate = onGenerate, onCancel = onCancel)
+    MinutesGenerationBar(
+        state = generation,
+        onGenerate = onGenerate,
+        onCancel = onCancel,
+        onOpenSettings = onOpenSettings,
+    )
     when {
         minutesFailure != null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
             Text(stringResource(R.string.detail_minutes_parse_failed, failureText(minutesFailure)))
@@ -304,11 +313,17 @@ private fun TranscriptionStatus(
 
 /** 纪要生成状态条：与转写同一种形状，只是文案与按钮不同。 */
 @Composable
-private fun MinutesGenerationBar(state: MinutesUiState, onGenerate: () -> Unit, onCancel: () -> Unit) {
+private fun MinutesGenerationBar(
+    state: MinutesUiState,
+    onGenerate: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     TaskStatusBar(
         status = state.toTaskStatus(),
         actionLabel = stringResource(R.string.minutes_generate),
-        onAction = onGenerate,
+        // 未配置时按钮给的是"去设置"：重试同一个请求不会有结果
+        onAction = if (state is MinutesUiState.NotConfigured) onOpenSettings else onGenerate,
         onCancel = onCancel,
     )
 }
@@ -326,8 +341,10 @@ private fun TranscriptionUiState.toTaskStatus(): TaskStatus = when (this) {
 @Composable
 private fun MinutesUiState.toTaskStatus(): TaskStatus = when (this) {
     MinutesUiState.Idle -> TaskStatus.Idle
-    is MinutesUiState.NeedModel -> TaskStatus.NeedModel(missingMb = missingBytes / 1_000_000)
-    is MinutesUiState.Downloading -> TaskStatus.Running(fraction, R.string.minutes_downloading)
+    MinutesUiState.NotConfigured -> TaskStatus.Blocked(
+        message = stringResource(R.string.err_llm_not_configured),
+        actionLabelRes = R.string.detail_minutes_go_settings,
+    )
     MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating)
     is MinutesUiState.Done -> TaskStatus.Done
     is MinutesUiState.Failed -> TaskStatus.Failed(

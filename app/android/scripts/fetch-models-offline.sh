@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 取内置模型到 app/android/models/（不进仓库，约 718 MB）。
+# 取内置语音模型到 app/android/models/（不进仓库，约 320 MB）。
 #
 # 优先从已连接的设备上取（那里通常已经下载并校验过），取不到再从镜像下载。
 # 用法：
@@ -11,14 +11,12 @@ MODELS_DIR="models"
 mkdir -p "$MODELS_DIR"
 
 ASR_FILES=(paraformer.int8.onnx tokens.txt am.mvn punct.int8.onnx campplus.onnx silero_vad.onnx)
-LLM_FILE=Qwen3-0.6B-Q4_K_M.gguf
-LLM_DIR_PATH="cache/models-llm"
 
 ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 PKG=io.github.tancheng33.tingo
 
 have_all() {
-  for f in "${ASR_FILES[@]}" "$LLM_FILE"; do
+  for f in "${ASR_FILES[@]}"; do
     [ -s "$MODELS_DIR/$f" ] || return 1
   done
 }
@@ -34,7 +32,6 @@ if [ "${1:-}" != "--from-mirror" ] && [ -x "$ADB" ] && "$ADB" devices | awk 'NR>
   for f in "${ASR_FILES[@]}"; do
     "$ADB" -s "$device" shell "run-as $PKG cat cache/models-full/$f" > "$MODELS_DIR/$f"
   done
-  "$ADB" -s "$device" shell "run-as $PKG cat $LLM_DIR_PATH/$LLM_FILE" > "$MODELS_DIR/$LLM_FILE"
 else
   echo "从镜像下载模型…"
   fetch() { # url size dest
@@ -48,7 +45,6 @@ else
   fetch "https://hf-mirror.com/ranger810/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8/resolve/main/model.int8.onnx" 75519198 "$MODELS_DIR/punct.int8.onnx"
   fetch "https://hf-mirror.com/csukuangfj/speaker-embedding-models/resolve/main/3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx" 28281138 "$MODELS_DIR/campplus.onnx"
   fetch "$B/../silero_vad.onnx" 643854 "$MODELS_DIR/silero_vad.onnx"
-  fetch "https://hf-mirror.com/unsloth/Qwen3-0.6B-GGUF/resolve/main/$LLM_FILE" 396705472 "$MODELS_DIR/$LLM_FILE"
 fi
 
 echo "模型清单："
