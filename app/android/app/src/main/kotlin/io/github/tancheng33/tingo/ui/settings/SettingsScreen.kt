@@ -5,6 +5,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import io.github.tancheng33.tingo.minutes.remote.LlmPresets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -121,6 +124,7 @@ fun SettingsScreen(
             onSave = onSaveLlmConfig,
             modelList = models.models,
             onFetchModels = onFetchModels,
+            english = language == AppLanguage.EN,
         )
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
@@ -296,6 +300,7 @@ private fun LlmServiceSection(
     onSave: (LlmConfig) -> Unit,
     modelList: ModelListState?,
     onFetchModels: (LlmConfig) -> Unit,
+    english: Boolean = false,
 ) {
     var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
@@ -310,6 +315,27 @@ private fun LlmServiceSection(
             stringResource(R.string.settings_llm_hint),
             style = MaterialTheme.typography.bodySmall,
             color = TingoTheme.colors.muted,
+        )
+        // 手填一家服务的三项（地址/协议/模型）最容易错在细节：DeepSeek 没有 /v1、
+        // Claude 走的是另一种协议。点一下预设把这些填好，用户只剩粘一个 API Key
+        PresetRow(
+            current = LlmPresets.match(draft),
+            english = english,
+            onPick = { id ->
+                if (id == LlmPresets.CUSTOM_ID) {
+                    // 自定义：清空，免得留在上一家的地址上，看起来像已经填好了
+                    baseUrl = ""
+                    model = ""
+                    protocol = LlmProtocol.OPENAI
+                } else {
+                    LlmPresets.find(id)?.let { preset ->
+                        val filled = preset.applyTo(draft)
+                        baseUrl = filled.baseUrl
+                        model = filled.model
+                        protocol = filled.protocol
+                    }
+                }
+            },
         )
         SettingsField(
             label = stringResource(R.string.settings_llm_base_url),
@@ -608,5 +634,38 @@ private fun AutoStopSection(minutes: Int, onSelect: (Int) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/**
+ * 服务商预设：横向一排，选中的高亮。
+ *
+ * 找不出对应预设时选"自定义"——用户自己填的地址不该被硬说成某个服务商。
+ * 地址仍然可编辑：预设是填空，不是绑定。
+ */
+@Composable
+private fun PresetRow(current: String, english: Boolean, onPick: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(LlmPresets.all) { preset ->
+                PillFilter(
+                    label = preset.name(english),
+                    selected = preset.id == current,
+                    onClick = { onPick(preset.id) },
+                )
+            }
+            item {
+                PillFilter(
+                    label = stringResource(R.string.settings_llm_preset_custom),
+                    selected = current == LlmPresets.CUSTOM_ID,
+                    onClick = { onPick(LlmPresets.CUSTOM_ID) },
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.settings_llm_preset_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = TingoTheme.colors.muted,
+        )
     }
 }

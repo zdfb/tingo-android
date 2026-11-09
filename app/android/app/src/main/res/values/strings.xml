@@ -236,4 +236,6 @@
     <string name="settings_auto_stop_hint">会议早早散了却还在录，文件会很大、转写也慢。连续这么久没人说话就自动结束，录音只保留到说完最后一句之后的 30 秒。</string>
     <string name="settings_auto_stop_off">不自动</string>
     <string name="settings_auto_stop_minutes">%1$d 分钟</string>
+    <string name="settings_llm_preset_custom">自定义</string>
+    <string name="settings_llm_preset_hint">点一下填好地址、协议与模型名；地址仍可改。手机上没有桌面那几样本机中转（Magpie / CC Switch / Ollama）——它们指向电脑本机。</string>
 </resources>

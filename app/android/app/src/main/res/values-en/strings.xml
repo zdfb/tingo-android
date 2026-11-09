@@ -236,4 +236,6 @@
     <string name="settings_auto_stop_hint">If the meeting ends early but recording continues, the file gets large and transcription slows down. Recording stops automatically after this long without speech, keeping up to 30 seconds past the last words.</string>
     <string name="settings_auto_stop_off">Off</string>
     <string name="settings_auto_stop_minutes">%1$d min</string>
+    <string name="settings_llm_preset_custom">Custom</string>
+    <string name="settings_llm_preset_hint">Tap one to fill the URL, protocol and model name; the URL stays editable. The desktop local proxies (Magpie / CC Switch / Ollama) are not offered here — they point at your computer.</string>
 </resources>
