@@ -86,6 +86,7 @@ import io.github.tancheng33.tingo.ui.detail.DetailScreen
 import io.github.tancheng33.tingo.ui.detail.MinutesViewModel
 import io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel
 import io.github.tancheng33.tingo.ui.detail.DetailViewModel
+import io.github.tancheng33.tingo.ui.library.LibraryManageActions
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
 import io.github.tancheng33.tingo.ui.library.LibraryViewModel
@@ -136,6 +137,12 @@ fun TingoRoot(
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()
     val libraryError by libraryViewModel.lastError.collectAsStateWithLifecycle()
+    val trashItems by libraryViewModel.trash.collectAsStateWithLifecycle()
+    val batchFailures by libraryViewModel.lastBatchFailures.collectAsStateWithLifecycle()
+    // 回收站视图与"列表/详情"共用同一页：用状态切换而不是再加一条导航路由
+    val trashVisible by libraryViewModel.trashVisible.collectAsStateWithLifecycle()
+    // 搜索命中要跳到具体毫秒：详情页的播放器接这个值
+    var pendingSeekMs by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
 
     /** 宽屏时右侧详情显示哪一场；窄屏走导航压栈。 */
     var selectedMeetingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -318,6 +325,25 @@ fun TingoRoot(
                         },
                         onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
                         onDelete = { card -> libraryViewModel.delete(card.id) },
+                        onOpenAtHit = { id, ms ->
+                            onOpenMeeting(id)
+                            // 跳到命中位置由详情页的播放器接手：先记录待跳转毫秒
+                            pendingSeekMs = ms.toLong()
+                        },
+                        manage = LibraryManageActions(
+                            onToggleSelection = libraryViewModel::toggleSelection,
+                            onSelectAll = libraryViewModel::selectAll,
+                            onClearSelection = libraryViewModel::clearSelection,
+                            onBatch = { action, tag -> libraryViewModel.runBatch(action, tag) },
+                            onDeleteToTrash = libraryViewModel::deleteToTrash,
+                            onShowTrash = libraryViewModel::showTrash,
+                            onShowMeetings = libraryViewModel::showMeetings,
+                            onRestore = libraryViewModel::restoreFromTrash,
+                            onPurge = libraryViewModel::purgeFromTrash,
+                        ),
+                        trash = trashItems,
+                        trashVisible = trashVisible,
+                        batchFailures = batchFailures,
                         actionError = libraryError,
                     )
                 }
@@ -363,6 +389,7 @@ fun TingoRoot(
                                 store = container.models,
                                 catalog = container.catalog,
                                 settings = container.settings,
+                                storageStats = { container.engine.storageStats() },
                                 meetingsRoot = File(container.dataRoot, "meetings"),
                                 installProgress = container.installProgress,
                             )
@@ -402,6 +429,14 @@ fun TingoRoot(
                     models = models,
                     onDeleteAsrModels = settingsViewModel::deleteAsr,
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
+                    onPurgeTrash = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
+                        {
+                            runCatching { container.engine.purgeTrash("") }
+                            settingsViewModel.refresh()
+                        }
+                    } else {
+                        null
+                    },
                     libraryBusy = models.libraryBusy,
                     libraryResult = models.libraryResult,
                     onBackupLibrary = { backupLauncher.launch("tingo-会议库备份.zip") },
@@ -595,6 +630,8 @@ private fun DetailRoute(
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
             onOpenSettings = onOpenSettings,
+            onRename = viewModel::rename,
+            onSetTags = viewModel::setTags,
             onExportBundle = {
                 pendingBundleTitle.value = meetingTitle
                 bundleLauncher.launch(

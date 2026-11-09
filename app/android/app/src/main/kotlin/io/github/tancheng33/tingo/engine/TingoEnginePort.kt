@@ -52,6 +52,31 @@ interface TingoEnginePort {
     /** 删除整场会议，返回释放的字节数。 */
     fun deleteMeeting(id: String): ULong
 
+    /** 改标题；空标题由引擎归一化，列表会回退到纪要标题或目录名。 */
+    fun renameMeeting(id: String, title: String)
+
+    /** 整体替换标签，返回归一化后的标签（去重、去空白）。 */
+    fun setTags(id: String, tags: List<String>): List<String>
+
+    /** 批量操作，按 id 逐个返回结果；`tag` 只对 tag_add / tag_remove 有意义。 */
+    fun batch(ids: List<String>, action: String, tag: String): List<BatchOutcome>
+
+    /** 跨会议搜索（纪要正文 + 转写正文，含模糊匹配）。 */
+    fun search(query: String): SearchResults
+
+    /** 存储统计：总量、音频、可清理的残留。 */
+    fun storageStats(): StorageStats
+
+    /** 删除到回收站，返回释放的字节数。 */
+    fun deleteToTrash(id: String): ULong
+
+    fun restoreFromTrash(id: String)
+
+    fun listTrash(): List<TrashItem>
+
+    /** 彻底清除；`id` 为空表示清空回收站。 */
+    fun purgeTrash(id: String): ULong
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -78,6 +103,27 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
         mapEngineCall { engine.setArchived(id, archived) }
 
     override fun deleteMeeting(id: String): ULong = mapEngineCall { engine.deleteMeeting(id) }
+
+    override fun renameMeeting(id: String, title: String) =
+        mapEngineCall { engine.renameMeeting(id, title) }
+
+    override fun setTags(id: String, tags: List<String>): List<String> =
+        mapEngineCall { engine.setTags(id, tags) }
+
+    override fun batch(ids: List<String>, action: String, tag: String): List<BatchOutcome> =
+        mapEngineCall { engine.batch(ids, action, tag) }
+
+    override fun search(query: String): SearchResults = mapEngineCall { engine.search(query) }
+
+    override fun storageStats(): StorageStats = mapEngineCall { engine.storageStats() }
+
+    override fun deleteToTrash(id: String): ULong = mapEngineCall { engine.deleteToTrash(id) }
+
+    override fun restoreFromTrash(id: String) = mapEngineCall { engine.restoreFromTrash(id) }
+
+    override fun listTrash(): List<TrashItem> = mapEngineCall { engine.listTrash() }
+
+    override fun purgeTrash(id: String): ULong = mapEngineCall { engine.purgeTrash(id) }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

@@ -54,6 +54,32 @@ class DetailViewModel(
         load()
     }
 
+    /** 改标题；空标题由引擎归一化。失败时保留旧标题并记下原因。 */
+    fun rename(title: String) {
+        viewModelScope.launch(io) {
+            try {
+                engine.renameMeeting(meetingId, title)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            load()
+        }
+    }
+
+    /** 整体替换标签（界面负责收集列表）。 */
+    fun setTags(tags: List<String>) {
+        viewModelScope.launch(io) {
+            try {
+                engine.setTags(meetingId, tags)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            load()
+        }
+    }
+
     fun load() {
         _state.value = _state.value.copy(loading = true, failure = null)
         viewModelScope.launch(io) {

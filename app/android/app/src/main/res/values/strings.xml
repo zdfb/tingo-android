@@ -141,4 +141,24 @@
     <string name="action_save">保存</string>
     <string name="err_llm_rejected">模型服务拒绝了请求：%1$s</string>
     <string name="settings_llm_saved">已保存</string>
+    <string name="library_selected_count">已选 %1$d 场</string>
+    <string name="library_select_all">全选</string>
+    <string name="library_batch_tag">加标签</string>
+    <string name="library_batch_tag_title">给选中的会议加标签</string>
+    <string name="library_batch_delete_audio">删音频</string>
+    <string name="library_batch_partial">%1$d 场没能处理完，其余已完成</string>
+    <string name="library_search_expanded">也按这些词找：%1$s</string>
+    <string name="library_hit_in_minutes">纪要正文命中</string>
+    <string name="library_trash_title">最近删除</string>
+    <string name="library_trash_empty">回收站是空的</string>
+    <string name="library_trash_restore">恢复</string>
+    <string name="library_trash_purge">彻底删除</string>
+    <string name="detail_rename">改标题</string>
+    <string name="detail_rename_hint">留空则用纪要标题或目录名</string>
+    <string name="detail_tags">标签</string>
+    <string name="detail_tags_hint">用逗号分隔，例如：产品,复盘</string>
+    <string name="detail_more_actions">更多操作</string>
+    <string name="settings_storage">存储空间</string>
+    <string name="settings_storage_summary">共 %1$d 场，占用 %2$s；其中音频 %3$s，可清理的残留 %4$s</string>
+    <string name="settings_storage_purge">清空回收站</string>
 </resources>

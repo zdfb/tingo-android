@@ -163,6 +163,185 @@ pub struct MeetingDetail {
     pub fishbone: Option<Fishbone>,
 }
 
+
+/// 一条搜索命中：界面直接渲染，不需要再读文件。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchHit {
+    pub meeting_id: String,
+    pub title: String,
+    pub date: String,
+    /// 纪要正文里也命中了（此时 [Self::snippet] 为空）
+    pub in_minutes: bool,
+    pub snippet: String,
+    pub start_ms: u64,
+    pub speaker: String,
+}
+
+/// 搜索结果的完整形态：`expanded` 让界面能说明"我是按这些词找的"。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchResults {
+    pub query: String,
+    pub expanded: Vec<String>,
+    pub hits: Vec<SearchHit>,
+}
+
+/// 一场会议占多少空间。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MeetingUsage {
+    pub id: String,
+    pub title: String,
+    pub date: String,
+    pub bytes: u64,
+    pub audio_bytes: u64,
+    pub archived: bool,
+}
+
+/// 会议库的存储统计；`leftover_bytes` 是可以清理的残留文件。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct StorageStats {
+    pub count: u32,
+    pub total_bytes: u64,
+    pub audio_bytes: u64,
+    pub leftover_bytes: u64,
+    /// 占空间最大的若干场（引擎取前 10）
+    pub largest: Vec<MeetingUsage>,
+}
+
+/// 批量操作里单个会议的结果：失败不中断其余会议。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BatchOutcome {
+    pub id: String,
+    pub ok: bool,
+    /// 失败原因（成功时为空串）
+    pub error: String,
+}
+
+/// 回收站条目。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TrashItem {
+    pub id: String,
+    pub bytes: u64,
+}
+
+
+/// 回收站目录名。以点开头，引擎的 `list` 会当作非会议目录跳过。
+const TRASH_DIR: &str = ".trash";
+
+/// 批量操作里单个会议的执行体。返回可展示的错误信息。
+fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), EngineError> {
+    let dir = meeting_dir(root, id)?;
+    match action {
+        "archive" | "unarchive" => {
+            let mut meta = meetings::read_meta(&dir);
+            meta.archived = action == "archive";
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
+        }
+        "tag_add" => {
+            let mut meta = meetings::read_meta(&dir);
+            let mut tags = meta.tags.clone();
+            tags.push(tag.to_string());
+            meta.tags = meetings::normalize_tags(&tags);
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
+        }
+        "tag_remove" => {
+            let mut meta = meetings::read_meta(&dir);
+            let target = meetings::normalize_tag(tag);
+            meta.tags = meta.tags.iter().filter(|t| **t != target).cloned().collect();
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
+        }
+        "delete_audio" => {
+            for file in meetings::audio_files(&dir) {
+                std::fs::remove_file(&file).map_err(|e| io_error(e, "batch"))?;
+            }
+            Ok(())
+        }
+        "delete" => {
+            std::fs::remove_dir_all(&dir).map_err(|e| io_error(e, "batch"))
+        }
+        other => Err(EngineError::InvalidInput {
+            detail: format!("不认识的批量操作：{other}"),
+        }),
+    }
+}
+
+/// 把引擎的搜索结果 JSON 转成 typed Record；字段缺了就跳过那一条，不让整个搜索失败。
+fn parse_search(query: &str, value: &serde_json::Value) -> SearchResults {
+    let expanded: Vec<String> = value
+        .get("expanded")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let mut hits = Vec::new();
+    for meeting in value
+        .get("results")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+    {
+        let id = meeting.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+        let title = meeting.get("title").and_then(|v| v.as_str()).unwrap_or_default();
+        let date = meeting.get("date").and_then(|v| v.as_str()).unwrap_or_default();
+        let in_minutes = meeting.get("minutes_hit").and_then(|v| v.as_bool()).unwrap_or(false);
+        let rows = meeting
+            .get("hits")
+            .and_then(|v| v.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or(&[]);
+        if rows.is_empty() {
+            if in_minutes {
+                hits.push(SearchHit {
+                    meeting_id: id.to_string(),
+                    title: title.to_string(),
+                    date: date.to_string(),
+                    in_minutes: true,
+                    snippet: String::new(),
+                    start_ms: 0,
+                    speaker: String::new(),
+                });
+            }
+            continue;
+        }
+        for row in rows {
+            hits.push(SearchHit {
+                meeting_id: id.to_string(),
+                title: title.to_string(),
+                date: date.to_string(),
+                in_minutes,
+                snippet: row.get("match").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                start_ms: row.get("ms").and_then(|v| v.as_u64()).unwrap_or(0),
+                speaker: row.get("speaker").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            });
+        }
+    }
+    SearchResults { query: query.to_string(), expanded, hits }
+}
+
+/// 把引擎的存储统计 JSON 转成 typed Record。
+fn parse_storage(value: &serde_json::Value) -> StorageStats {
+    let num = |key: &str| value.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+    let largest = value
+        .get("largest")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+        .iter()
+        .map(|row| MeetingUsage {
+            id: row.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            title: row.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            date: row.get("date").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            bytes: row.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0),
+            audio_bytes: row.get("audio_bytes").and_then(|v| v.as_u64()).unwrap_or(0),
+            archived: row.get("archived").and_then(|v| v.as_bool()).unwrap_or(false),
+        })
+        .collect();
+    StorageStats {
+        count: num("count") as u32,
+        total_bytes: num("meetings_bytes"),
+        audio_bytes: num("audio_bytes"),
+        leftover_bytes: num("leftover_bytes"),
+        largest,
+    }
+}
 /// 引擎实例：持有注入的目录，所有用例函数都是它的方法。
 #[derive(uniffi::Object)]
 pub struct TingoEngine {
@@ -225,6 +404,145 @@ impl TingoEngine {
         })
     }
 
+
+    /// 改会议标题。空标题交给引擎归一化（回退到目录名推断的标题）。
+    pub fn rename_meeting(&self, id: String, title: String) -> Result<(), EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("rename_meeting", move || {
+            let mut meta = meetings::read_meta(&dir);
+            meta.title = meetings::normalize_title(Some(&title));
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "rename_meeting"))
+        })
+    }
+
+    /// 设置标签（整体替换）。返回归一化后的标签，界面用它刷新而不必重扫。
+    pub fn set_tags(&self, id: String, tags: Vec<String>) -> Result<Vec<String>, EngineError> {
+        let dir = meeting_dir(&self.paths.meetings_root, &id)?;
+        guard("set_tags", move || {
+            let mut meta = meetings::read_meta(&dir);
+            meta.tags = meetings::normalize_tags(&tags);
+            meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "set_tags"))?;
+            Ok(meetings::read_meta(&dir).tags)
+        })
+    }
+
+    /// 批量操作：`archive` / `unarchive` / `tag_add` / `tag_remove` / `delete_audio` / `delete`。
+    ///
+    /// 单个会议失败不中断其余会议——一批里有一场目录损坏，不该让另外九场白干。
+    pub fn batch(&self, ids: Vec<String>, action: String, tag: String) -> Result<Vec<BatchOutcome>, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("batch", move || {
+            let mut out = Vec::with_capacity(ids.len());
+            for id in ids {
+                let result = apply_batch(&root, &id, &action, &tag);
+                out.push(match result {
+                    Ok(()) => BatchOutcome { id, ok: true, error: String::new() },
+                    Err(e) => BatchOutcome { id, ok: false, error: format!("{e:?}") },
+                });
+            }
+            Ok(out)
+        })
+    }
+
+    /// 跨会议搜索：纪要正文 + 转写正文，含桌面版那套"术语扩展 + 差一个字"的模糊匹配。
+    pub fn search(&self, query: String) -> Result<SearchResults, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("search", move || {
+            let value = tingo_engine::terms::search(&root, &query, tingo_engine::i18n::Lang::Zh);
+            Ok(parse_search(&query, &value))
+        })
+    }
+
+    /// 存储统计：每场体积、音频体积、可清理的残留文件。
+    pub fn storage_stats(&self) -> Result<StorageStats, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("storage_stats", move || {
+            Ok(parse_storage(&meetings::storage(&root, |_| false)))
+        })
+    }
+
+    /// 删除到回收站（目录整体改名，瞬时且可恢复），返回释放的字节数。
+    pub fn delete_to_trash(&self, id: String) -> Result<u64, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("delete_to_trash", move || {
+            let dir = meeting_dir(&root, &id)?;
+            let bytes = meetings::size_of(&dir);
+            let trash = root.join(TRASH_DIR).join(&id);
+            if trash.exists() {
+                return Err(EngineError::InvalidInput {
+                    detail: format!("回收站里已有同名会议：{id}"),
+                });
+            }
+            std::fs::create_dir_all(root.join(TRASH_DIR))
+                .map_err(|e| io_error(e, "delete_to_trash"))?;
+            std::fs::rename(&dir, &trash).map_err(|e| io_error(e, "delete_to_trash"))?;
+            Ok(bytes)
+        })
+    }
+
+    /// 从回收站恢复。目标已存在时拒绝，绝不覆盖用户数据。
+    pub fn restore_from_trash(&self, id: String) -> Result<(), EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("restore_from_trash", move || {
+            validate_id(&id)?;
+            let source = root.join(TRASH_DIR).join(&id);
+            if !source.is_dir() {
+                return Err(EngineError::Missing {
+                    detail: format!("回收站里没有 {id}"),
+                });
+            }
+            let target = root.join(&id);
+            if target.exists() {
+                return Err(EngineError::InvalidInput {
+                    detail: format!("会议库里已有同 id 的目录：{id}"),
+                });
+            }
+            std::fs::rename(&source, &target).map_err(|e| io_error(e, "restore_from_trash"))
+        })
+    }
+
+    /// 回收站内容，按 id 排序。
+    pub fn list_trash(&self) -> Result<Vec<TrashItem>, EngineError> {
+        let trash = self.paths.meetings_root.join(TRASH_DIR);
+        guard("list_trash", move || {
+            let Ok(rd) = std::fs::read_dir(&trash) else {
+                return Ok(Vec::new());
+            };
+            let mut items: Vec<TrashItem> = rd
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .filter_map(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| TrashItem { id: n.to_string(), bytes: meetings::size_of(&p) })
+                })
+                .collect();
+            items.sort_by(|a, b| a.id.cmp(&b.id));
+            Ok(items)
+        })
+    }
+
+    /// 彻底清除回收站里的一场会议；`id` 为空表示清空整个回收站。
+    pub fn purge_trash(&self, id: String) -> Result<u64, EngineError> {
+        let trash = self.paths.meetings_root.join(TRASH_DIR);
+        guard("purge_trash", move || {
+            if id.is_empty() {
+                let freed = meetings::size_of(&trash);
+                let _ = std::fs::remove_dir_all(&trash);
+                return Ok(freed);
+            }
+            validate_id(&id)?;
+            let dir = trash.join(&id);
+            if !dir.is_dir() {
+                return Err(EngineError::Missing { detail: format!("回收站里没有 {id}") });
+            }
+            let freed = meetings::size_of(&dir);
+            std::fs::remove_dir_all(&dir).map_err(|e| io_error(e, "purge_trash"))?;
+            Ok(freed)
+        })
+    }
+
     /// 解析纪要里的鱼骨图代码块。没有代码块返回 `None`；内容非法返回 `Malformed`。
     pub fn parse_fishbone(&self, minutes_text: String) -> Result<Option<Fishbone>, EngineError> {
         guard("parse_fishbone", move || {
@@ -270,12 +588,18 @@ fn guard<T>(what: &str, f: impl FnOnce() -> Result<T, EngineError>) -> Result<T,
 }
 
 /// 会议 id 只能是单层目录名：挡掉 `../` 这类逃逸，避免宿主把 ID 当成任意路径。
-fn meeting_dir(root: &Path, id: &str) -> Result<PathBuf, EngineError> {
+/// 只校验 id 本身（单层目录名），不要求目录存在——回收站里的会议不在会议库根下。
+fn validate_id(id: &str) -> Result<(), EngineError> {
     if id.trim().is_empty() || id.contains('/') || id.contains('\\') || id == "." || id == ".." {
         return Err(EngineError::InvalidInput {
             detail: format!("invalid meeting id: {id}"),
         });
     }
+    Ok(())
+}
+
+fn meeting_dir(root: &Path, id: &str) -> Result<PathBuf, EngineError> {
+    validate_id(id)?;
     let dir = root.join(id);
     if !dir.is_dir() {
         return Err(EngineError::Missing {
@@ -658,5 +982,192 @@ mod tests {
         let doc = engine.parse_minutes(String::new()).unwrap();
         assert_eq!(doc.title, "");
         assert!(doc.sections.is_empty());
+    }
+
+    // ---- 会议管理与搜索（与桌面端对齐的那一批） ----
+
+    #[test]
+    fn rename_writes_title_and_keeps_tags() {
+        let root = temp_root("rename");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        let mut meta = meetings::read_meta(&dir);
+        meta.tags = vec!["产品".to_string()];
+        meetings::write_meta(&dir, &meta).unwrap();
+
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.rename_meeting("2026-10-28_1430_复盘".to_string(), "  Q4 复盘  ".to_string()).unwrap();
+
+        let after = meetings::read_meta(&dir);
+        assert_eq!(after.title.as_deref(), Some("Q4 复盘"));
+        assert_eq!(after.tags, vec!["产品".to_string()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn empty_title_falls_back_to_nothing_so_list_uses_folder_name() {
+        let root = temp_root("rename-empty");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.rename_meeting("2026-10-28_1430_复盘".to_string(), "   ".to_string()).unwrap();
+
+        // 标题归一化成"没有"；列表标题的回退顺序是 meta.title → 纪要里的一级标题 → 目录名
+        assert_eq!(meetings::read_meta(&dir).title, None);
+        let title = engine.scan_library().unwrap()[0].title.clone();
+        assert_eq!(title, "标题", "有纪要时应取纪要标题，实际：{title}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn set_tags_normalizes_and_dedupes() {
+        let root = temp_root("tags");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let tags = engine
+            .set_tags(
+                "2026-10-28_1430_复盘".to_string(),
+                vec!["  产品 ".to_string(), "产品".to_string(), "".to_string(), "周会".to_string()],
+            )
+            .unwrap();
+
+        assert_eq!(tags, vec!["产品".to_string(), "周会".to_string()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_reports_per_meeting_outcome_and_keeps_going() {
+        let root = temp_root("batch");
+        meeting(&root, "2026-10-28_1430_复盘");
+        meeting(&root, "2026-10-29_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let outcomes = engine
+            .batch(
+                vec![
+                    "2026-10-28_1430_复盘".to_string(),
+                    "不存在的会议".to_string(),
+                    "2026-10-29_1000_周会".to_string(),
+                ],
+                "archive".to_string(),
+                String::new(),
+            )
+            .unwrap();
+
+        assert_eq!(outcomes.len(), 3);
+        assert!(outcomes[0].ok);
+        assert!(!outcomes[1].ok, "坏的那场只影响它自己，实际：{outcomes:?}");
+        assert!(outcomes[2].ok);
+        assert!(engine.scan_library().unwrap().iter().all(|m| m.archived));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_tag_add_and_remove() {
+        let root = temp_root("batch-tags");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        engine
+            .batch(vec!["2026-10-28_1430_复盘".to_string()], "tag_add".to_string(), "产品".to_string())
+            .unwrap();
+        assert_eq!(engine.scan_library().unwrap()[0].tags, vec!["产品".to_string()]);
+
+        engine
+            .batch(vec!["2026-10-28_1430_复盘".to_string()], "tag_remove".to_string(), "产品".to_string())
+            .unwrap();
+        assert!(engine.scan_library().unwrap()[0].tags.is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_to_trash_hides_meeting_and_restore_brings_it_back() {
+        let root = temp_root("trash");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let freed = engine.delete_to_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+        assert!(freed > 0);
+        assert!(!dir.exists());
+        assert!(engine.scan_library().unwrap().is_empty(), "回收站里的会议不能出现在库里");
+        assert_eq!(engine.list_trash().unwrap().len(), 1);
+
+        engine.restore_from_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+        assert!(dir.is_dir());
+        assert!(engine.list_trash().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restore_refuses_to_overwrite_existing_meeting() {
+        let root = temp_root("trash-conflict");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_to_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+        // 用户又录了一场同名会议
+        meeting(&root, "2026-10-28_1430_复盘");
+
+        assert!(engine.restore_from_trash("2026-10-28_1430_复盘".to_string()).is_err());
+        // 两边都还在：库里的没被删，回收站里的也没丢
+        assert!(engine.scan_library().unwrap().len() == 1);
+        assert_eq!(engine.list_trash().unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn purge_trash_empties_it() {
+        let root = temp_root("purge");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_to_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+
+        let freed = engine.purge_trash(String::new()).unwrap();
+        assert!(freed > 0);
+        assert!(engine.list_trash().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_finds_transcript_text_and_minutes() {
+        let root = temp_root("search");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(
+            dir.join("transcript.json"),
+            r#"{"source":"录音.wav","duration_ms":6000,"sentences":[{"speaker":0,"start_ms":1000,"end_ms":2000,"text":"短信验正码延迟四秒"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("纪要.md"), "# 复盘
+
+## 决议
+- 修短信验证码（[00:01]）
+").unwrap();
+
+        let engine = TingoEngine::new(root.display().to_string());
+        let result = engine.search("验证码".to_string()).unwrap();
+
+        assert_eq!(result.query, "验证码");
+        assert!(!result.hits.is_empty(), "应命中识别错字，实际：{result:?}");
+        assert!(result.hits.iter().all(|h| h.meeting_id == "2026-10-28_1430_复盘"));
+        assert!(result.hits.iter().any(|h| h.start_ms == 1000 || h.in_minutes));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn storage_reports_totals_and_leftovers() {
+        let root = temp_root("storage");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 2048]).unwrap();
+        // 已被合成录音取代的原始音轨：属于可清理的残留
+        std::fs::write(dir.join("mic.wav"), vec![0u8; 1024]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let stats = engine.storage_stats().unwrap();
+        assert_eq!(stats.count, 1);
+        assert!(stats.total_bytes >= 3072);
+        // 引擎把 mic.wav 也算"音频文件"（它就是一条音轨），所以音频体积含它；
+        // 残留体积单独再算一份 mic.wav——这正是界面要提示"删掉能省 1 KB"的数
+        assert_eq!(stats.audio_bytes, 3072);
+        assert_eq!(stats.leftover_bytes, 1024);
+        assert_eq!(stats.largest.len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

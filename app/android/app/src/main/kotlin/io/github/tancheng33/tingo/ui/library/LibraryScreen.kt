@@ -1,6 +1,14 @@
 package io.github.tancheng33.tingo.ui.library
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.draw.clip
+import io.github.tancheng33.tingo.data.BatchAction
+import io.github.tancheng33.tingo.engine.TrashItem
+import io.github.tancheng33.tingo.ui.components.PillButton
+import io.github.tancheng33.tingo.ui.components.PillKind
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,6 +70,24 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 
 /**
+ * 列表上的管理动作。
+ *
+ * 参数一次性有十来个，散着传会让签名读不出重点，所以打包成一个对象——
+ * 界面层只关心"有哪些动作"，不关心它们各自从哪来。
+ */
+class LibraryManageActions(
+    val onToggleSelection: (String) -> Unit = {},
+    val onSelectAll: () -> Unit = {},
+    val onClearSelection: () -> Unit = {},
+    val onBatch: (BatchAction, String) -> Unit = { _, _ -> },
+    val onDeleteToTrash: (String) -> Unit = {},
+    val onShowTrash: () -> Unit = {},
+    val onShowMeetings: () -> Unit = {},
+    val onRestore: (String) -> Unit = {},
+    val onPurge: (String) -> Unit = {},
+)
+
+/**
  * 会议库列表。
  *
  * 视觉上对着桌面版的"会议记录"页：近白底、白卡片 + 1px 细描边、16dp 圆角，
@@ -75,9 +101,16 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
+    /** 点击搜索命中：打开会议并跳到该毫秒 */
+    onOpenAtHit: (String, ULong) -> Unit = { _, _ -> },
     onUnreadableClick: (MeetingCard) -> Unit = {},
     onSetArchived: (MeetingCard, Boolean) -> Unit = { _, _ -> },
     onDelete: (MeetingCard) -> Unit = {},
+    manage: LibraryManageActions = LibraryManageActions(),
+    /** 回收站内容；[state] 为空且 [trashVisible] 为真时显示回收站视图 */
+    trash: List<TrashItem> = emptyList(),
+    trashVisible: Boolean = false,
+    batchFailures: Int = 0,
     actionError: FailureKind? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -89,6 +122,16 @@ fun LibraryScreen(
             color = colors.red,
             modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter, vertical = 8.dp),
         )
+    }
+    if (trashVisible) {
+        TrashView(
+            items = trash,
+            onRestore = manage.onRestore,
+            onPurge = manage.onPurge,
+            onBack = manage.onShowMeetings,
+            modifier = modifier,
+        )
+        return
     }
     when (state) {
         LibraryUiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -124,6 +167,17 @@ fun LibraryScreen(
                     stringResource(R.string.library_count_filtered, state.items.size, state.totalCount)
                 },
             )
+            if (state.selection.isNotEmpty()) {
+                BatchBar(
+                    count = state.selection.size,
+                    failures = batchFailures,
+                    onSelectAll = manage.onSelectAll,
+                    onClear = manage.onClearSelection,
+                    onBatch = manage.onBatch,
+                )
+            } else if (state.query.isNotBlank() && state.hits.isNotEmpty()) {
+                SearchHits(state = state, onOpenAt = onOpenAtHit)
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -138,10 +192,15 @@ fun LibraryScreen(
                     MeetingCardRow(
                         card = card,
                         query = state.query,
-                        onClick = { onOpenMeeting(card.id) },
+                        selected = card.id in state.selection,
+                        selecting = state.selection.isNotEmpty(),
+                        onClick = {
+                            if (state.selection.isNotEmpty()) manage.onToggleSelection(card.id) else onOpenMeeting(card.id)
+                        },
+                        onLongClick = { manage.onToggleSelection(card.id) },
                         onUnreadableClick = { onUnreadableClick(card) },
                         onSetArchived = { onSetArchived(card, it) },
-                        onDelete = { onDelete(card) },
+                        onDelete = { manage.onDeleteToTrash(card.id) },
                     )
                 }
             }
@@ -254,7 +313,11 @@ private fun MeetingCardRow(
     card: MeetingCard,
     /** 当前搜索词，用来高亮命中的字 */
     query: String,
+    selected: Boolean,
+    /** 正在多选：卡片左侧显示勾选圈 */
+    selecting: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onUnreadableClick: () -> Unit,
     onSetArchived: (Boolean) -> Unit,
     onDelete: () -> Unit,
@@ -290,11 +353,14 @@ private fun MeetingCardRow(
             .fillMaxWidth()
             .background(colors.card, TingoDimens.cardShape)
             .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selecting) {
+                SelectionDot(selected = selected)
+            }
             Text(
                 text = highlighted(card.title.ifBlank { card.id }, query),
                 style = MaterialTheme.typography.titleMedium,
@@ -401,4 +467,220 @@ private fun highlighted(text: String, query: String): AnnotatedString {
             }
         }
     }
+}
+
+/** 多选时卡片左侧的勾选圈：选中用主色实心，未选用细描边。 */
+@Composable
+private fun SelectionDot(selected: Boolean) {
+    val colors = TingoTheme.colors
+    Box(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(if (selected) colors.blue else colors.card)
+            .border(BorderStroke(TingoDimens.hairline, if (selected) colors.blue else colors.line), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = colors.onBlack,
+                modifier = Modifier.size(12.dp),
+            )
+        }
+    }
+}
+
+/** 多选后的批量操作条：最常用的四个动作直接给按钮，标签通过输入框补。 */
+@Composable
+private fun BatchBar(
+    count: Int,
+    failures: Int,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+    onBatch: (BatchAction, String) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    var tagDialog by remember { mutableStateOf<String?>(null) }
+    if (tagDialog != null) {
+        TagInputDialog(
+            title = stringResource(R.string.library_batch_tag_title),
+            onDismiss = { tagDialog = null },
+            onConfirm = { tag ->
+                tagDialog = null
+                onBatch(BatchAction.TAG_ADD, tag)
+            },
+        )
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = TingoDimens.gutter, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.library_selected_count, count),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.text,
+            )
+            TextButton(onClick = onSelectAll) { Text(stringResource(R.string.library_select_all), color = colors.blue) }
+            TextButton(onClick = onClear) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton(stringResource(R.string.library_archive), { onBatch(BatchAction.ARCHIVE, "") }, kind = PillKind.Soft)
+            PillButton(stringResource(R.string.library_batch_tag), { tagDialog = "" }, kind = PillKind.Soft)
+            PillButton(
+                stringResource(R.string.library_batch_delete_audio),
+                { onBatch(BatchAction.DELETE_AUDIO, "") },
+                kind = PillKind.Soft,
+            )
+            PillButton(stringResource(R.string.library_delete), { onBatch(BatchAction.DELETE, "") }, kind = PillKind.Primary)
+        }
+        if (failures > 0) {
+            Text(
+                stringResource(R.string.library_batch_partial, failures),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.red,
+            )
+        }
+    }
+}
+
+/** 搜索结果：按会议分组显示命中片段，点一条跳到那个时间点。 */
+@Composable
+private fun SearchHits(state: LibraryUiState.Content, onOpenAt: (String, ULong) -> Unit) {
+    val colors = TingoTheme.colors
+    val grouped = state.hits.groupBy { it.meetingId }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = TingoDimens.gutter, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (state.expandedTerms.size > 1) {
+            Text(
+                stringResource(R.string.library_search_expanded, state.expandedTerms.joinToString("、")),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.muted,
+            )
+        }
+        grouped.entries.take(3).forEach { (meetingId, hits) ->
+            val first = hits.first()
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = first.title.ifBlank { meetingId },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.text,
+                )
+                hits.take(3).forEach { hit ->
+                    Text(
+                        text = if (hit.inMinutes) {
+                            stringResource(R.string.library_hit_in_minutes)
+                        } else {
+                            "${hit.speaker}：${hit.snippet}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.blue,
+                        modifier = Modifier.clickable { onOpenAt(meetingId, hit.startMs) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 回收站：恢复或彻底清除。 */
+@Composable
+private fun TrashView(
+    items: List<TrashItem>,
+    onRestore: (String) -> Unit,
+    onPurge: (String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = TingoTheme.colors
+    Column(modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.library_trash_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.text,
+            )
+            TextButton(onClick = onBack) { Text(stringResource(R.string.action_back), color = colors.blue) }
+        }
+        if (items.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.library_trash_empty), color = colors.muted)
+            }
+            return@Column
+        }
+        LazyColumn(
+            contentPadding = PaddingValues(TingoDimens.gutter),
+            verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
+        ) {
+            items(items, key = { it.id }) { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.card, TingoDimens.cardShape)
+                        .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(item.id, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+                        Text(
+                            "${item.bytes / 1_000_000u} MB",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.muted,
+                        )
+                    }
+                    TextButton(onClick = { onRestore(item.id) }) {
+                        Text(stringResource(R.string.library_trash_restore), color = colors.blue)
+                    }
+                    TextButton(onClick = { onPurge(item.id) }) {
+                        Text(stringResource(R.string.library_trash_purge), color = colors.red)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 一个标签输入框：批量加标签、详情页编辑标签都用它。 */
+@Composable
+private fun TagInputDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val colors = TingoTheme.colors
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.card,
+        title = { Text(title, color = colors.text) },
+        text = {
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
+                cursorBrush = SolidColor(colors.blue),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.seg, TingoDimens.controlShape)
+                    .padding(12.dp),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) {
+                Text(stringResource(R.string.action_save), color = colors.blue)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) } },
+    )
 }

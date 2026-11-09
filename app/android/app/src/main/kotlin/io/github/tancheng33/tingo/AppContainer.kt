@@ -140,6 +140,24 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun deleteMeeting(id: String): Nothing = fail()
 
+    override fun renameMeeting(id: String, title: String): Nothing = fail()
+
+    override fun setTags(id: String, tags: List<String>): Nothing = fail()
+
+    override fun batch(ids: List<String>, action: String, tag: String): Nothing = fail()
+
+    override fun search(query: String): Nothing = fail()
+
+    override fun storageStats(): Nothing = fail()
+
+    override fun deleteToTrash(id: String): Nothing = fail()
+
+    override fun restoreFromTrash(id: String): Nothing = fail()
+
+    override fun listTrash(): Nothing = fail()
+
+    override fun purgeTrash(id: String): Nothing = fail()
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,

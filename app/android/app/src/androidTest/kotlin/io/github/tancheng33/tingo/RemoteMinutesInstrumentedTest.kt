@@ -69,19 +69,24 @@ class RemoteMinutesInstrumentedTest {
 
         val serving = thread(isDaemon = true) {
             runCatching {
-                server.accept().use { socket ->
+                server.soTimeout = 20_000
+                val accepted = server.accept()
+                accepted.use { socket ->
+                    // 只从原始流读：BufferedReader 会把请求体的一部分缓冲走，
+                    // 之后再从原始流按 Content-Length 读就会永远等不到那些字节（实测挂死）
                     val input = socket.getInputStream()
-                    val reader = input.bufferedReader()
-                    val requestLine = reader.readLine().orEmpty()
-                    receivedPath = requestLine.split(" ").getOrNull(1)
-                    var line = reader.readLine()
-                    val headers = mutableMapOf<String, String>()
-                    while (!line.isNullOrBlank()) {
-                        line.split(": ", limit = 2).takeIf { it.size == 2 }?.let { headers[it[0].lowercase()] = it[1] }
-                        line = reader.readLine()
+                    val head = StringBuilder()
+                    while (!head.endsWith("\r\n\r\n")) {
+                        val b = input.read()
+                        if (b < 0) break
+                        head.append(b.toChar())
                     }
+                    val lines = head.split("\r\n")
+                    val requestLine = lines.firstOrNull().orEmpty()
+                    val headers = lines.drop(1)
+                        .mapNotNull { line -> line.split(": ", limit = 2).takeIf { it.size == 2 } }
+                        .associate { it[0].lowercase() to it[1] }
                     val length = headers["content-length"]?.toIntOrNull() ?: 0
-                    // 按字节读：按字符读会把多字节 UTF-8 截断成乱码，断言恰好用 contains 才没暴露
                     val bodyBytes = ByteArray(length)
                     var received = 0
                     while (received < length) {
@@ -89,8 +94,9 @@ class RemoteMinutesInstrumentedTest {
                         if (n <= 0) break
                         received += n
                     }
-                    receivedBody = String(bodyBytes, 0, received, Charsets.UTF_8)
+                    receivedPath = requestLine.split(" ").getOrNull(1)
                     receivedAuth = headers["authorization"]
+                    receivedBody = String(bodyBytes, 0, received, Charsets.UTF_8)
 
                     val payload = """{"choices":[{"message":{"role":"assistant","content":${quote(markdown)}}}]}"""
                     val bytes = payload.toByteArray()
@@ -111,7 +117,10 @@ class RemoteMinutesInstrumentedTest {
             model = "test-model",
             protocol = LlmProtocol.OPENAI,
         )
-        val generator = RemoteMinutesGenerator({ config }, UrlHttpJsonClient(connectTimeoutMs = 5_000, readTimeoutMs = 20_000))
+        val generator = RemoteMinutesGenerator(
+            { config },
+            UrlHttpJsonClient(connectTimeoutMs = 15_000, readTimeoutMs = 30_000),
+        )
         val service = MinutesService(generator)
 
         val file = try {

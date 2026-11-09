@@ -57,6 +57,8 @@ fun SettingsScreen(
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
+    /** 清空回收站；null 表示当前没有可清理的内容 */
+    onPurgeTrash: (() -> Unit)? = null,
     libraryBusy: Boolean = false,
     libraryResult: LibraryOpResult? = null,
     onBackupLibrary: () -> Unit = {},
@@ -100,6 +102,11 @@ fun SettingsScreen(
         }
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+
+        models.storage?.let { stats ->
+            StorageSection(stats = stats, onPurgeTrash = onPurgeTrash)
+            HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+        }
 
         LlmServiceSection(config = models.llmConfig, onSave = onSaveLlmConfig)
 
@@ -362,3 +369,50 @@ private fun SettingsField(
         )
     }
 }
+
+/** 会议库占用：总量、音频、可清理的残留，以及占空间最大的几场。 */
+@Composable
+private fun StorageSection(stats: io.github.tancheng33.tingo.engine.StorageStats, onPurgeTrash: (() -> Unit)?) {
+    val colors = TingoTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            stringResource(R.string.settings_storage),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        Text(
+            stringResource(
+                R.string.settings_storage_summary,
+                stats.count.toInt(),
+                mb(stats.totalBytes),
+                mb(stats.audioBytes),
+                mb(stats.leftoverBytes),
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.muted,
+        )
+        stats.largest.take(3).forEach { usage ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    usage.title.ifBlank { usage.id },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.text2,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(mb(usage.bytes), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            }
+        }
+        if (onPurgeTrash != null) {
+            PillButton(
+                label = stringResource(R.string.settings_storage_purge),
+                onClick = onPurgeTrash,
+                kind = PillKind.Soft,
+            )
+        }
+    }
+}
+
+/** 字节转 MB：设置页只需要量级，不显示小数。 */
+private fun mb(bytes: ULong): String = "${bytes / 1_000_000u} MB"

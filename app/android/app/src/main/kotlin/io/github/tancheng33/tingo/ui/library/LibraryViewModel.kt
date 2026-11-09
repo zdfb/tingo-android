@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
+import io.github.tancheng33.tingo.data.BatchAction
 import io.github.tancheng33.tingo.engine.FailureKind
+import io.github.tancheng33.tingo.engine.SearchHit
+import io.github.tancheng33.tingo.engine.TrashItem
 import io.github.tancheng33.tingo.engine.TingoFailure
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +33,12 @@ sealed interface LibraryUiState {
         val unreadableCount: Int,
         val query: String = "",
         val archivedOnly: Boolean = false,
+        /** 多选中的会议 id；非空时界面显示批量操作条 */
+        val selection: Set<String> = emptySet(),
+        /** 搜索命中：空表示"这次搜索没有命中"而不是"没在搜索" */
+        val hits: List<SearchHit> = emptyList(),
+        /** 引擎实际按哪些词去找（术语扩展后的结果），界面用它说明"我是这么理解的" */
+        val expandedTerms: List<String> = emptyList(),
     ) : LibraryUiState
 
     data class Failed(val kind: FailureKind) : LibraryUiState
@@ -58,6 +67,21 @@ class LibraryViewModel(
     private val _lastError = MutableStateFlow<FailureKind?>(null)
     val lastError: StateFlow<FailureKind?> = _lastError.asStateFlow()
 
+    /** 上一次批量操作里失败的会议数；0 表示全部成功。 */
+    private val _lastBatchFailures = MutableStateFlow(0)
+    val lastBatchFailures: StateFlow<Int> = _lastBatchFailures.asStateFlow()
+
+    /** 回收站内容；非空且 [trashVisible] 为真时界面显示回收站视图。 */
+    private val _trash = MutableStateFlow<List<TrashItem>>(emptyList())
+    val trash: StateFlow<List<TrashItem>> = _trash.asStateFlow()
+
+    /** 回收站视图是否在显示；放在这里而不是界面里，从详情页返回时不能丢。 */
+    private val _trashVisible = MutableStateFlow(false)
+    val trashVisible: StateFlow<Boolean> = _trashVisible.asStateFlow()
+    private var selection: Set<String> = emptySet()
+    private var hits: List<SearchHit> = emptyList()
+    private var expandedTerms: List<String> = emptyList()
+
     init {
         refresh()
     }
@@ -81,9 +105,35 @@ class LibraryViewModel(
         _state.value = next
     }
 
+    /**
+     * 搜索词变化。
+     *
+     * 搜索走引擎的全文检索（纪要 + 转写，含识别错字的模糊匹配），不在 Kotlin 里
+     * 抄一套子串匹配：两套规则必然漂移，用户在两端搜同一句话会得到不同结果。
+     */
     fun onQueryChange(text: String) {
         query = text
         lastSnapshot?.let { _state.value = render(it) }
+        val needle = text.trim()
+        if (needle.isEmpty()) {
+            hits = emptyList()
+            expandedTerms = emptyList()
+            lastSnapshot?.let { _state.value = render(it) }
+            return
+        }
+        viewModelScope.launch(io) {
+            val result = try {
+                repository.search(needle)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                return@launch
+            }
+            // 搜索期间用户可能又改了词：只认最后一次
+            if (query.trim() != needle) return@launch
+            hits = result.hits
+            expandedTerms = result.expanded
+            lastSnapshot?.let { _state.value = render(it) }
+        }
     }
 
     /** 归档或取消归档；成功后刷新列表，失败就保留原列表并记下原因。 */
@@ -98,7 +148,7 @@ class LibraryViewModel(
         }
     }
 
-    /** 删除整场会议；界面负责先确认。 */
+    /** 彻底删除整场会议（不进回收站）；界面负责先确认。 */
     fun delete(id: String) {
         viewModelScope.launch(io) {
             try {
@@ -106,6 +156,108 @@ class LibraryViewModel(
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
             }
+            refreshNow()
+        }
+    }
+
+    /** 删除到回收站：可恢复，是界面上"删除"的默认动作。 */
+    fun deleteToTrash(id: String) {
+        viewModelScope.launch(io) {
+            try {
+                repository.deleteToTrash(id)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshNow()
+        }
+    }
+
+    fun restoreFromTrash(id: String) {
+        viewModelScope.launch(io) {
+            try {
+                repository.restoreFromTrash(id)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshTrash()
+        }
+    }
+
+    fun purgeFromTrash(id: String) {
+        viewModelScope.launch(io) {
+            try {
+                repository.purgeTrash(id)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshTrash()
+        }
+    }
+
+    /** 切到回收站视图。 */
+    fun showTrash() {
+        _trashVisible.value = true
+        clearSelection()
+        refreshTrash()
+    }
+
+    fun showMeetings() {
+        _trashVisible.value = false
+        refresh()
+    }
+
+    private fun refreshTrash() {
+        viewModelScope.launch(io) {
+            _trash.value = try {
+                repository.listTrash()
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                emptyList()
+            }
+        }
+    }
+
+    /** 改名；界面负责收集输入。 */
+    fun rename(id: String, title: String) {
+        viewModelScope.launch(io) {
+            try {
+                repository.rename(id, title)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshNow()
+        }
+    }
+
+    fun toggleSelection(id: String) {
+        selection = if (id in selection) selection - id else selection + id
+        lastSnapshot?.let { _state.value = render(it) }
+    }
+
+    fun clearSelection() {
+        selection = emptySet()
+        lastSnapshot?.let { _state.value = render(it) }
+    }
+
+    fun selectAll() {
+        val all = (lastSnapshot ?: return).filter { !archivedOnly || it.archived }.map { it.id }.toSet()
+        selection = all
+        lastSnapshot?.let { _state.value = render(it) }
+    }
+
+    /** 对当前选择执行批量操作；部分失败只报数量，不打断其余会议。 */
+    fun runBatch(action: BatchAction, tag: String = "") {
+        val ids = selection.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch(io) {
+            val failures = try {
+                repository.batch(ids, action, tag).count { !it.ok }
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                ids.size
+            }
+            _lastBatchFailures.value = failures
+            selection = emptySet()
             refreshNow()
         }
     }
@@ -128,6 +280,9 @@ class LibraryViewModel(
             unreadableCount = all.count { it.unreadable },
             query = query,
             archivedOnly = archivedOnly,
+            selection = selection,
+            hits = hits,
+            expandedTerms = expandedTerms,
         )
     }
 

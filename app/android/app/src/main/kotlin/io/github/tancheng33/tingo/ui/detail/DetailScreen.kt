@@ -32,6 +32,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -81,6 +88,8 @@ fun DetailScreen(
     onCancelMinutes: () -> Unit = {},
     /** "还没配模型服务"时按钮跳设置页 */
     onOpenSettings: () -> Unit = {},
+    onRename: (String) -> Unit = {},
+    onSetTags: (List<String>) -> Unit = {},
     onExport: () -> Unit = {},
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
@@ -106,6 +115,9 @@ fun DetailScreen(
             val detail = state.detail
             val tabs = if (showMinutesTab) 2 else 1
             var tab by remember { mutableIntStateOf(initialTab.coerceIn(0, tabs - 1)) }
+            var renameOpen by remember { mutableStateOf(false) }
+            var tagsOpen by remember { mutableStateOf(false) }
+            var menuOpen by remember { mutableStateOf(false) }
             Column(modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -135,6 +147,55 @@ fun DetailScreen(
                             contentDescription = stringResource(R.string.detail_export),
                         )
                     }
+                    // 改名与标签收进一个溢出菜单：标题行已经有两个分享入口，再塞两个图标太挤
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.detail_more_actions),
+                            )
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.detail_rename), color = TingoTheme.colors.text) },
+                                onClick = {
+                                    menuOpen = false
+                                    renameOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.detail_tags), color = TingoTheme.colors.text) },
+                                onClick = {
+                                    menuOpen = false
+                                    tagsOpen = true
+                                },
+                            )
+                        }
+                    }
+                }
+                if (renameOpen) {
+                    TextInputDialog(
+                        title = stringResource(R.string.detail_rename),
+                        initial = detail?.summary?.title.orEmpty(),
+                        hint = stringResource(R.string.detail_rename_hint),
+                        onDismiss = { renameOpen = false },
+                        onConfirm = { title ->
+                            renameOpen = false
+                            onRename(title)
+                        },
+                    )
+                }
+                if (tagsOpen) {
+                    TextInputDialog(
+                        title = stringResource(R.string.detail_tags),
+                        initial = detail?.summary?.tags.orEmpty().joinToString(","),
+                        hint = stringResource(R.string.detail_tags_hint),
+                        onDismiss = { tagsOpen = false },
+                        onConfirm = { text ->
+                            tagsOpen = false
+                            onSetTags(text.split(",", "，").map { it.trim() }.filter { it.isNotEmpty() })
+                        },
+                    )
                 }
                 if (playback.available) {
                     PlaybackBar(playback = playback, onTogglePlay = onTogglePlay)
@@ -417,3 +478,50 @@ internal fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.INTERNAL -> stringResource(R.string.error_internal)
 }
 
+/** 一个带初始值的输入对话框：改名与标签共用。 */
+@Composable
+private fun TextInputDialog(
+    title: String,
+    initial: String,
+    hint: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.card,
+        title = { Text(title, color = colors.text) },
+        text = {
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.seg, TingoDimens.controlShape)
+                    .padding(12.dp)
+                    .semantics { contentDescription = title },
+                decorationBox = { inner ->
+                    Box {
+                        if (text.isEmpty()) {
+                            Text(hint, style = MaterialTheme.typography.bodyMedium, color = colors.faint)
+                        }
+                        inner()
+                    }
+                },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim()) }) {
+                Text(stringResource(R.string.action_save), color = colors.blue)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
+        },
+    )
+}

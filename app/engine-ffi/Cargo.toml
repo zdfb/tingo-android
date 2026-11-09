@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # 边界层只依赖可移植核心：桌面专属能力（axum、sherpa-onnx、子进程）不进 Android。
 tingo-engine = { path = "../engine", default-features = false }
+serde_json = "1"
 thiserror = "2.0"
 uniffi = { version = "0.32", features = ["cli"] }
 

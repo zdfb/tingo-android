@@ -141,4 +141,24 @@
     <string name="action_save">Save</string>
     <string name="err_llm_rejected">The model service rejected the request: %1$s</string>
     <string name="settings_llm_saved">Saved</string>
+    <string name="library_selected_count">%1$d selected</string>
+    <string name="library_select_all">Select all</string>
+    <string name="library_batch_tag">Add tag</string>
+    <string name="library_batch_tag_title">Tag selected meetings</string>
+    <string name="library_batch_delete_audio">Delete audio</string>
+    <string name="library_batch_partial">%1$d could not be processed; the rest finished</string>
+    <string name="library_search_expanded">Also searching: %1$s</string>
+    <string name="library_hit_in_minutes">Found in minutes</string>
+    <string name="library_trash_title">Recently deleted</string>
+    <string name="library_trash_empty">Trash is empty</string>
+    <string name="library_trash_restore">Restore</string>
+    <string name="library_trash_purge">Delete permanently</string>
+    <string name="detail_rename">Rename</string>
+    <string name="detail_rename_hint">Leave empty to use the minutes title or folder name</string>
+    <string name="detail_tags">Tags</string>
+    <string name="detail_tags_hint">Comma separated, e.g. product,retro</string>
+    <string name="detail_more_actions">More actions</string>
+    <string name="settings_storage">Storage</string>
+    <string name="settings_storage_summary">%1$d meetings, %2$s total; audio %3$s, reclaimable leftovers %4$s</string>
+    <string name="settings_storage_purge">Empty trash</string>
 </resources>

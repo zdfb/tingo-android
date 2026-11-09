@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.data.LibraryBackup
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.settings.AppSettings
+import io.github.tancheng33.tingo.engine.StorageStats
 import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.models.ModelStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -42,6 +43,8 @@ data class SettingsUiState(
     val asr: ModelGroup = ModelGroup(),
     /** 纪要用的模型服务配置；默认全空 */
     val llmConfig: LlmConfig = LlmConfig(),
+    /** 会议库存储统计；null 表示还没算出来 */
+    val storage: StorageStats? = null,
     /** 删除失败时给出原因，而不是静默什么都不发生 */
     val deleteFailed: Boolean = false,
     /** 备份/恢复是否在跑，跑了什么结果 */
@@ -61,6 +64,10 @@ class SettingsViewModel(
     private val catalog: ModelCatalog,
     /** 模型服务配置的读写入口；测试里用内存实现 */
     private val settings: AppSettings,
+    /** 会议库存储统计的来源；测试里用假实现 */
+    private val storageStats: suspend () -> StorageStats = {
+        StorageStats(count = 0u, totalBytes = 0uL, audioBytes = 0uL, leftoverBytes = 0uL, largest = emptyList())
+    },
     /** 会议库根目录：备份从这里打包，恢复往这里写 */
     private val meetingsRoot: java.io.File,
     /** 内置模型的解包进度；null 表示没有在解包 */
@@ -139,7 +146,8 @@ class SettingsViewModel(
         // 只刷新"模型占用"这几个字段：整块重建会把解包进度、备份结果一起抹掉，
         // 出现"刚显示进度条又消失""备份结果闪一下没了"
         val next = try {
-            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm)
+            val stats = runCatching { storageStats() }.getOrNull()
+            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm, storage = stats)
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading
             _state.value.copy(loading = false)
