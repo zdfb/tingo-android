@@ -158,6 +158,8 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun purgeTrash(id: String): Nothing = fail()
 
+    override fun cleanupLeftovers(): Nothing = fail()
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,

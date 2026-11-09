@@ -20,8 +20,6 @@ enum class BatchAction(val wire: String) {
     DELETE("delete"),
     ;
 
-    /** 加/减标签要带标签名，其它动作不需要 */
-    val needsTag: Boolean get() = this == TAG_ADD || this == TAG_REMOVE
 }
 
 /**
@@ -76,6 +74,9 @@ class MeetingRepository(
     suspend fun listTrash(): List<TrashItem> = withContext(io) { engine.listTrash() }
 
     suspend fun purgeTrash(id: String): ULong = withContext(io) { engine.purgeTrash(id) }
+
+    /** 清理残留文件（合成后遗留的音轨、part 与 tmp）；返回释放的字节数。 */
+    suspend fun cleanupLeftovers(): ULong = withContext(io) { engine.cleanupLeftovers() }
 }
 
 internal fun MeetingSummary.toCard(): MeetingCard = MeetingCard(

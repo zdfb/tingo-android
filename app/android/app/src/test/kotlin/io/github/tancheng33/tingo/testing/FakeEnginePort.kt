@@ -134,6 +134,11 @@ class FakeEnginePort(
         return 1uL
     }
 
+    override fun cleanupLeftovers(): ULong {
+        cleaned += 1
+        return 1uL
+    }
+
     /** 改名的调用记录 */
     val renamed = mutableListOf<Pair<String, String>>()
 
@@ -152,4 +157,7 @@ class FakeEnginePort(
     val trashed = mutableListOf<String>()
     val restored = mutableListOf<String>()
     val purged = mutableListOf<String>()
+
+    /** 残留清理的调用次数 */
+    var cleaned = 0
 }

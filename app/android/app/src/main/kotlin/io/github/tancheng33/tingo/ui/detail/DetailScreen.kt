@@ -90,12 +90,16 @@ fun DetailScreen(
     onOpenSettings: () -> Unit = {},
     onRename: (String) -> Unit = {},
     onSetTags: (List<String>) -> Unit = {},
+    /** 从搜索命中进来时，打开就跳到这句话 */
+    initialSeekMs: Long? = null,
     onExport: () -> Unit = {},
     /** 导出归档 zip（录音 + transcript.json + 纪要） */
     onExportBundle: (() -> Unit)? = null,
     exportEnabled: Boolean = false,
     playback: PlaybackState = PlaybackState(),
     onTogglePlay: () -> Unit = {},
+    /** 跳到指定毫秒并开始播放（搜索命中跳转用） */
+    onPlayFrom: (Long) -> Unit = {},
 ) {
     when {
         state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -115,6 +119,10 @@ fun DetailScreen(
             val detail = state.detail
             val tabs = if (showMinutesTab) 2 else 1
             var tab by remember { mutableIntStateOf(initialTab.coerceIn(0, tabs - 1)) }
+            // 只跳一次：用户随后自己拖动进度条不该被"初始位置"拽回去
+            androidx.compose.runtime.LaunchedEffect(initialSeekMs) {
+                if (initialSeekMs != null) onPlayFrom(initialSeekMs)
+            }
             var renameOpen by remember { mutableStateOf(false) }
             var tagsOpen by remember { mutableStateOf(false) }
             var menuOpen by remember { mutableStateOf(false) }

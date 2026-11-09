@@ -11,6 +11,7 @@ import io.github.tancheng33.tingo.testing.summary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -145,5 +146,65 @@ class LibraryManageTest {
         advanceUntilIdle()
 
         assertEquals(listOf("a", "b"), vm.trash.value.map { it.id })
+    }
+
+    @Test
+    fun searchFailureDoesNotLeaveStaleHits() = runTest(dispatcher) {
+        val engine = object : io.github.tancheng33.tingo.engine.TingoEnginePort by FakeEnginePort(
+            onScan = { listOf(summary("a")) },
+            onSearch = { q ->
+                if (q == "好的") {
+                    SearchResults("好的", emptyList(), listOf(SearchHit("a", "周会", "", false, "命中", 1uL, "s")))
+                } else {
+                    throw io.github.tancheng33.tingo.engine.TingoFailure(io.github.tancheng33.tingo.engine.FailureKind.INTERNAL, "boom")
+                }
+            },
+        ) {}
+
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+        vm.onQueryChange("好的")
+        advanceTimeBy(300)
+        advanceUntilIdle()
+        assertEquals(1, (vm.state.value as LibraryUiState.Content).hits.size)
+
+        // 换了个搜不动的词：不能还显示上一次的命中，否则界面会以为这些结果属于新词
+        vm.onQueryChange("坏的")
+        advanceTimeBy(300)
+        advanceUntilIdle()
+        assertTrue((vm.state.value as LibraryUiState.Content).hits.isEmpty())
+    }
+
+    @Test
+    fun batchFailuresAreResetBetweenRuns() = runTest(dispatcher) {
+        val engine = FakeEnginePort(
+            onScan = { listOf(summary("a"), summary("b")) },
+            onBatch = { ids, _, _ -> ids.map { BatchOutcome(it, ok = false, error = "boom") } },
+        )
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+
+        vm.toggleSelection("a")
+        vm.runBatch(BatchAction.ARCHIVE)
+        advanceUntilIdle()
+        assertEquals(1, vm.lastBatchFailures.value)
+
+        vm.toggleSelection("a")
+        vm.runBatch(BatchAction.ARCHIVE)
+        advanceUntilIdle()
+        // 第二批还是失败一次，但要确认计数是"这一批"的，不是累加
+        assertEquals(1, vm.lastBatchFailures.value)
+    }
+
+    @Test
+    fun cleanupLeftoversGoesToEngine() = runTest(dispatcher) {
+        val engine = FakeEnginePort(onScan = { listOf(summary("a")) })
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        advanceUntilIdle()
+
+        vm.cleanupLeftovers()
+        advanceUntilIdle()
+
+        assertEquals(1, engine.cleaned)
     }
 }

@@ -161,4 +161,9 @@
     <string name="settings_storage">Storage</string>
     <string name="settings_storage_summary">%1$d meetings, %2$s total; audio %3$s, reclaimable leftovers %4$s</string>
     <string name="settings_storage_purge">Empty trash</string>
+    <string name="library_batch_untag">Remove tag</string>
+    <string name="library_batch_untag_title">Which tag to remove</string>
+    <string name="library_trash_entry">Recently deleted</string>
+    <string name="settings_storage_cleanup">Clean up leftovers</string>
+    <string name="library_trash_empty_all">Empty trash</string>
 </resources>

@@ -224,8 +224,15 @@ pub struct TrashItem {
 }
 
 
-/// 回收站目录名。以点开头，引擎的 `list` 会当作非会议目录跳过。
+/// 回收站目录名。
+///
+/// 引擎判定"是不是会议目录"看的是内容（有没有纪要/录音/转写），不是名字，
+/// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
+/// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
+
+/// 批量操作的动作白名单，与桌面 `/api/meetings/batch` 一致。
+const BATCH_ACTIONS: [&str; 6] = ["archive", "unarchive", "tag_add", "tag_remove", "delete_audio", "delete"];
 
 /// 批量操作里单个会议的执行体。返回可展示的错误信息。
 fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), EngineError> {
@@ -256,7 +263,15 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
             Ok(())
         }
         "delete" => {
-            std::fs::remove_dir_all(&dir).map_err(|e| io_error(e, "batch"))
+            // 与单条删除同一语义：先进回收站，用户能反悔
+            let trash = root.join(TRASH_DIR).join(id);
+            if trash.exists() {
+                return Err(EngineError::InvalidInput {
+                    detail: format!("回收站里已有同名会议：{id}"),
+                });
+            }
+            std::fs::create_dir_all(root.join(TRASH_DIR)).map_err(|e| io_error(e, "batch"))?;
+            std::fs::rename(&dir, &trash).map_err(|e| io_error(e, "batch"))
         }
         other => Err(EngineError::InvalidInput {
             detail: format!("不认识的批量操作：{other}"),
@@ -335,7 +350,7 @@ fn parse_storage(value: &serde_json::Value) -> StorageStats {
         })
         .collect();
     StorageStats {
-        count: num("count") as u32,
+        count: num("count").min(u32::MAX as u64) as u32,
         total_bytes: num("meetings_bytes"),
         audio_bytes: num("audio_bytes"),
         leftover_bytes: num("leftover_bytes"),
@@ -432,12 +447,19 @@ impl TingoEngine {
     pub fn batch(&self, ids: Vec<String>, action: String, tag: String) -> Result<Vec<BatchOutcome>, EngineError> {
         let root = self.paths.meetings_root.clone();
         guard("batch", move || {
+            // 动作名先整体校验：拼错了要一眼看出来，而不是伪装成"每场会议都坏了"
+            if !BATCH_ACTIONS.contains(&action.as_str()) {
+                return Err(EngineError::InvalidInput {
+                    detail: format!("不认识的批量操作：{action}"),
+                });
+            }
             let mut out = Vec::with_capacity(ids.len());
             for id in ids {
                 let result = apply_batch(&root, &id, &action, &tag);
                 out.push(match result {
                     Ok(()) => BatchOutcome { id, ok: true, error: String::new() },
-                    Err(e) => BatchOutcome { id, ok: false, error: format!("{e:?}") },
+                    // 只报类别，不把 Rust 的 Debug 文本漏给宿主
+                    Err(e) => BatchOutcome { id, ok: false, error: e.to_string() },
                 });
             }
             Ok(out)
@@ -523,14 +545,45 @@ impl TingoEngine {
         })
     }
 
+    /// 清理残留文件（已合成录音后遗留的 system.wav / mic.wav、*.part、*.tmp），返回释放的字节数。
+    ///
+    /// 与回收站是两件事：这里的文件还在正常会议目录里，只是没人再用了。
+    pub fn cleanup_leftovers(&self) -> Result<u64, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("cleanup_leftovers", move || {
+            let mut freed = 0u64;
+            let mut failed = false;
+            for summary in meetings::list(&root) {
+                let dir = root.join(&summary.id);
+                for file in meetings::leftover_files(&dir) {
+                    let bytes = meetings::size_of(&file);
+                    match std::fs::remove_file(&file) {
+                        Ok(()) => freed += bytes,
+                        // 单个文件删不掉（被占用）不算整体失败，但要如实说明有没清掉的
+                        Err(_) => failed = true,
+                    }
+                }
+            }
+            if failed && freed == 0 {
+                return Err(EngineError::Malformed {
+                    detail: "残留文件都没能删除（可能正被占用）".to_string(),
+                });
+            }
+            Ok(freed)
+        })
+    }
+
     /// 彻底清除回收站里的一场会议；`id` 为空表示清空整个回收站。
     pub fn purge_trash(&self, id: String) -> Result<u64, EngineError> {
         let trash = self.paths.meetings_root.join(TRASH_DIR);
         guard("purge_trash", move || {
             if id.is_empty() {
                 let freed = meetings::size_of(&trash);
-                let _ = std::fs::remove_dir_all(&trash);
-                return Ok(freed);
+                match std::fs::remove_dir_all(&trash) {
+                    Ok(()) => return Ok(freed),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+                    Err(e) => return Err(io_error(e, "purge_trash")),
+                }
             }
             validate_id(&id)?;
             let dir = trash.join(&id);
@@ -1004,7 +1057,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_title_falls_back_to_nothing_so_list_uses_folder_name() {
+    fn empty_title_falls_back_to_minutes_heading_then_folder() {
         let root = temp_root("rename-empty");
         let dir = meeting(&root, "2026-10-28_1430_复盘");
         let engine = TingoEngine::new(root.display().to_string());
@@ -1168,6 +1221,64 @@ mod tests {
         assert_eq!(stats.audio_bytes, 3072);
         assert_eq!(stats.leftover_bytes, 1024);
         assert_eq!(stats.largest.len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_delete_goes_to_trash_not_oblivion() {
+        let root = temp_root("batch-delete-trash");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let outcomes = engine.batch(vec!["2026-10-28_1430_复盘".to_string()], "delete".to_string(), String::new()).unwrap();
+        assert!(outcomes[0].ok);
+        assert!(engine.scan_library().unwrap().is_empty());
+        // 关键：还能恢复，批量删除不等于彻底删除
+        assert_eq!(engine.list_trash().unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unknown_batch_action_is_rejected_as_a_whole() {
+        let root = temp_root("batch-unknown");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        // 拼错动作名要整体报错，而不是伪装成"每场会议都失败了"
+        let result = engine.batch(vec!["2026-10-28_1430_复盘".to_string()], "archiv".to_string(), String::new());
+        assert!(matches!(result, Err(EngineError::InvalidInput { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn trash_never_shows_up_in_library() {
+        let root = temp_root("trash-hidden");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_to_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+
+        // 回收站里那场会议自己带纪要和转写，但它是 `.trash/<id>` 下的子目录，
+        // 不会成为库根下的一级目录，所以扫描时必须看不到
+        assert!(engine.scan_library().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_leftovers_frees_only_junk() {
+        let root = temp_root("cleanup");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 2048]).unwrap();
+        std::fs::write(dir.join("mic.wav"), vec![0u8; 512]).unwrap();
+        std::fs::write(dir.join("system.part"), vec![0u8; 128]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let freed = engine.cleanup_leftovers().unwrap();
+
+        assert_eq!(freed, 640);
+        assert!(dir.join("录音.wav").is_file(), "正式录音不能被清掉");
+        assert!(!dir.join("mic.wav").exists());
+        assert!(!dir.join("system.part").exists());
+        assert_eq!(engine.storage_stats().unwrap().leftover_bytes, 0);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

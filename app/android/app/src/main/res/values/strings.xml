@@ -161,4 +161,9 @@
     <string name="settings_storage">存储空间</string>
     <string name="settings_storage_summary">共 %1$d 场，占用 %2$s；其中音频 %3$s，可清理的残留 %4$s</string>
     <string name="settings_storage_purge">清空回收站</string>
+    <string name="library_batch_untag">移除标签</string>
+    <string name="library_batch_untag_title">要移除哪个标签</string>
+    <string name="library_trash_entry">最近删除</string>
+    <string name="settings_storage_cleanup">清理残留文件</string>
+    <string name="library_trash_empty_all">清空回收站</string>
 </resources>

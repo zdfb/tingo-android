@@ -340,6 +340,7 @@ fun TingoRoot(
                             onShowMeetings = libraryViewModel::showMeetings,
                             onRestore = libraryViewModel::restoreFromTrash,
                             onPurge = libraryViewModel::purgeFromTrash,
+                            onEmptyTrash = { libraryViewModel.purgeAllFromTrash() },
                         ),
                         trash = trashItems,
                         trashVisible = trashVisible,
@@ -361,6 +362,7 @@ fun TingoRoot(
                         onOpenSettings = {
                             runCatching { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } }
                         },
+                        onChanged = libraryViewModel::refresh,
                     )
                             } ?: EmptyDetailHint()
                         }
@@ -372,13 +374,22 @@ fun TingoRoot(
 
             composable("$DETAIL_ROUTE/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
+                val seek = pendingSeekMs
                 DetailRoute(
                     container,
                     id,
                     wide = false,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        // 用户在详情页改了名/标签，返回列表时要看到新值
+                        libraryViewModel.refresh()
+                        navController.popBackStack()
+                    },
                     onOpenSettings = { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } },
+                    seekMs = seek,
+                    onChanged = libraryViewModel::refresh,
                 )
+                // 跳一次就够：返回后再进来不该又跳回同一句
+                androidx.compose.runtime.LaunchedEffect(seek) { pendingSeekMs = null }
             }
 
             composable(TopDestination.SETTINGS.route) {
@@ -429,9 +440,9 @@ fun TingoRoot(
                     models = models,
                     onDeleteAsrModels = settingsViewModel::deleteAsr,
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
-                    onPurgeTrash = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
+                    onCleanupLeftovers = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
                         {
-                            runCatching { container.engine.purgeTrash("") }
+                            runCatching { container.engine.cleanupLeftovers() }
                             settingsViewModel.refresh()
                         }
                     } else {
@@ -502,6 +513,10 @@ private fun DetailRoute(
     wide: Boolean,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    /** 从搜索命中进来时要跳到这一句 */
+    seekMs: Long? = null,
+    /** 改名/标签等写操作后通知调用方刷新列表 */
+    onChanged: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -630,8 +645,16 @@ private fun DetailRoute(
             onGenerateMinutes = minutesViewModel::start,
             onCancelMinutes = minutesViewModel::cancel,
             onOpenSettings = onOpenSettings,
-            onRename = viewModel::rename,
-            onSetTags = viewModel::setTags,
+            initialSeekMs = seekMs,
+            onPlayFrom = viewModel::playFrom,
+            onRename = { title ->
+                viewModel.rename(title)
+                onChanged()
+            },
+            onSetTags = { tags ->
+                viewModel.setTags(tags)
+                onChanged()
+            },
             onExportBundle = {
                 pendingBundleTitle.value = meetingTitle
                 bundleLauncher.launch(

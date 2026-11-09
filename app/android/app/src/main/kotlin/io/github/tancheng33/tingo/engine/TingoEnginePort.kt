@@ -77,6 +77,9 @@ interface TingoEnginePort {
     /** 彻底清除；`id` 为空表示清空回收站。 */
     fun purgeTrash(id: String): ULong
 
+    /** 清理残留文件（合成后遗留的音轨、part 与 tmp 文件），返回释放的字节数。 */
+    fun cleanupLeftovers(): ULong
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -124,6 +127,8 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
     override fun listTrash(): List<TrashItem> = mapEngineCall { engine.listTrash() }
 
     override fun purgeTrash(id: String): ULong = mapEngineCall { engine.purgeTrash(id) }
+
+    override fun cleanupLeftovers(): ULong = mapEngineCall { engine.cleanupLeftovers() }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

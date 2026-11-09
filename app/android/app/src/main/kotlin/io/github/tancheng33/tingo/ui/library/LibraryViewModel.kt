@@ -9,8 +9,11 @@ import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.SearchHit
 import io.github.tancheng33.tingo.engine.TrashItem
 import io.github.tancheng33.tingo.engine.TingoFailure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,6 +82,7 @@ class LibraryViewModel(
     private val _trashVisible = MutableStateFlow(false)
     val trashVisible: StateFlow<Boolean> = _trashVisible.asStateFlow()
     private var selection: Set<String> = emptySet()
+    private var searchJob: Job? = null
     private var hits: List<SearchHit> = emptyList()
     private var expandedTerms: List<String> = emptyList()
 
@@ -115,17 +119,26 @@ class LibraryViewModel(
         query = text
         lastSnapshot?.let { _state.value = render(it) }
         val needle = text.trim()
+        searchJob?.cancel()
         if (needle.isEmpty()) {
             hits = emptyList()
             expandedTerms = emptyList()
             lastSnapshot?.let { _state.value = render(it) }
             return
         }
-        viewModelScope.launch(io) {
+        // 每敲一个字就全库检索一次太贵（纪要 + 转写都要读盘）：等 250 ms 没有新输入再搜
+        searchJob = viewModelScope.launch(io) {
+            delay(SEARCH_DEBOUNCE_MS)
             val result = try {
                 repository.search(needle)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                // 失败不能留着上一次的命中：界面会以为这些结果属于新搜索词
+                hits = emptyList()
+                expandedTerms = emptyList()
+                lastSnapshot?.let { _state.value = render(it) }
                 return@launch
             }
             // 搜索期间用户可能又改了词：只认最后一次
@@ -176,6 +189,30 @@ class LibraryViewModel(
         viewModelScope.launch(io) {
             try {
                 repository.restoreFromTrash(id)
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshTrash()
+        }
+    }
+
+    /** 清理残留文件（合成后遗留的音轨、*.part）：与回收站无关。 */
+    fun cleanupLeftovers() {
+        viewModelScope.launch(io) {
+            try {
+                repository.cleanupLeftovers()
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+            }
+            refreshNow()
+        }
+    }
+
+    /** 清空回收站（彻底删除，不可恢复）。 */
+    fun purgeAllFromTrash() {
+        viewModelScope.launch(io) {
+            try {
+                repository.purgeTrash("")
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
             }
@@ -249,6 +286,8 @@ class LibraryViewModel(
     fun runBatch(action: BatchAction, tag: String = "") {
         val ids = selection.toList()
         if (ids.isEmpty()) return
+        // 上一批的失败数不能带进来：用户看到的是这一批的结果
+        _lastBatchFailures.value = 0
         viewModelScope.launch(io) {
             val failures = try {
                 repository.batch(ids, action, tag).count { !it.ok }
@@ -292,5 +331,10 @@ class LibraryViewModel(
         return card.title.contains(needle, ignoreCase = true) ||
             card.oneLiner.contains(needle, ignoreCase = true) ||
             card.tags.any { it.contains(needle, ignoreCase = true) }
+    }
+
+    private companion object {
+        /** 搜索去抖：够快看不出延迟，又不会每敲一个字就读一遍全库 */
+        const val SEARCH_DEBOUNCE_MS = 250L
     }
 }

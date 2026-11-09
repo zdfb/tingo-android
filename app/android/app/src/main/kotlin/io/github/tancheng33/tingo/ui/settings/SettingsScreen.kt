@@ -57,8 +57,8 @@ fun SettingsScreen(
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
-    /** 清空回收站；null 表示当前没有可清理的内容 */
-    onPurgeTrash: (() -> Unit)? = null,
+    /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
+    onCleanupLeftovers: (() -> Unit)? = null,
     libraryBusy: Boolean = false,
     libraryResult: LibraryOpResult? = null,
     onBackupLibrary: () -> Unit = {},
@@ -104,7 +104,7 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         models.storage?.let { stats ->
-            StorageSection(stats = stats, onPurgeTrash = onPurgeTrash)
+            StorageSection(stats = stats, onCleanupLeftovers = onCleanupLeftovers)
             HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
         }
 
@@ -372,7 +372,10 @@ private fun SettingsField(
 
 /** 会议库占用：总量、音频、可清理的残留，以及占空间最大的几场。 */
 @Composable
-private fun StorageSection(stats: io.github.tancheng33.tingo.engine.StorageStats, onPurgeTrash: (() -> Unit)?) {
+private fun StorageSection(
+    stats: io.github.tancheng33.tingo.engine.StorageStats,
+    onCleanupLeftovers: (() -> Unit)?,
+) {
     val colors = TingoTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -404,10 +407,10 @@ private fun StorageSection(stats: io.github.tancheng33.tingo.engine.StorageStats
                 Text(mb(usage.bytes), style = MaterialTheme.typography.bodySmall, color = colors.muted)
             }
         }
-        if (onPurgeTrash != null) {
+        if (onCleanupLeftovers != null) {
             PillButton(
-                label = stringResource(R.string.settings_storage_purge),
-                onClick = onPurgeTrash,
+                label = stringResource(R.string.settings_storage_cleanup),
+                onClick = onCleanupLeftovers,
                 kind = PillKind.Soft,
             )
         }

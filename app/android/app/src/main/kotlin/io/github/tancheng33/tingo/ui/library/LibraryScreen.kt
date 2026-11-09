@@ -85,6 +85,8 @@ class LibraryManageActions(
     val onShowMeetings: () -> Unit = {},
     val onRestore: (String) -> Unit = {},
     val onPurge: (String) -> Unit = {},
+    /** 清空整个回收站 */
+    val onEmptyTrash: () -> Unit = {},
 )
 
 /**
@@ -129,6 +131,7 @@ fun LibraryScreen(
             onRestore = manage.onRestore,
             onPurge = manage.onPurge,
             onBack = manage.onShowMeetings,
+            onEmpty = manage.onEmptyTrash,
             modifier = modifier,
         )
         return
@@ -161,6 +164,7 @@ fun LibraryScreen(
                 onQueryChange = onQueryChange,
                 archivedOnly = state.archivedOnly,
                 onArchivedOnlyChange = onArchivedOnlyChange,
+                onShowTrash = manage.onShowTrash,
                 countLabel = if (state.items.size == state.totalCount) {
                     stringResource(R.string.library_count, state.totalCount)
                 } else {
@@ -221,6 +225,7 @@ private fun LibraryHeader(
     archivedOnly: Boolean,
     onArchivedOnlyChange: (Boolean) -> Unit,
     countLabel: String,
+    onShowTrash: () -> Unit,
 ) {
     val colors = TingoTheme.colors
     val searchLabel = stringResource(R.string.library_search_hint)
@@ -241,6 +246,19 @@ private fun LibraryHeader(
                 modifier = Modifier.weight(1f),
             )
             Text(text = countLabel, style = MaterialTheme.typography.labelMedium, color = colors.faint)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight), verticalAlignment = Alignment.CenterVertically) {
+            PillFilter(
+                label = stringResource(R.string.library_filter_archived),
+                selected = archivedOnly,
+                onClick = { onArchivedOnlyChange(!archivedOnly) },
+            )
+            // 回收站入口：删除是可恢复的动作，就必须有个地方能把会议找回来
+            PillButton(
+                label = stringResource(R.string.library_trash_entry),
+                onClick = onShowTrash,
+                kind = PillKind.Ghost,
+            )
         }
 
         Row(
@@ -280,13 +298,6 @@ private fun LibraryHeader(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight)) {
-            PillFilter(
-                label = stringResource(R.string.library_filter_archived),
-                selected = archivedOnly,
-                onClick = { onArchivedOnlyChange(!archivedOnly) },
-            )
-        }
     }
 }
 
@@ -503,14 +514,18 @@ private fun BatchBar(
     onBatch: (BatchAction, String) -> Unit,
 ) {
     val colors = TingoTheme.colors
-    var tagDialog by remember { mutableStateOf<String?>(null) }
+    // 加标签与移除标签用的是同一个输入框，靠这个记住当前要执行哪个动作
+    var tagDialog by remember { mutableStateOf<BatchAction?>(null) }
     if (tagDialog != null) {
         TagInputDialog(
-            title = stringResource(R.string.library_batch_tag_title),
+            title = stringResource(
+                if (tagDialog == BatchAction.TAG_REMOVE) R.string.library_batch_untag_title else R.string.library_batch_tag_title,
+            ),
             onDismiss = { tagDialog = null },
             onConfirm = { tag ->
+                val action = tagDialog
                 tagDialog = null
-                onBatch(BatchAction.TAG_ADD, tag)
+                if (action != null) onBatch(action, tag)
             },
         )
     }
@@ -531,12 +546,27 @@ private fun BatchBar(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(stringResource(R.string.library_archive), { onBatch(BatchAction.ARCHIVE, "") }, kind = PillKind.Soft)
-            PillButton(stringResource(R.string.library_batch_tag), { tagDialog = "" }, kind = PillKind.Soft)
+            PillButton(
+                stringResource(R.string.library_unarchive),
+                { onBatch(BatchAction.UNARCHIVE, "") },
+                kind = PillKind.Soft,
+            )
+            PillButton(
+                stringResource(R.string.library_batch_tag),
+                { tagDialog = BatchAction.TAG_ADD },
+                kind = PillKind.Soft,
+            )
+            PillButton(
+                stringResource(R.string.library_batch_untag),
+                { tagDialog = BatchAction.TAG_REMOVE },
+                kind = PillKind.Soft,
+            )
             PillButton(
                 stringResource(R.string.library_batch_delete_audio),
                 { onBatch(BatchAction.DELETE_AUDIO, "") },
                 kind = PillKind.Soft,
             )
+            // 删除进回收站，可恢复；界面在动作前不来第二遍确认，因为回收站本身就是后悔药
             PillButton(stringResource(R.string.library_delete), { onBatch(BatchAction.DELETE, "") }, kind = PillKind.Primary)
         }
         if (failures > 0) {
@@ -599,6 +629,7 @@ private fun TrashView(
     onRestore: (String) -> Unit,
     onPurge: (String) -> Unit,
     onBack: () -> Unit,
+    onEmpty: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = TingoTheme.colors
@@ -614,6 +645,11 @@ private fun TrashView(
                 color = colors.text,
             )
             TextButton(onClick = onBack) { Text(stringResource(R.string.action_back), color = colors.blue) }
+            if (items.isNotEmpty()) {
+                TextButton(onClick = onEmpty) {
+                    Text(stringResource(R.string.library_trash_empty_all), color = colors.red)
+                }
+            }
         }
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

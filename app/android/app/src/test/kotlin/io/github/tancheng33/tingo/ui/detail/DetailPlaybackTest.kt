@@ -113,6 +113,7 @@ class DetailPlaybackTest {
         override fun restoreFromTrash(id: String) = Unit
         override fun listTrash(): List<io.github.tancheng33.tingo.engine.TrashItem> = emptyList()
         override fun purgeTrash(id: String): ULong = 0uL
+        override fun cleanupLeftovers(): ULong = 0uL
     }
 
     private fun viewModel(dir: File, player: FakePlayer) = DetailViewModel(
