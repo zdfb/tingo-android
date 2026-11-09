@@ -427,6 +427,8 @@ fun TingoRoot(
                     onStop = recordViewModel::stop,
                     onDiscard = recordViewModel::discard,
                     onOpenMeeting = { id ->
+                        // 用户已经进到那场会议了，自动结束的提示不必再挂着
+                        recordViewModel.consumeAutoStopNotice()
                         if (wide) {
                             selectedMeetingId = id
                             navController.navigate(TopDestination.MEETINGS.route) { launchSingleTop = true }

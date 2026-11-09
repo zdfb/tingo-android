@@ -76,7 +76,7 @@ data class SettingsUiState(
     /** 上一次保存热词失败了（界面据此提示，而不是照样说"已保存"） */
     val hotwordsFailed: Boolean = false,
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
-    val autoStopSilenceMin: Int = 10,
+    val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
     val models: ModelListState? = null,
     /** 删除失败时给出原因，而不是静默什么都不发生 */

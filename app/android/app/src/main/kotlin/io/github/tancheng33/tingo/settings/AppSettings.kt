@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo.settings
 
+import io.github.tancheng33.tingo.recording.SilenceWatcher
+
 import android.content.Context
 
 /** 界面语言。取值直接存成 BCP-47 tag，方便将来加语言。 */
@@ -69,7 +71,7 @@ class AppSettings(private val store: KeyValueStore) {
      * 连续多少分钟没人说话就自动结束录音；0 表示不自动结束（与桌面 `[record] auto_stop_silence_min` 一致）。
      */
     var autoStopSilenceMin: Int
-        get() = store.getString(KEY_AUTO_STOP)?.toIntOrNull() ?: DEFAULT_SILENCE_MIN
+        get() = store.getString(KEY_AUTO_STOP)?.toIntOrNull() ?: SilenceWatcher.DEFAULT_MINUTES
         set(value) = store.putString(KEY_AUTO_STOP, value.coerceIn(0, MAX_SILENCE_MIN).toString())
 
     /**
@@ -85,7 +87,6 @@ class AppSettings(private val store: KeyValueStore) {
 
     private companion object {
         const val KEY_AUTO_STOP = "auto_stop_silence_min"
-        const val DEFAULT_SILENCE_MIN = 10
         const val MAX_SILENCE_MIN = 60
         const val KEY_ONBOARDED = "onboarded"
         const val KEY_LANGUAGE = "ui_language"

@@ -277,23 +277,23 @@ class RecordViewModel(
         session.finish(clock())
         currentDir = null
         _state.value = RecordUiState.Finished(dir.name, duration)
-        // 自动结束：先把静音的尾巴截掉，再混音（否则混出来的还是整段长度）
-        if (keepMs != null) trimTail(dir, keepMs)
-        mergeInBackground(dir)
+        // 自动结束：先截掉静音的尾巴，再混音。两件事必须在同一个协程里按顺序做，
+        // 否则混音可能读到"正在被截短"的文件，混出来的长度就说不准了
+        mergeInBackground(dir, keepMs)
     }
 
-    /** 截掉最后没声音的那一段（只影响自动结束的录音）。 */
-    private fun trimTail(dir: File, keepMs: Long) {
+    /**
+     * 后台把原始音轨合成 `录音.wav`；失败不打扰用户，转写时还有一次机会。
+     *
+     * @param keepMs 自动结束时只保留到这一刻：先截两路原始音轨，再混音
+     */
+    private fun mergeInBackground(dir: File, keepMs: Long? = null) {
         viewModelScope.launch(io) {
-            listOf(MIC_TRACK, SYSTEM_TRACK).forEach { name ->
-                runCatching { WavTrim.trimTo(File(dir, name), keepMs) }
+            if (keepMs != null) {
+                listOf(MIC_TRACK, SYSTEM_TRACK).forEach { name ->
+                    runCatching { WavTrim.trimTo(File(dir, name), keepMs) }
+                }
             }
-        }
-    }
-
-    /** 后台把原始音轨合成 `录音.wav`；失败不打扰用户，转写时还有一次机会。 */
-    private fun mergeInBackground(dir: File) {
-        viewModelScope.launch(io) {
             runCatching { RecordingTracks.ensureMixed(dir) }
         }
     }
@@ -376,7 +376,8 @@ class RecordViewModel(
             while (isActive) {
                 val s = _state.value
                 if (s is RecordUiState.Recording) {
-                    val level = capture.level()
+                    // 两路取大的：只有对方说话（自己不吭声）时也不能算静音
+                    val level = maxOf(capture.level(), runCatching { systemAudio?.peakLevel() ?: 0f }.getOrDefault(0f))
                     val elapsed = session.elapsedMs(clock())
                     _state.value = RecordUiState.Recording(elapsed, level)
                     checkSystemAudioSilence()

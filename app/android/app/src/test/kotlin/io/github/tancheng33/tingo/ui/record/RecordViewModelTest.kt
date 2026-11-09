@@ -242,6 +242,8 @@ class RecordViewModelTest {
             scope = { backgroundScope },
         )
         vm.start()
+        // 真的写 65 秒的音频进去：只有头没有数据的 wav 会让截断变成空操作，断言就成了摆设
+        capture.emit(ByteArray(16_000 * 2 * 65) { 0 })
         // 先"说" 5 秒，然后一直安静
         now = 5_000
         advanceTimeBy(500)
@@ -258,7 +260,11 @@ class RecordViewModelTest {
         val dir = File(root, (vm.state.value as RecordUiState.Finished).meetingId)
         val mic = File(dir, "mic.wav")
         val format = io.github.tancheng33.tingo.transcription.WavReader.format(mic)
-        assertTrue("录音不该还是整段长度：${format.durationMs}", format.durationMs < 40_000)
+        // 只留到最后有声（5 秒）之后 30 秒 → 35 秒；整段是 65 秒
+        assertTrue("尾巴没截干净：${format.durationMs}", format.durationMs in 34_000..36_000)
+        // 混出来的 录音.wav 也必须是截过的长度（截断与混音的先后顺序曾经是错的）
+        val merged = io.github.tancheng33.tingo.transcription.WavReader.format(File(dir, "录音.wav"))
+        assertTrue("录出来的 录音.wav 还是整段长度：${merged.durationMs}", merged.durationMs in 34_000..36_000)
         vm.consumeAutoStopNotice()
         assertNull(vm.autoStoppedAfter.value)
     }

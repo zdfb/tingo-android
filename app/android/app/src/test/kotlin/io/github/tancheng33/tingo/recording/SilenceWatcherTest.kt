@@ -32,6 +32,20 @@ class SilenceWatcherTest {
     }
 
     @Test
+    fun ordinarySpeechCountsAsVoiceEvenWhenQuiet() {
+        // 正常说话在峰值刻度上大约 0.1：门限若照搬桌面的 0.4（那是另一种刻度），
+        // 这种音量会被当成静音，正在开的会被掐断
+        val watcher = SilenceWatcher(silenceMinutes = 1)
+
+        val stops = (0..120).mapNotNull { second ->
+            watcher.observe(0.1f, elapsedMs = second * 1_000L)
+        }
+
+        assertTrue("正常说话被当成了静音", stops.isEmpty())
+        assertEquals(120_000L, watcher.lastVoiceMs)
+    }
+
+    @Test
     fun stopsAfterTheConfiguredSilence() {
         val watcher = SilenceWatcher(silenceMinutes = 5)
         var stop: SilenceWatcher.AutoStop? = null
@@ -62,10 +76,10 @@ class SilenceWatcherTest {
     fun quietNoiseFloorDoesNotCountAsSpeech() {
         val watcher = SilenceWatcher(silenceMinutes = 1)
 
-        // 麦克风底噪 0.1 不该被当成有人说话：最后有声的时刻应该一直是 0，
-        // 于是"安静 1 分钟"就从录音开始算起
+        // 会议室底噪（空调、风扇）在峰值刻度上低于 0.05，不该被当成有人说话：
+        // 最后有声的时刻应该一直是 0，于是"安静 1 分钟"就从录音开始算起
         val stops = (0..120).mapNotNull { second ->
-            watcher.observe(0.1f, elapsedMs = second * 1_000L)
+            watcher.observe(0.01f, elapsedMs = second * 1_000L)
         }
 
         assertEquals("底噪被当成了说话", 0L, watcher.lastVoiceMs)
