@@ -8,6 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +46,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // targetSdk 35+ 已经是强制边到边：这里只需要把系统栏避让做对（见 setContent 里的 safeDrawing）
 
         setContent {
             // calculateWindowSizeClass 是 @Composable，必须在组合内计算
@@ -50,6 +54,13 @@ class MainActivity : ComponentActivity() {
             val wide = calculateWindowSizeClass(this@MainActivity).widthSizeClass == WindowWidthSizeClass.Expanded
             TingoTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    // 系统栏/刘海/手势条的避让在这里统一处理一次：
+                    // 各页面不再各自算 padding，双栏与单栏也不会出现两种结果
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing),
+                    ) {
                     if (!AbiCheck.isSupported()) {
                         UnsupportedDevice()
                     } else {
@@ -64,6 +75,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                         )
+                    }
                     }
                 }
             }
