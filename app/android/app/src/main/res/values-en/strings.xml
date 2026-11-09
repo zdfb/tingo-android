@@ -70,7 +70,7 @@
     <string name="transcribe_running">Transcribing on this device; you can leave this page…</string>
     <string name="action_cancel">Cancel</string>
     <string name="minutes_generate">Generate minutes</string>
-    <string name="minutes_generating">Generating minutes on this device; a short meeting usually takes a few tens of seconds…</string>
+    <string name="minutes_generating">Generating minutes…</string>
     <string name="library_more">More actions</string>
     <string name="library_archive">Archive</string>
     <string name="library_unarchive">Unarchive</string>
@@ -110,7 +110,6 @@
     <string name="settings_models">On-device models</string>
     <string name="settings_models_desc">Models ship inside the app and are unpacked on first launch, then everything runs offline; deleting one re-unpacks it from the app next time</string>
     <string name="settings_models_asr">Speech recognition models (VAD / ASR / punctuation / speaker)</string>
-    <string name="settings_models_llm">Minutes language model (quantised Qwen3-0.6B)</string>
     <string name="settings_models_ready">Ready, using %1$d MB</string>
     <string name="settings_models_empty">Not downloaded</string>
     <string name="settings_models_partial">Download incomplete, %1$d MB used</string>
@@ -126,7 +125,6 @@
     <string name="settings_library_restored">Restored %1$d, skipped %2$d (already present), rejected %3$d unsafe files</string>
     <string name="settings_library_failed">Backup/restore failed; check the file</string>
     <string name="record_notification_denied">Notifications are off: recording still runs, but no progress is shown in the status bar</string>
-    <string name="minutes_downloading">Downloading language model…</string>
     <string name="err_low_storage">Not enough storage (500 MB needed): free some space and try again</string>
     <string name="settings_models_installing">Unpacking the models bundled in the app…</string>
     <string name="err_llm_unreachable">Cannot reach the model service: %1$s</string>
@@ -139,8 +137,8 @@
     <string name="settings_llm_api_key">API key</string>
     <string name="settings_llm_model">Model</string>
     <string name="settings_llm_model_hint">e.g. deepseek-chat</string>
-    <string name="settings_llm_protocol">Protocol</string>
-    <string name="settings_llm_saved">Saved</string>
     <string name="settings_llm_incomplete">Address, key and model are all required</string>
     <string name="action_save">Save</string>
+    <string name="err_llm_rejected">The model service rejected the request: %1$s</string>
+    <string name="settings_llm_saved">Saved</string>
 </resources>

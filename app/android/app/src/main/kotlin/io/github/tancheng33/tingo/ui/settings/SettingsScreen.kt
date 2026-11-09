@@ -1,11 +1,7 @@
 package io.github.tancheng33.tingo.ui.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,8 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -263,6 +257,7 @@ private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
     var model by remember(config) { mutableStateOf(config.model) }
     var protocol by remember(config) { mutableStateOf(config.protocol) }
+    var saved by remember(config) { mutableStateOf(false) }
     val draft = LlmConfig(baseUrl = baseUrl, apiKey = apiKey, model = model, protocol = protocol)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,7 +289,10 @@ private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LlmProtocol.entries.forEach { option ->
                 PillFilter(
-                    label = option.wire,
+                    label = when (option) {
+                        LlmProtocol.OPENAI -> "OpenAI 兼容"
+                        LlmProtocol.ANTHROPIC -> "Anthropic"
+                    },
                     selected = option == protocol,
                     onClick = { protocol = option },
                 )
@@ -303,9 +301,19 @@ private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             PillButton(
                 label = stringResource(R.string.action_save),
-                onClick = { onSave(draft) },
+                onClick = {
+                    onSave(draft)
+                    saved = true
+                },
                 enabled = draft.isConfigured,
             )
+            if (saved && draft == config) {
+                Text(
+                    stringResource(R.string.settings_llm_saved),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TingoTheme.colors.green,
+                )
+            }
             if (!draft.isConfigured) {
                 Text(
                     stringResource(R.string.settings_llm_incomplete),
@@ -350,7 +358,7 @@ private fun SettingsField(
                     inner()
                 }
             },
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

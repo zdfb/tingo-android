@@ -49,10 +49,29 @@ class RemoteMinutesGeneratorTest {
     }
 
     @Test
-    fun distinguishesUnreachableFromRejection() = runTest {
+    fun unreachableSurfacesAsTypedFailure() = runTest {
         val client = FakeClient { throw HttpJsonClient.Unreachable("timeout") }
         val error = runCatching { generator(client).generate("写纪要", 1200) }.exceptionOrNull()
-        assertTrue("应明确是连不上，实际：${error?.message}", error?.message?.contains("连不上") == true)
+        // 类型化：界面据此选文案，不用猜中文子串
+        assertTrue("连不上应抛 LlmUnavailable，实际：${error}", error is LlmUnavailable)
+    }
+
+    @Test
+    fun rejectionSurfacesAsTypedFailure() = runTest {
+        val client = FakeClient { throw HttpJsonClient.HttpFailure(429, """{"error":{"message":"rate limited"}}""") }
+        val error = runCatching { generator(client).generate("写纪要", 1200) }.exceptionOrNull()
+        assertTrue("服务拒绝应抛 LlmRejected，实际：$error", error is LlmRejected)
+        assertTrue("要带上服务端原话", error?.message?.contains("rate limited") == true)
+    }
+
+    @Test
+    fun truncatedOutputIsReportedAsSuch() = runTest {
+        // finish_reason=length：再重的试也只是再截一次，必须如实说"被截断"
+        val client = FakeClient {
+            """{"choices":[{"message":{"content":"# 标题"},"finish_reason":"length"}]}"""
+        }
+        val error = runCatching { generator(client).generate("写纪要", 1200) }.exceptionOrNull()
+        assertTrue("应提示被长度上限截断，实际：${error?.message}", error?.message?.contains("截断") == true)
     }
 
     @Test

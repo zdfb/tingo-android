@@ -70,7 +70,7 @@
     <string name="transcribe_running">正在本机转写，可以离开这一页…</string>
     <string name="action_cancel">取消</string>
     <string name="minutes_generate">生成会议纪要</string>
-    <string name="minutes_generating">正在本机生成纪要，一分钟左右的会议通常要等几十秒…</string>
+    <string name="minutes_generating">正在生成纪要…</string>
     <string name="library_more">更多操作</string>
     <string name="library_archive">归档</string>
     <string name="library_unarchive">取消归档</string>
@@ -110,7 +110,6 @@
     <string name="settings_models">端侧模型</string>
     <string name="settings_models_desc">模型随安装包内置，首次启动解包，之后全程离线；删掉后下次使用时从安装包重新解包</string>
     <string name="settings_models_asr">语音识别模型（切段 / 识别 / 标点 / 声纹）</string>
-    <string name="settings_models_llm">纪要语言模型（Qwen3-0.6B 量化）</string>
     <string name="settings_models_ready">已就绪，占用 %1$d MB</string>
     <string name="settings_models_empty">未下载</string>
     <string name="settings_models_partial">下载未完成，已占 %1$d MB</string>
@@ -126,7 +125,6 @@
     <string name="settings_library_restored">恢复 %1$d 场，跳过 %2$d 场（已存在），拒绝 %3$d 个不安全文件</string>
     <string name="settings_library_failed">备份/恢复失败，请确认文件可用</string>
     <string name="record_notification_denied">通知权限被关闭：录音仍在进行，但状态栏看不到进度</string>
-    <string name="minutes_downloading">正在下载语言模型…</string>
     <string name="err_low_storage">存储空间不足（至少需要 500 MB）：请清理后再录音</string>
     <string name="settings_models_installing">正在从安装包解包内置模型…</string>
     <string name="err_llm_unreachable">连不上模型服务：%1$s</string>
@@ -139,8 +137,8 @@
     <string name="settings_llm_api_key">API Key</string>
     <string name="settings_llm_model">模型名</string>
     <string name="settings_llm_model_hint">例如 deepseek-chat</string>
-    <string name="settings_llm_protocol">接口协议</string>
-    <string name="settings_llm_saved">已保存</string>
     <string name="settings_llm_incomplete">地址、密钥、模型名都要填</string>
     <string name="action_save">保存</string>
+    <string name="err_llm_rejected">模型服务拒绝了请求：%1$s</string>
+    <string name="settings_llm_saved">已保存</string>
 </resources>

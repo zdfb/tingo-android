@@ -62,6 +62,17 @@ object LlmRequests {
             }
     }
 
+    /** 响应是否因为长度上限被截断；两种协议的字段不同。 */
+    fun isTruncated(config: LlmConfig, raw: String): Boolean = runCatching {
+        when (config.protocol) {
+            LlmProtocol.OPENAI ->
+                JSONObject(raw).optJSONArray("choices")?.optJSONObject(0)?.optString("finish_reason") == "length"
+
+            LlmProtocol.ANTHROPIC ->
+                JSONObject(raw).optString("stop_reason") == "max_tokens"
+        }
+    }.getOrDefault(false)
+
     /**
      * 从错误正文里挖出能给用户看的一句话。
      *

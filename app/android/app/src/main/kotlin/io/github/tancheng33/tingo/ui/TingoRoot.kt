@@ -327,7 +327,15 @@ fun TingoRoot(
                         VerticalDivider()
                         Box(Modifier.weight(1.2f).fillMaxHeight()) {
                             selectedMeetingId?.let { id ->
-                                DetailRoute(container, id, wide = true, onBack = { selectedMeetingId = null })
+                                DetailRoute(
+                        container,
+                        id,
+                        wide = true,
+                        onBack = { selectedMeetingId = null },
+                        onOpenSettings = {
+                            runCatching { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } }
+                        },
+                    )
                             } ?: EmptyDetailHint()
                         }
                     }

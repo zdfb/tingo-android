@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.minutes.MinutesService
+import io.github.tancheng33.tingo.minutes.remote.LlmRejected
+import io.github.tancheng33.tingo.minutes.remote.LlmUnavailable
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -88,20 +90,20 @@ class MinutesViewModel(
                     e.problems.firstOrNull() ?: "structure",
                     draft = e.draft,
                 )
+            } catch (e: LlmUnavailable) {
+                _state.value = MinutesUiState.Failed(R.string.err_llm_unreachable, e.message.orEmpty())
+            } catch (e: LlmRejected) {
+                _state.value = MinutesUiState.Failed(R.string.err_llm_rejected, e.message.orEmpty())
             } catch (e: Exception) {
-                // 连不上服务与"服务拒绝"在文案上要分开：用户要做的事完全不同
-                val reason = if (e.message?.contains("连不上") == true) {
-                    R.string.err_llm_unreachable
-                } else {
-                    R.string.err_minutes_failed
-                }
-                _state.value = MinutesUiState.Failed(reason, e.message.orEmpty())
+                _state.value = MinutesUiState.Failed(R.string.err_minutes_failed, e.message.orEmpty())
             }
         }
     }
 
+    /** 取消：立刻回到"可再次点击"的状态，别让界面在取消后还挂着"生成中"。 */
     fun cancel() {
         job?.cancel()
         job = null
+        _state.value = MinutesUiState.Idle
     }
 }

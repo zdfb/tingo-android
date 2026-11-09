@@ -70,7 +70,8 @@ class RemoteMinutesInstrumentedTest {
         val serving = thread(isDaemon = true) {
             runCatching {
                 server.accept().use { socket ->
-                    val reader = socket.getInputStream().bufferedReader()
+                    val input = socket.getInputStream()
+                    val reader = input.bufferedReader()
                     val requestLine = reader.readLine().orEmpty()
                     receivedPath = requestLine.split(" ").getOrNull(1)
                     var line = reader.readLine()
@@ -80,10 +81,15 @@ class RemoteMinutesInstrumentedTest {
                         line = reader.readLine()
                     }
                     val length = headers["content-length"]?.toIntOrNull() ?: 0
-                    receivedBody = CharArray(length).let { buffer ->
-                        reader.read(buffer)
-                        String(buffer)
+                    // 按字节读：按字符读会把多字节 UTF-8 截断成乱码，断言恰好用 contains 才没暴露
+                    val bodyBytes = ByteArray(length)
+                    var received = 0
+                    while (received < length) {
+                        val n = input.read(bodyBytes, received, length - received)
+                        if (n <= 0) break
+                        received += n
                     }
+                    receivedBody = String(bodyBytes, 0, received, Charsets.UTF_8)
                     receivedAuth = headers["authorization"]
 
                     val payload = """{"choices":[{"message":{"role":"assistant","content":${quote(markdown)}}}]}"""
@@ -108,11 +114,13 @@ class RemoteMinutesInstrumentedTest {
         val generator = RemoteMinutesGenerator({ config }, UrlHttpJsonClient(connectTimeoutMs = 5_000, readTimeoutMs = 20_000))
         val service = MinutesService(generator)
 
-        val file = runBlocking {
-            service.generate(transcript(), dir)
+        val file = try {
+            runBlocking { service.generate(transcript(), dir) }
+        } finally {
+            // 断言失败也要收掉线程与端口，别让一条红用例把后面几条一起拖红
+            serving.join(5_000)
+            server.close()
         }
-        serving.join(5_000)
-        server.close()
 
         assertTrue("应当写出 纪要.md", file.isFile)
         assertTrue("纪要内容应来自服务端响应", file.readText().contains("## 一句话总结"))

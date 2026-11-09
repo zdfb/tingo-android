@@ -197,6 +197,8 @@ private fun MinutesPane(
         onGenerate = onGenerate,
         onCancel = onCancel,
         onOpenSettings = onOpenSettings,
+        // 有转写、还没有纪要时才给"生成"按钮：没转写点了也没用，已有纪要时再给一个等于噪音
+        hasTranscript = minutes == null && minutesFailure == null && generation !is MinutesUiState.NotConfigured,
     )
     when {
         minutesFailure != null -> Box(Modifier.fillMaxSize().padding(24.dp)) {
@@ -318,6 +320,7 @@ private fun MinutesGenerationBar(
     onGenerate: () -> Unit,
     onCancel: () -> Unit,
     onOpenSettings: () -> Unit,
+    hasTranscript: Boolean,
 ) {
     TaskStatusBar(
         status = state.toTaskStatus(),
@@ -325,6 +328,7 @@ private fun MinutesGenerationBar(
         // 未配置时按钮给的是"去设置"：重试同一个请求不会有结果
         onAction = if (state is MinutesUiState.NotConfigured) onOpenSettings else onGenerate,
         onCancel = onCancel,
+        idleAction = hasTranscript,
     )
 }
 

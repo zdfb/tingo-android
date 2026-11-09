@@ -126,7 +126,7 @@ class MinutesViewModelTest {
             meeting(),
             object : MinutesGenerator {
                 override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String =
-                    error("连不上模型服务，请检查网络或服务地址（timeout）")
+                    throw io.github.tancheng33.tingo.minutes.remote.LlmUnavailable("timeout")
             },
         )
 

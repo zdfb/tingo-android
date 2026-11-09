@@ -199,7 +199,7 @@ class SettingsViewModelTest {
     fun deletingAsrFreesItsBytesAndKeepsLlm() = runTest(dispatcher) {
         val store = store()
         val asr = catalog(1_000, 2_000)
-        val llm = catalog("gguf", 3_000)
+        val llm = catalog("extra", 3_000)
         asr.files.forEach { ready(store, it) }
         llm.files.forEach { ready(store, it) }
         val vm = viewModel(store, asr)

@@ -69,7 +69,7 @@ object ModelInstaller {
             target.parentFile?.mkdirs()
             val temp = File(target.parentFile, "${target.name}.installing")
             val copied = runCatching {
-                // 逐块拷贝并报进度：copyTo 没有回调，一个 397 MB 的 gguf 会让进度条整体卡住
+                // 逐块拷贝并报进度：copyTo 没有回调，一个 几百兆的模型文件 会让进度条整体卡住
                 bundle.open(file.fileName)?.use { input ->
                     temp.outputStream().use { out ->
                         val buffer = ByteArray(256 * 1024)
