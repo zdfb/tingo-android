@@ -162,6 +162,23 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
 
 
 /**
+ * 数一份文本会占多少 token。
+ *
+ * 提示词预算必须按 token 算而不是按字符算：中文大约 1 字 1 token，但标点、数字、
+ * 英文混排的比值并不固定。按字符猜上限，长会议会直接超出上下文。
+ */
+extern "C" JNIEXPORT jint JNICALL
+Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeCountTokens(
+        JNIEnv *env, jclass, jlong handle, jstring text) {
+    auto *session = reinterpret_cast<Session *>(handle);
+    if (session == nullptr) return 0;
+    const std::string utf8 = jstring_to_utf8(env, text);
+    const int count = -llama_tokenize(session->vocab, utf8.c_str(),
+                                      static_cast<int32_t>(utf8.size()), nullptr, 0, false, true);
+    return count > 0 ? count : 0;
+}
+
+/**
  * 纯测速：把 prompt 预填充与逐 token 解码分别计时，返回 "prefill_tokens,prefill_ms,decode_tokens,decode_ms"。
  *
  * 界面上的生成走 nativeGenerate；这个入口只给基准测试用，避免"用整体耗时反推 tok/s"

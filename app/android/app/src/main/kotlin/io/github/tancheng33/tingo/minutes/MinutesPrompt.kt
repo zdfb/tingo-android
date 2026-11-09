@@ -77,6 +77,49 @@ object MinutesPrompt {
         return TEMPLATE.replace("{transcript}", clipped)
     }
 
+    /**
+     * 把提示词裁到 [budgetTokens] 以内。
+     *
+     * 预算必须由真实分词器给出（见 [LlamaBridge.countTokens]），不能按字符折算：
+     * 中文大约 1 字 1 token，中英混排、时间戳和表格符号都会更高，按字符估会低估。
+     * 裁掉的是转写尾部（模板里转写在最后），并明确告诉模型"后面没了"——
+     * 否则它会当成全文都在，编出不存在的内容。
+     */
+    fun trimToTokenBudget(
+        prompt: String,
+        budgetTokens: Int,
+        countTokens: (String) -> Int,
+    ): String {
+        if (budgetTokens <= 0) return prompt
+        if (countTokens(prompt) <= budgetTokens) return prompt
+
+        val marker = "\n（转写过长，后续内容已省略）\n"
+        val splitAt = prompt.lastIndexOf(TRANSCRIPT_HEADER)
+        if (splitAt < 0) return prompt
+        val head = prompt.substring(0, splitAt + TRANSCRIPT_HEADER.length)
+        val lines = prompt.substring(splitAt + TRANSCRIPT_HEADER.length).trimEnd('\n').lines()
+
+        // 二分找"能装下的最长前缀"，每次都用真实分词器数，不做线性猜测
+        var low = 0
+        var high = lines.size
+        var best = -1
+        while (low <= high) {
+            val mid = (low + high) / 2
+            val candidate = head + lines.take(mid).joinToString("\n") + marker
+            if (countTokens(candidate) <= budgetTokens) {
+                best = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        val kept = if (best <= 0) emptyList() else lines.take(best)
+        return head + kept.joinToString("\n") + marker
+    }
+
+    /** 模板里转写块的标题，裁剪靠它定位。 */
+    private const val TRANSCRIPT_HEADER = "转写：\n"
+
     /** 校验模型输出：该有的章节要在，鱼骨图 JSON 要能解析。 */
     fun validate(markdown: String): List<String> {
         val problems = mutableListOf<String>()

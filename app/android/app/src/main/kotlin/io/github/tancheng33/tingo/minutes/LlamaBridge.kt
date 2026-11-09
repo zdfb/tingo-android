@@ -68,7 +68,18 @@ object LlamaBridge {
         val timeToFirstTokenMs: Long get() = prefillMs
     }
 
+    /**
+     * 这段文本占多少 token。
+     *
+     * 提示词预算按 token 算：按字符估会在长会议上直接超上下文（中文 1 字≈1 token，
+     * 但中英混排、时间戳、表格符号都会拉高），而超上下文的后果是生成失败而不是截断。
+     */
+    fun countTokens(handle: Long, text: String): Int =
+        if (handle == 0L || !isAvailable) 0 else nativeCountTokens(handle, text)
+
     private external fun nativeLoad(modelPath: String, nThreads: Int, nCtx: Int): Long
+
+    private external fun nativeCountTokens(handle: Long, text: String): Int
 
     private external fun nativeBench(handle: Long, prompt: String, maxTokens: Int): String
 
