@@ -47,6 +47,7 @@ class SystemAudioCapture(
     /** 开始把系统声音写进 [file]；失败抛异常，由调用方转成界面提示。 */
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun start(file: File) {
+        peak = 0f
         val config = AudioPlaybackCaptureConfiguration.Builder(projection)
             // 会议软件的对方声音一般走 MEDIA；GAME/UNKNOWN 一并收着，能多抓一点是一点
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -131,9 +132,11 @@ class SystemAudioCapture(
     /** 结束并回填 wav 头；返回写入的毫秒数。 */
     override fun stop(): Long {
         running = false
-        worker?.join(1_000)
-        worker = null
+        // 先把 AudioRecord 停掉：采集线程可能正阻塞在 read() 里，光设标志位它出不来，
+        // 而下面的 close() 一旦跑在它前面，就会"头长度小于实际数据"或者写入被吞
         runCatching { record?.stop() }
+        worker?.join(2_000)
+        worker = null
         runCatching { record?.release() }
         record = null
         val wav = writer

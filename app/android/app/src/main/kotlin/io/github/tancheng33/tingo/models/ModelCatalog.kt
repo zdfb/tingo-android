@@ -18,7 +18,10 @@ data class ModelFile(
 /**
  * 随 APK 打包的模型清单。
  *
- * 模型不进 APK（三百多兆），进 APK 的只有这份清单：谁、多大、从哪下、摘要是什么。
+ * 这份清单说明都有哪些文件、多大、从哪下、摘要是什么。
+ *
+ * 文件本身随 APK 内置（`assets/models/`），清单同时用于"解包后核对"与"兜底下载"两条路径：
+ * 内置包缺文件或用户删了模型且当前联网时，才会真的去下载。
  * 清单放在 assets 里，改模型不需要改代码。
  */
 class ModelCatalog(val files: List<ModelFile>) {

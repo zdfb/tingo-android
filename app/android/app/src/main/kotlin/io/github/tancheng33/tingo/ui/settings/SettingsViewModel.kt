@@ -130,11 +130,13 @@ class SettingsViewModel(
 
     /** 同步重算占用（调用方已经在 IO 线程上）。 */
     private suspend fun refreshNow() {
+        // 只刷新"模型占用"这几个字段：整块重建会把解包进度、备份结果一起抹掉，
+        // 出现"刚显示进度条又消失""备份结果闪一下没了"
         val next = try {
-            SettingsUiState(loading = false, asr = groupOf(catalog), llm = groupOf(llmCatalog))
+            _state.value.copy(loading = false, asr = groupOf(catalog), llm = groupOf(llmCatalog))
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading
-            SettingsUiState(loading = false)
+            _state.value.copy(loading = false)
         }
         _state.value = next
     }

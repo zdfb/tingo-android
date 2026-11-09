@@ -1,5 +1,9 @@
 package io.github.tancheng33.tingo.ui
 
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import io.github.tancheng33.tingo.ui.record.RecordUiState
 import java.io.File
 
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +31,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -132,6 +139,75 @@ fun TingoRoot(
         )
     }
 
+
+    // 录音状态机与它的守护副作用都放在外壳层：录音必须在用户切到别的页时照样进行，
+    // 通知栏计时继续走、通知栏"结束录音"继续有效。放到录音页的组合里，切走就全断了。
+    val recordContext = androidx.compose.ui.platform.LocalContext.current
+    val recordViewModel: RecordViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                RecordViewModel(
+                    capture = MicRecorder(),
+                    meetingsRoot = File(container.dataRoot, "meetings"),
+                    stopService = { RecordingService.stop(recordContext) },
+                )
+            }
+        },
+    )
+    val recordState by recordViewModel.state.collectAsStateWithLifecycle()
+    val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
+    var systemAudioEnabled by remember { mutableStateOf(false) }
+    var systemAudioDenied by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        RecordingKeepAlive.onServiceDestroyed = { recordViewModel.onInterrupted() }
+        RecordingKeepAlive.onStopRequested = { recordViewModel.stop() }
+        RecordingKeepAlive.onSystemAudioCapture = { capture ->
+            if (capture != null) recordViewModel.attachSystemAudio(capture) else recordViewModel.systemAudioFailed()
+        }
+        onDispose {
+            // 组合没了，但服务可能还在跑：这里不能把回调清成空动作，
+            // 否则通知栏"结束录音"变成点了没反应、迟到的投影也没人停
+            RecordingKeepAlive.onServiceDestroyed = {}
+            RecordingKeepAlive.onStopRequested = {}
+            RecordingKeepAlive.onSystemAudioCapture = { capture -> runCatching { capture?.stop() } }
+        }
+    }
+    // 每个 tick 只更新通知内容；服务本身只在"需不需要"变化时启停
+    LaunchedEffect(recordState) { RecordingKeepAlive.publish(recordState) }
+    val needsService = requiresForegroundService(recordState)
+    LaunchedEffect(needsService, systemAudioEnabled) {
+        if (needsService) {
+            RecordingService.start(recordContext, systemAudio = systemAudioEnabled)
+        } else {
+            RecordingService.stop(recordContext)
+            RecordingKeepAlive.publish(null)
+        }
+    }
+
+    // 录系统声音要先拿到屏幕录制授权（Android 10+）：授权结果交给服务去取投影
+    val projectionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            systemAudioDenied = false
+            recordViewModel.start()
+            RecordingService.start(recordContext, systemAudio = true, projection = data)
+        } else {
+            systemAudioDenied = true
+            recordViewModel.start()
+        }
+    }
+    val startRecording: () -> Unit = {
+        if (systemAudioEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val manager = recordContext.getSystemService(MediaProjectionManager::class.java)
+            projectionLauncher.launch(manager.createScreenCaptureIntent())
+        } else {
+            recordViewModel.start()
+        }
+    }
+
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             TopDestination.entries.forEach { destination ->
@@ -162,7 +238,19 @@ fun TingoRoot(
         ) {
             composable(TopDestination.RECORD.route) {
                 RecordRoute(
-                    container = container,
+                    state = recordState,
+                    systemAudioStatus = recordSystemAudioStatus,
+                    systemAudioEnabled = systemAudioEnabled,
+                    systemAudioDenied = systemAudioDenied,
+                    onSystemAudioChange = { enabled ->
+                        systemAudioEnabled = enabled
+                        if (!enabled) systemAudioDenied = false
+                    },
+                    onStart = startRecording,
+                    onPause = recordViewModel::pause,
+                    onResume = recordViewModel::resume,
+                    onStop = recordViewModel::stop,
+                    onDiscard = recordViewModel::discard,
                     onOpenMeeting = { id ->
                         if (wide) {
                             selectedMeetingId = id
@@ -287,94 +375,30 @@ private fun shareFile(context: android.content.Context, file: File) {
 }
 
 @Composable
-private fun RecordRoute(container: AppContainer, onOpenMeeting: (String) -> Unit) {
-    val viewModel: RecordViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                RecordViewModel(
-                    capture = MicRecorder(),
-                    meetingsRoot = File(container.dataRoot, "meetings"), // 会议库根目录固定为 dataRoot/meetings
-                )
-            }
-        },
-    )
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val serviceContext = androidx.compose.ui.platform.LocalContext.current
-    // 是否同时录会议软件的声音：开关、授权结果、以及实际抓到没有
-    val systemAudioStatus by viewModel.systemAudioStatus.collectAsStateWithLifecycle()
-    var systemAudioEnabled by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var systemAudioDenied by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
-
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        RecordingKeepAlive.onServiceDestroyed = { viewModel.onInterrupted() }
-        // 服务拿到投影（或确认拿不到）后，把采集器交给录音状态机
-        RecordingKeepAlive.onSystemAudioCapture = { capture ->
-            if (capture != null) viewModel.attachSystemAudio(capture)
-            else viewModel.systemAudioFailed()
-        }
-        // 通知栏的"结束录音"走正常收尾，文件会被保存（不能当成被系统中断）
-        RecordingKeepAlive.onStopRequested = { viewModel.stop() }
-        onDispose {
-            RecordingKeepAlive.onServiceDestroyed = {}
-            RecordingKeepAlive.onStopRequested = {}
-            RecordingKeepAlive.onSystemAudioCapture = {}
-        }
-    }
-    // 每个 tick 只更新通知，不重复拉起服务
-    androidx.compose.runtime.LaunchedEffect(state) {
-        RecordingKeepAlive.publish(state)
-    }
-    // 服务只在"需不需要"变化时启停：state 里带着每 200 ms 变一次的计时，不能当 key
-    val needsService = requiresForegroundService(state)
-    androidx.compose.runtime.LaunchedEffect(needsService, systemAudioEnabled) {
-        if (needsService) {
-            RecordingService.start(serviceContext, systemAudio = systemAudioEnabled)
-        } else {
-            RecordingService.stop(serviceContext)
-            RecordingKeepAlive.publish(null)
-        }
-    }
-
-    // 录系统声音要先拿到屏幕录制授权（Android 10+）
-    val projectionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val data = result.data
-        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
-            systemAudioDenied = false
-            viewModel.start()
-            // 投影必须在"已带 mediaProjection 类型的前台服务"里取，所以先起服务再让服务去要
-            RecordingService.start(serviceContext, systemAudio = true, projection = data)
-        } else {
-            // 用户拒绝：照常录麦克风，并明确告诉用户这次没有对方声音
-            systemAudioDenied = true
-            viewModel.start()
-        }
-    }
-
-    val startWithPermission: () -> Unit = androidx.compose.runtime.remember {
-        {
-            if (systemAudioEnabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                val manager = serviceContext.getSystemService(android.media.projection.MediaProjectionManager::class.java)
-                projectionLauncher.launch(manager.createScreenCaptureIntent())
-            } else {
-                viewModel.start()
-            }
-        }
-    }
-
+private fun RecordRoute(
+    onOpenMeeting: (String) -> Unit,
+    state: RecordUiState,
+    systemAudioStatus: RecordViewModel.SystemAudioStatus,
+    systemAudioEnabled: Boolean,
+    systemAudioDenied: Boolean,
+    onSystemAudioChange: (Boolean) -> Unit,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    onDiscard: () -> Unit,
+) {
     RecordScreen(
         state = state,
-        onStart = startWithPermission,
+        onStart = onStart,
         systemAudioEnabled = systemAudioEnabled,
-        onSystemAudioChange = { systemAudioEnabled = it },
+        onSystemAudioChange = onSystemAudioChange,
         systemAudioMissing = systemAudioStatus == RecordViewModel.SystemAudioStatus.MISSING,
         systemAudioDenied = systemAudioDenied,
-        onPause = viewModel::pause,
-        onResume = viewModel::resume,
-        onStop = viewModel::stop,
-        onDiscard = viewModel::discard,
+        onPause = onPause,
+        onResume = onResume,
+        onStop = onStop,
+        onDiscard = onDiscard,
         onOpenMeeting = onOpenMeeting,
     )
 }

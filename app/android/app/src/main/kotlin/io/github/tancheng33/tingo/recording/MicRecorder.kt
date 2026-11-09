@@ -34,6 +34,8 @@ class MicRecorder : AudioCapture {
 
     override fun start(file: File) {
         check(record == null) { "已经在录音" }
+        // 上一次的错误不能带到这一次：否则一次写盘失败之后，每次结束录音都报"中断"
+        failed = null
 
         val minBuffer = AudioRecord.getMinBufferSize(
             WavWriter.SAMPLE_RATE,

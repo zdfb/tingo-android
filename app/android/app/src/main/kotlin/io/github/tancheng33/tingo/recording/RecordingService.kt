@@ -261,6 +261,13 @@ object RecordingKeepAlive {
     /** 用户在通知栏点"结束录音"时回调；界面负责走正常的 stop 流程（保存文件）。 */
     var onStopRequested: () -> Unit = {}
 
-    /** 系统声音那一路准备好（或确认失败，参数为 null）时回调。 */
-    var onSystemAudioCapture: (SystemAudioCapture?) -> Unit = {}
+    /**
+     * 系统声音那一路准备好（或确认失败，参数为 null）时回调。
+     *
+     * 没有接收者时（界面已经销毁、或录音根本没开始）就地把投影停掉：
+     * 否则系统的"正在录屏"指示会一直亮着，而用户看不到任何正在录的东西。
+     */
+    var onSystemAudioCapture: (SystemAudioCapture?) -> Unit = { capture ->
+        runCatching { capture?.stop() }
+    }
 }

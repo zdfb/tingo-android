@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
+import io.github.tancheng33.tingo.recording.RecordingKeepAlive
 import io.github.tancheng33.tingo.recording.SystemAudioTrack
 import io.github.tancheng33.tingo.recording.TrackMerger
 import io.github.tancheng33.tingo.recording.WavWriter
@@ -45,6 +46,8 @@ class RecordViewModel(
     private val capture: AudioCapture,
     private val meetingsRoot: File,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** 收尾时把前台服务一起停掉；由界面注入（ViewModel 不该自己拿 Context） */
+    private val stopService: () -> Unit = {},
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
      * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
@@ -217,6 +220,24 @@ class RecordViewModel(
     }
 
     /** 不保存地放弃本次录音（删除空目录）。 */
+    /**
+     * 界面彻底销毁时收尾。
+     *
+     * 录音的采集器与写文件都在 ViewModel 里：它被清理时不关掉，麦克风与前台服务就成了孤儿，
+     * 用户既看不到界面也停不下来。切到别的页不会触发这一步（ViewModel 跟着 Activity 活），
+     * 但退出应用、或系统回收界面时会。
+     */
+    override fun onCleared() {
+        if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) {
+            runCatching { capture.stop() }
+            currentDir?.let { mergeInBackground(it) }
+            _state.value = RecordUiState.Idle
+            RecordingKeepAlive.publish(null)
+            runCatching { stopService() }
+        }
+        super.onCleared()
+    }
+
     fun discard() {
         ticker?.cancel()
         ticker = null
@@ -240,9 +261,13 @@ class RecordViewModel(
         val capture = systemAudio ?: return
         val elapsed = session.elapsedMs(clock())
         if (elapsed < SILENCE_CHECK_MS) return
-        if (_systemAudioStatus.value != SystemAudioStatus.ACTIVE) return
-        if (capture.peakLevel() > SILENCE_THRESHOLD) return
-        _systemAudioStatus.value = SystemAudioStatus.MISSING
+        val hasSound = capture.peakLevel() > SILENCE_THRESHOLD
+        when (_systemAudioStatus.value) {
+            // 会议刚开始可能前几秒没人说话：判错了还要能翻回来，否则一直显示"没抓到"
+            SystemAudioStatus.ACTIVE -> if (!hasSound) _systemAudioStatus.value = SystemAudioStatus.MISSING
+            SystemAudioStatus.MISSING -> if (hasSound) _systemAudioStatus.value = SystemAudioStatus.ACTIVE
+            else -> Unit
+        }
     }
 
     private fun startTicker() {

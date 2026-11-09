@@ -69,8 +69,21 @@ object ModelInstaller {
             target.parentFile?.mkdirs()
             val temp = File(target.parentFile, "${target.name}.installing")
             val copied = runCatching {
+                // 逐块拷贝并报进度：copyTo 没有回调，一个 397 MB 的 gguf 会让进度条整体卡住
                 bundle.open(file.fileName)?.use { input ->
-                    temp.outputStream().use { out -> input.copyTo(out, bufferSize = 256 * 1024) }
+                    temp.outputStream().use { out ->
+                        val buffer = ByteArray(256 * 1024)
+                        var written = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            out.write(buffer, 0, read)
+                            written += read
+                            val fraction = ((done + written).toFloat() / total).coerceIn(0f, 1f)
+                            onProgress(fraction)
+                        }
+                        written
+                    }
                 } ?: 0L
             }.getOrElse {
                 temp.delete()

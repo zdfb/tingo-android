@@ -138,7 +138,7 @@ val syncBundledModels by tasks.registering(Sync::class) {
 }
 
 /**
- * 打包内置模型前先确认模型真的在。
+ * 打包内置模型前先确认模型真的在（缺文件直接失败，不是警告）。
  *
  * 规格要求"模型随 APK 内置、端侧推理不需要网络"：如果 `models/` 空着还照样出包，
  * 交付出来的 APK 会在离线设备上装不上模型——这类问题不该等到装到手机上才发现。
@@ -152,11 +152,14 @@ val verifyBundledModels by tasks.registering {
             logger.lifecycle("跳过内置模型检查：-PtingoSkipBundledModels=true")
             return@doLast
         }
-        val expected = listOf(
-            "paraformer.int8.onnx", "tokens.txt", "am.mvn", "punct.int8.onnx",
-            "campplus.onnx", "silero_vad.onnx", "Qwen3-0.6B-Q4_K_M.gguf",
-        )
-        val missing = expected.filterNot { modelsDir.file(it).asFile.exists() }
+        // 文件名以 assets 里的清单为准，别在这里再抄一份（抄一份就会和清单漂移）
+        val expected = listOf("models.json", "llm.json").flatMap { manifest ->
+            val text = rootProject.file("app/src/main/assets/$manifest").readText()
+            Regex("\"file_?[Nn]ame\"\\s*:\\s*\"([^\"]+)\"").findAll(text).map { it.groupValues[1] }.toList()
+        }
+        check(expected.isNotEmpty()) { "assets 清单里没解析到文件名，检查 models.json/llm.json 格式" }
+        // 语言模型与语音模型同目录，文件名不重复
+        val missing = expected.distinct().filterNot { modelsDir.file(it).asFile.exists() }
         if (missing.isNotEmpty()) {
             throw GradleException(
                 "内置模型缺失：${missing.joinToString()}；先跑 ./scripts/fetch-models-offline.sh，" +
