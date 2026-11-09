@@ -175,6 +175,19 @@ class FakeEnginePort(
         return "/tmp/$id.srt"
     }
 
+    override fun hotwords(): List<String> = hotwordList
+
+    override fun setHotwords(words: List<String>): List<String> {
+        hotwordList = words.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        return hotwordList
+    }
+
+    override fun minutesGlossary(language: String): String =
+        if (hotwordList.isEmpty()) "" else "热词：${hotwordList.joinToString("、")}"
+
+    /** 热词：用例直接塞 */
+    var hotwordList: List<String> = emptyList()
+
     override fun exportExcalidraw(id: String): List<String> {
         exportedExcalidraw += id
         return listOf("/tmp/$id/鱼骨图.excalidraw")

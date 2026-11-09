@@ -185,4 +185,9 @@
     <string name="detail_export_docx">导出 Word</string>
     <string name="detail_export_excalidraw">导出 Excalidraw 鱼骨图</string>
     <string name="detail_export_pdf">导出 PDF</string>
+    <string name="settings_hotwords">热词（专有名词）</string>
+    <string name="settings_hotwords_hint">人名、项目代号、内部系统名。写纪要时会作为提示词的专有名词表，让模型把转写里的同音错字改成正确写法。一行一个，也可以用逗号分隔。</string>
+    <string name="settings_hotwords_placeholder">例如：星河计划、林舟、Kafka</string>
+    <string name="settings_llm_models_fetch">拉取模型列表</string>
+    <string name="settings_llm_models_loading">正在拉取…</string>
 </resources>

@@ -6,6 +6,8 @@ import io.github.tancheng33.tingo.data.LibraryBackup
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.engine.StorageStats
+import io.github.tancheng33.tingo.minutes.remote.LlmCatalog
+
 import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.models.ModelStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -14,6 +16,32 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/**
+ * 设置页需要引擎做、但不属于"模型文件/配置"的两件事：热词与拉取模型列表。
+ *
+ * 做成接口是为了让设置页能在 JVM 上测——真机上它们分别落到引擎配置和用户配置的服务上。
+ */
+interface HotwordsPort {
+    suspend fun load(): List<String>
+    suspend fun save(words: List<String>): List<String>
+    /** 向用户配置的服务要模型列表；失败要如实返回原因 */
+    suspend fun listModels(): List<String>
+
+    /** 没有引擎时（测试/未初始化）什么都不做 */
+    data object None : HotwordsPort {
+        override suspend fun load(): List<String> = emptyList()
+        override suspend fun save(words: List<String>): List<String> = words
+        override suspend fun listModels(): List<String> = emptyList()
+    }
+}
+
+/** 拉取模型列表的状态。 */
+sealed interface ModelListState {
+    data object Loading : ModelListState
+    data class Ready(val models: List<String>) : ModelListState
+    data class Failed(val reason: String) : ModelListState
+}
 
 /** 一组模型（识别用的四个文件）在磁盘上的情况。
  *
@@ -45,6 +73,10 @@ data class SettingsUiState(
     val llmConfig: LlmConfig = LlmConfig(),
     /** 会议库存储统计；null 表示还没算出来 */
     val storage: StorageStats? = null,
+    /** 热词（专有名词、人名、项目代号） */
+    val hotwords: List<String> = emptyList(),
+    /** 拉取模型列表的结果：null 表示没拉过 */
+    val models: ModelListState? = null,
     /** 删除失败时给出原因，而不是静默什么都不发生 */
     val deleteFailed: Boolean = false,
     /** 备份/恢复是否在跑，跑了什么结果 */
@@ -64,7 +96,8 @@ class SettingsViewModel(
     private val catalog: ModelCatalog,
     /** 模型服务配置的读写入口；测试里用内存实现 */
     private val settings: AppSettings,
-    /** 会议库存储统计的来源；测试里用假实现 */
+    /** 热词读写与拉取模型列表的能力；测试里用假实现 */
+    private val hotwordsPort: HotwordsPort = HotwordsPort.None,
     private val storageStats: suspend () -> StorageStats = {
         StorageStats(count = 0u, totalBytes = 0uL, audioBytes = 0uL, leftoverBytes = 0uL, largest = emptyList())
     },
@@ -91,6 +124,27 @@ class SettingsViewModel(
     fun refresh() {
         _state.value = _state.value.copy(loading = true, deleteFailed = false)
         viewModelScope.launch(io) { refreshNow() }
+    }
+
+    /** 保存热词；返回归一化后的词表（界面据此回填）。 */
+    fun saveHotwords(words: List<String>) {
+        viewModelScope.launch(io) {
+            val saved = runCatching { hotwordsPort.save(words) }.getOrElse { words }
+            _state.value = _state.value.copy(hotwords = saved)
+        }
+    }
+
+    /** 拉取用户配置服务的模型列表（OpenAI 兼容的 /models）。 */
+    fun fetchModels() {
+        _state.value = _state.value.copy(models = ModelListState.Loading)
+        viewModelScope.launch(io) {
+            val next = try {
+                ModelListState.Ready(hotwordsPort.listModels())
+            } catch (e: Exception) {
+                ModelListState.Failed(e.message ?: e::class.java.simpleName)
+            }
+            _state.value = _state.value.copy(models = next)
+        }
     }
 
     /** 删掉识别模型（四个文件一起，缺一个也用不了）。 */
@@ -147,7 +201,8 @@ class SettingsViewModel(
         // 出现"刚显示进度条又消失""备份结果闪一下没了"
         val next = try {
             val stats = runCatching { storageStats() }.getOrNull()
-            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm, storage = stats)
+            val hotwords = runCatching { hotwordsPort.load() }.getOrDefault(emptyList())
+            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm, storage = stats, hotwords = hotwords)
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading
             _state.value.copy(loading = false)

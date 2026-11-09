@@ -185,4 +185,9 @@
     <string name="detail_export_docx">Export Word</string>
     <string name="detail_export_excalidraw">Export Excalidraw diagram</string>
     <string name="detail_export_pdf">Export PDF</string>
+    <string name="settings_hotwords">Hotwords (proper nouns)</string>
+    <string name="settings_hotwords_hint">Names, project codes, internal systems. Included in the minutes prompt so homophones in the transcript get corrected. One per line, or comma separated.</string>
+    <string name="settings_hotwords_placeholder">e.g. Project Nova, Lin Zhou, Kafka</string>
+    <string name="settings_llm_models_fetch">Fetch model list</string>
+    <string name="settings_llm_models_loading">Fetching…</string>
 </resources>

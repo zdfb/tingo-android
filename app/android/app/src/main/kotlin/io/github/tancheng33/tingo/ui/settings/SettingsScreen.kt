@@ -1,5 +1,8 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +60,8 @@ fun SettingsScreen(
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
+    onFetchModels: () -> Unit = {},
+    onSaveHotwords: (List<String>) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
     libraryBusy: Boolean = false,
@@ -108,7 +113,16 @@ fun SettingsScreen(
             HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
         }
 
-        LlmServiceSection(config = models.llmConfig, onSave = onSaveLlmConfig)
+        LlmServiceSection(
+            config = models.llmConfig,
+            onSave = onSaveLlmConfig,
+            modelList = models.models,
+            onFetchModels = onFetchModels,
+        )
+
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+
+        HotwordsSection(words = models.hotwords, onSave = onSaveHotwords)
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
@@ -259,7 +273,12 @@ private const val MB = 1_000_000L
  * 避免别人站在旁边就能看全。
  */
 @Composable
-private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
+private fun LlmServiceSection(
+    config: LlmConfig,
+    onSave: (LlmConfig) -> Unit,
+    modelList: ModelListState?,
+    onFetchModels: () -> Unit,
+) {
     var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
     var model by remember(config) { mutableStateOf(config.model) }
@@ -292,6 +311,12 @@ private fun LlmServiceSection(config: LlmConfig, onSave: (LlmConfig) -> Unit) {
             value = model,
             placeholder = stringResource(R.string.settings_llm_model_hint),
             onValueChange = { model = it },
+        )
+        // 手抄模型名最容易错：能连上就把它有的模型列出来，点一下即填
+        ModelListPicker(
+            state = modelList,
+            onFetch = onFetchModels,
+            onPick = { model = it },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LlmProtocol.entries.forEach { option ->
@@ -419,3 +444,102 @@ private fun StorageSection(
 
 /** 字节转 MB：设置页只需要量级，不显示小数。 */
 private fun mb(bytes: ULong): String = "${bytes / 1_000_000u} MB"
+
+/** 模型列表：拉取中、失败（带原因）、成功（点一下填进模型名）。 */
+@Composable
+private fun ModelListPicker(state: ModelListState?, onFetch: () -> Unit, onPick: (String) -> Unit) {
+    val colors = TingoTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        PillButton(
+            label = stringResource(if (state is ModelListState.Loading) R.string.settings_llm_models_loading else R.string.settings_llm_models_fetch),
+            onClick = onFetch,
+            kind = PillKind.Ghost,
+            enabled = state !is ModelListState.Loading,
+        )
+        when (state) {
+            is ModelListState.Failed -> Text(
+                text = state.reason,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.red,
+            )
+            is ModelListState.Ready -> androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                state.models.take(20).forEach { name ->
+                    PillFilter(label = name, selected = false, onClick = { onPick(name) })
+                }
+            }
+            else -> Unit
+        }
+    }
+}
+
+/**
+ * 热词：专有名词、人名、项目代号。
+ *
+ * 一段文本、一行一个（也接受逗号分隔）——比"加一条删一条"的列表好填，
+ * 手机上粘贴一串词进来就能用。保存时由引擎归一化（去空白、去重、限数）。
+ */
+@Composable
+private fun HotwordsSection(words: List<String>, onSave: (List<String>) -> Unit) {
+    val colors = TingoTheme.colors
+    var text by remember(words) { mutableStateOf(words.joinToString("\n")) }
+    var saved by remember(words) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.settings_hotwords),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        Text(
+            stringResource(R.string.settings_hotwords_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.muted,
+        )
+        androidx.compose.foundation.text.BasicTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                saved = false
+            },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 80.dp)
+                .background(colors.seg, TingoDimens.controlShape)
+                .padding(12.dp)
+                .semantics { contentDescription = "hotwords" },
+            decorationBox = { inner ->
+                Box {
+                    if (text.isEmpty()) {
+                        Text(
+                            stringResource(R.string.settings_hotwords_placeholder),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.faint,
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(
+                label = stringResource(R.string.action_save),
+                onClick = {
+                    onSave(text.split("\n", ",", "，").map { it.trim() }.filter { it.isNotEmpty() })
+                    saved = true
+                },
+                kind = PillKind.Soft,
+            )
+            if (saved) {
+                Text(
+                    stringResource(R.string.settings_llm_saved),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.green,
+                )
+            }
+        }
+    }
+}

@@ -19,7 +19,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 9 | 鱼骨图 | `fishbone.rs` | 已有（解析 + 卡片） | — |
 | 10 | 说话人命名（手改） | `/api/meetings/{id}/speakers` | 已有（详情页说话人 chip 点开改名） | — |
 | 11 | AI 猜说话人名字 | `/api/meetings/{id}/speakers/guess` | 已有（提示词与解析复用引擎，调模型走用户配置） | — |
-| 12 | 人名/术语表（跨会议） | `terms.rs` | 引擎已能读出术语表；编辑入口待热词那一批 | 缺界面 |
+| 12 | 人名/术语表（跨会议） | `terms.rs`（从各场纪要的 terms 块汇总） | 引擎已能读（FFI `glossary`）；App 内只读展示待做 | 缺界面 |
 | 13 | 跨会议搜索（含识别错字模糊匹配） | `terms::search` + `/api/search` | 已接（引擎全文检索、命中片段、跳转时间点） | — |
 | 14 | 会议重命名 | `/api/meetings/{id}/meta` | 已有（详情页溢出菜单） | — |
 | 15 | 标签 | `/api/meetings/{id}/meta`（tags） | 已有（详情编辑、批量加/减） | — |
@@ -37,7 +37,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 27 | 检查更新（校验安装包） | `update.rs` | 无（走应用商店，不迁移自更新） | 不做自更新 |
 | 28 | Obsidian 导出 | `/api/meetings/{id}/obsidian` | 无 | 缺（可后置） |
 | 29 | Webhook 推送 | `/api/meetings/{id}/push` | 无 | 缺（可后置） |
-| 30 | 热词 | `asr.rs`（hotwords） | 无 | 缺 |
+| 30 | 热词 | `asr.rs`（hotwords）/ `summarize.rs`（glossary） | 已有：设置页编辑，提示词里注入专有名词段 | — |
 | 31 | 会议库位置可切换 | `/api/config`（storage_root） | 固定 | 缺 |
 | 32 | 服务商预设 + 拉模型列表 | `/api/llm/providers`、`/api/llm/models` | 无（要手填四项） | 缺 |
 | 33 | 界面语言 | `i18n.rs` | 已有（中/英） | — |
@@ -48,7 +48,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 1. ~~**会议管理 + 搜索**（#13–#19）~~ 已完成（`2026-11-09-parity-library-and-search`）
 2. ~~**说话人与术语**（#10–#12）~~ 已完成说话人部分；术语表编辑随热词一起做：手改名字、AI 猜名字、跨会议术语表
 3. **纪要历史 + 导出**（#7、#21–#24）：版本历史、Word/SRT/PDF/Excalidraw
-4. **配置补齐**（#30–#32）：热词、库位置、服务商预设与模型列表
+4. **配置补齐**（#30–#32）：热词已完成；剩库位置、服务商预设（模型列表拉取已完成）
 5. **入门与导入**（#25、#26）：导入音频、示例会议、引导
 
 不迁移：Apple Speech（macOS 专有）、桌面自更新（Android 走商店）。

@@ -17,6 +17,8 @@ interface MinutesGenerator {
  */
 class MinutesService(
     private val generator: MinutesGenerator,
+    /** 提示词里的"专有名词"段；由调用方从引擎取（与桌面同一份文案）。 */
+    private val glossary: () -> String = { "" },
     private val maxTokens: Int = 1_200,
 ) {
     /** @param draft 自检不通过时保留的草稿文件（可能为 null：连草稿都写不下去） */
@@ -43,7 +45,7 @@ class MinutesService(
     ): File {
         require(transcript.sentences.isNotEmpty()) { "没有转写内容，无法生成纪要" }
 
-        val prompt = MinutesPrompt.build(transcript)
+        val prompt = MinutesPrompt.build(transcript, glossary = glossary())
         var markdown = generator.generate(prompt, maxTokens, onToken)
         var problems = MinutesPrompt.validate(markdown)
 

@@ -323,7 +323,11 @@ fn glossary(hotwords: &[String]) -> String {
     glossary_in(hotwords, Lang::Zh)
 }
 
-fn glossary_in(hotwords: &[String], lang: Lang) -> String {
+/// 提示词里的"专有名词"那一段。
+///
+/// 桌面与 Android 都要在同一位置加同一段说明——两处各写一份必然漂移，
+/// 所以这段文案由引擎产出，宿主只负责拼进自己的提示词里。
+pub fn glossary_in(hotwords: &[String], lang: Lang) -> String {
     let words: Vec<&str> = hotwords
         .iter()
         .map(|w| w.trim())

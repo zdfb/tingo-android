@@ -51,6 +51,7 @@ object MinutesPrompt {
 4. 某一节没有内容时写"无"，不要删掉这一节（「原因分析」除外：只有会上明确分析了
    某个问题的原因时才写，否则整节省略）。
 5. 去掉寒暄和口头禅，语言简洁、书面化。
+{glossary}
 
 转写：
 {transcript}
@@ -65,7 +66,7 @@ object MinutesPrompt {
      *   所以给到 48k 字符（约两小时的会）；真遇到超长会议再截断，并明确告诉模型"后面没了"，
      *   否则它会当成全文都在、编出不存在的内容。
      */
-    fun build(transcript: Transcript, maxChars: Int = 48_000): String {
+    fun build(transcript: Transcript, maxChars: Int = 48_000, glossary: String = ""): String {
         val body = buildString {
             transcript.sentences.forEach { sentence ->
                 append('[').append(Transcript.mmss(sentence.startMs)).append("] ")
@@ -78,7 +79,10 @@ object MinutesPrompt {
         } else {
             body.take(maxChars) + "\n（转写过长，后续内容已省略）\n"
         }
-        return TEMPLATE.replace("{transcript}", clipped)
+        // 热词那一段由引擎产出（与桌面同一份文案），放进模板预留的位置
+        return TEMPLATE
+            .replace("{glossary}", glossary)
+            .replace("{transcript}", clipped)
     }
 
     /** 模板里转写块的标题，裁剪靠它定位。 */

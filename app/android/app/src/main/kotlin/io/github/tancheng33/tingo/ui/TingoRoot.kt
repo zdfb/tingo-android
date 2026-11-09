@@ -84,6 +84,7 @@ import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
+import io.github.tancheng33.tingo.minutes.remote.LlmCatalog
 import io.github.tancheng33.tingo.minutes.remote.LlmChat
 import io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator
 import io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient
@@ -414,6 +415,16 @@ fun TingoRoot(
                                 catalog = container.catalog,
                                 settings = container.settings,
                                 storageStats = { container.engine.storageStats() },
+                                // 热词存在引擎配置里；模型列表问用户配置的服务
+                                hotwordsPort = object : io.github.tancheng33.tingo.ui.settings.HotwordsPort {
+                                    override suspend fun load(): List<String> = container.engine.hotwords()
+
+                                    override suspend fun save(words: List<String>): List<String> =
+                                        container.engine.setHotwords(words)
+
+                                    override suspend fun listModels(): List<String> = LlmCatalog(UrlHttpJsonClient())
+                                        .list(container.settings.llm)
+                                },
                                 meetingsRoot = File(container.dataRoot, "meetings"),
                                 installProgress = container.installProgress,
                             )
@@ -453,6 +464,8 @@ fun TingoRoot(
                     models = models,
                     onDeleteAsrModels = settingsViewModel::deleteAsr,
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
+                    onFetchModels = settingsViewModel::fetchModels,
+                    onSaveHotwords = settingsViewModel::saveHotwords,
                     onCleanupLeftovers = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
                         {
                             runCatching { container.engine.cleanupLeftovers() }
@@ -657,10 +670,12 @@ private fun DetailRoute(
                 MinutesViewModel(
                     serviceFactory = {
                         MinutesService(
-                            RemoteMinutesGenerator(
+                            generator = RemoteMinutesGenerator(
                                 configProvider = { container.settings.llm },
                                 client = UrlHttpJsonClient(),
                             ),
+                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案
+                            glossary = { container.engine.minutesGlossary(uiLang) },
                         )
                     },
                     isConfigured = { container.settings.llm.isConfigured },

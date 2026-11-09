@@ -193,6 +193,12 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun exportExcalidraw(id: String): Nothing = fail()
 
+    override fun hotwords(): Nothing = fail()
+
+    override fun setHotwords(words: List<String>): Nothing = fail()
+
+    override fun minutesGlossary(language: String): String = ""
+
     override fun capabilities(): Capabilities =
         Capabilities(
             meetingStorage = false,

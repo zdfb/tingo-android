@@ -115,6 +115,15 @@ interface TingoEnginePort {
     /** 把纪要里的鱼骨图导出成 .excalidraw，返回写出的文件路径（可能有多个）。 */
     fun exportExcalidraw(id: String): List<String>
 
+    /** 当前热词（专有名词、人名、项目代号）。 */
+    fun hotwords(): List<String>
+
+    /** 保存热词；返回归一化后的结果（去空白、去重、限数）。 */
+    fun setHotwords(words: List<String>): List<String>
+
+    /** 提示词里"专有名词"那一段；没有热词时为空串。 */
+    fun minutesGlossary(language: String): String
+
     companion object {
         /** 六项能力都在的实现；原生库不可用时由界面层替换为降级实现。 */
         fun native(dataRoot: String): TingoEnginePort = NativeTingoEngine(TingoEngine(dataRoot))
@@ -197,6 +206,12 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun exportExcalidraw(id: String): List<String> =
         mapEngineCall { engine.exportExcalidraw(id) }
+
+    override fun hotwords(): List<String> = mapEngineCall { engine.hotwords() }
+
+    override fun setHotwords(words: List<String>): List<String> = mapEngineCall { engine.setHotwords(words) }
+
+    override fun minutesGlossary(language: String): String = engine.minutesGlossary(language)
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

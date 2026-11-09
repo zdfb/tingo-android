@@ -227,6 +227,23 @@ pub struct TrashItem {
 
 
 
+
+/// 热词归一化：去空白、去重、限数。空表是合法的（用户清空）。
+fn normalize_hotwords(words: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in words {
+        let word = word.trim().to_string();
+        if word.is_empty() || out.contains(&word) {
+            continue;
+        }
+        out.push(word);
+        if out.len() >= MAX_HOTWORDS {
+            break;
+        }
+    }
+    out
+}
+
 /// 列表用的版本摘要：只取前 200 字，避免把整篇纪要搬过 FFI 边界。
 fn version_info(v: &minutes_history::Version) -> MinutesVersionInfo {
     MinutesVersionInfo {
@@ -270,6 +287,12 @@ fn speaker_infos(tr: &engine_transcript::Transcript) -> Vec<SpeakerInfo> {
 /// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
+
+/// 配置文件名字（`<config>/config.toml`），与桌面 `config::default_path` 一致。
+const CONFIG_FILE: &str = "config.toml";
+
+/// 热词上限：设置页填再多，提示词也放不下；与桌面同一口径。
+const MAX_HOTWORDS: usize = 200;
 
 /// 批量操作的动作白名单，与桌面 `/api/meetings/batch` 一致。
 const BATCH_ACTIONS: [&str; 6] = ["archive", "unarchive", "tag_add", "tag_remove", "delete_audio", "delete"];
@@ -623,6 +646,33 @@ impl TingoEngine {
     }
 
 
+
+
+    /// 当前配置的热词（专有名词、人名、项目代号）。
+    pub fn hotwords(&self) -> Result<Vec<String>, EngineError> {
+        let path = self.paths.config_dir.join(CONFIG_FILE);
+        // 每次都读盘：设置页刚写完，缓存一份只会读到旧值
+        guard("hotwords", move || Ok(tingo_engine::config::load(&path).hotwords))
+    }
+
+    /// 保存热词：去空白、去重，最多 200 条（与桌面设置页口径一致）。
+    pub fn set_hotwords(&self, words: Vec<String>) -> Result<Vec<String>, EngineError> {
+        let path = self.paths.config_dir.join(CONFIG_FILE);
+        let words = normalize_hotwords(words);
+        guard("set_hotwords", move || {
+            let mut config = tingo_engine::config::load(&path);
+            config.hotwords = words.clone();
+            tingo_engine::config::save(&path, &config).map_err(|e| io_error(e, "set_hotwords"))?;
+            Ok(words)
+        })
+    }
+
+    /// 提示词里"专有名词"那一段（没有热词时为空串）。文案由引擎产出，两个平台共用。
+    pub fn minutes_glossary(&self, language: String) -> String {
+        let path = self.paths.config_dir.join(CONFIG_FILE);
+        let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+        tingo_engine::summarize::glossary_in(&tingo_engine::config::load(&path).hotwords, lang)
+    }
 
     /// 纪要的历史版本，按保存时间从新到旧。
     pub fn minutes_history(&self, id: String) -> Result<Vec<MinutesVersionInfo>, EngineError> {
@@ -1848,6 +1898,53 @@ mod tests {
 
         let result = engine.export_excalidraw("2026-11-07_1000_产品复盘".to_string());
         assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 热词 ----
+
+    #[test]
+    fn hotwords_round_trip_and_normalize() {
+        let root = temp_root("hotwords");
+        let engine = TingoEngine::new(root.display().to_string());
+        assert!(engine.hotwords().unwrap().is_empty());
+
+        let saved = engine
+            .set_hotwords(vec![" 星河 ".to_string(), "Kafka".to_string(), "星河".to_string(), String::new()])
+            .unwrap();
+
+        // 去空白、去重、丢空项；写进配置文件后要能读回来
+        assert_eq!(saved, vec!["星河".to_string(), "Kafka".to_string()]);
+        assert_eq!(engine.hotwords().unwrap(), saved);
+        assert!(std::fs::read_to_string(root.join("config").join("config.toml")).unwrap().contains("星河"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn glossary_snippet_mentions_every_hotword() {
+        let root = temp_root("hotwords-glossary");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine
+            .set_hotwords(vec!["星河".to_string(), "Kafka".to_string()])
+            .unwrap();
+
+        let zh = engine.minutes_glossary("zh".to_string());
+        let en = engine.minutes_glossary("en".to_string());
+
+        assert!(zh.contains("星河") && zh.contains("Kafka"), "实际：{zh}");
+        assert!(en.contains("星河") && en.contains("Kafka"), "实际：{en}");
+        // 中英两版是同一段说明的不同语言，不是"英文界面漏了这段"
+        assert_ne!(zh, en);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn empty_hotwords_produce_no_glossary_snippet() {
+        let root = temp_root("hotwords-empty");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        // 没填热词就不该往提示词里塞一段空说明
+        assert!(engine.minutes_glossary("zh".to_string()).is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

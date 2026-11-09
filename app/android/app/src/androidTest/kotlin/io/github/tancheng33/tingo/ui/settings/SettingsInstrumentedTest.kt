@@ -67,4 +67,21 @@ class SettingsInstrumentedTest {
         }
         throw AssertionError("等待状态超时，当前：${vm.state.value}")
     }
+
+    @Test
+    fun hotwordsSurviveARoundTripThroughTheEngineConfig() {
+        val root = File(context.filesDir, "hotwords-test").apply { deleteRecursively(); mkdirs() }
+        val engine = io.github.tancheng33.tingo.engine.TingoEnginePort.native(root.absolutePath)
+
+        val saved = engine.setHotwords(listOf(" 星河计划 ", "Kafka", "星河计划", ""))
+
+        assertEquals(listOf("星河计划", "Kafka"), saved)
+        assertEquals(saved, engine.hotwords())
+        // 提示词里的那段说明也要跟着热词走（与桌面同一份文案）
+        val glossary = engine.minutesGlossary("zh")
+        assertTrue("专有名词段里要有热词：$glossary", glossary.contains("星河计划"))
+        // 真的写到了磁盘上的配置文件，重启后还在
+        val reopened = io.github.tancheng33.tingo.engine.TingoEnginePort.native(root.absolutePath)
+        assertEquals(saved, reopened.hotwords())
+    }
 }
