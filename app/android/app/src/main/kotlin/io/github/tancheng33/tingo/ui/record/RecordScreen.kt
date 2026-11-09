@@ -88,6 +88,8 @@ fun RecordScreen(
     statusRows: List<HomeStatus> = emptyList(),
     /** 导入已有录音：桌面端是把文件拖进窗口，手机上是选文件 */
     onPickAudio: () -> Unit = {},
+    /** 上一场是"没人说话"自动结束的（分钟数）；null 表示不是自动结束 */
+    autoStoppedAfter: Int? = null,
     /** 导入进度 0..1；null 表示没有在导入 */
     importProgress: Float? = null,
     /** 这一次导入失败的原因（格式不支持 / 读不出来），null 表示没失败 */
@@ -150,6 +152,14 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    if (autoStoppedAfter != null) {
+                        // 自动停录要说明白：否则用户回来看见"没在录"会以为应用崩了
+                        Text(
+                            text = stringResource(R.string.record_auto_stopped, autoStoppedAfter),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TingoTheme.colors.muted,
+                        )
+                    }
                     ImportEntry(
                         progress = importProgress,
                         failure = importFailure,
@@ -236,6 +246,14 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    if (autoStoppedAfter != null) {
+                        // 自动停录要说明白：否则用户回来看见"没在录"会以为应用崩了
+                        Text(
+                            text = stringResource(R.string.record_auto_stopped, autoStoppedAfter),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TingoTheme.colors.muted,
+                        )
+                    }
                     ImportEntry(
                         progress = importProgress,
                         failure = importFailure,

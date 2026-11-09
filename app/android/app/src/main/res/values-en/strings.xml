@@ -231,4 +231,9 @@
     <string name="onboard_demo_installing">Installing…</string>
     <string name="onboard_demo_failed">Could not install the sample; you can retry from the library later</string>
     <string name="settings_replay_onboarding">Replay the intro tour</string>
+    <string name="record_auto_stopped">No one spoke for %1$d minutes — recording stopped automatically</string>
+    <string name="settings_auto_stop">Stop when nobody speaks</string>
+    <string name="settings_auto_stop_hint">If the meeting ends early but recording continues, the file gets large and transcription slows down. Recording stops automatically after this long without speech, keeping up to 30 seconds past the last words.</string>
+    <string name="settings_auto_stop_off">Off</string>
+    <string name="settings_auto_stop_minutes">%1$d min</string>
 </resources>

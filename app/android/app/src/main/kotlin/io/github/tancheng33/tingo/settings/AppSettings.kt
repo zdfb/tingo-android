@@ -66,6 +66,13 @@ class AppSettings(private val store: KeyValueStore) {
         }
 
     /**
+     * 连续多少分钟没人说话就自动结束录音；0 表示不自动结束（与桌面 `[record] auto_stop_silence_min` 一致）。
+     */
+    var autoStopSilenceMin: Int
+        get() = store.getString(KEY_AUTO_STOP)?.toIntOrNull() ?: DEFAULT_SILENCE_MIN
+        set(value) = store.putString(KEY_AUTO_STOP, value.coerceIn(0, MAX_SILENCE_MIN).toString())
+
+    /**
      * 新手引导走完了没有。
      *
      * 桌面端记在 localStorage；这里记在应用私有偏好里。没有这个键 = 没走过（新装的用户），
@@ -77,6 +84,9 @@ class AppSettings(private val store: KeyValueStore) {
         set(value) = store.putString(KEY_ONBOARDED, if (value) "1" else "0")
 
     private companion object {
+        const val KEY_AUTO_STOP = "auto_stop_silence_min"
+        const val DEFAULT_SILENCE_MIN = 10
+        const val MAX_SILENCE_MIN = 60
         const val KEY_ONBOARDED = "onboarded"
         const val KEY_LANGUAGE = "ui_language"
         const val KEY_LLM_BASE_URL = "llm_base_url"

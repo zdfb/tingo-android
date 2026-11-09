@@ -7,6 +7,8 @@ import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
+import io.github.tancheng33.tingo.recording.SilenceWatcher
+import io.github.tancheng33.tingo.recording.WavTrim
 import io.github.tancheng33.tingo.recording.RecordingKeepAlive
 import io.github.tancheng33.tingo.recording.SystemAudioTrack
 import io.github.tancheng33.tingo.recording.TrackMerger
@@ -49,6 +51,13 @@ class RecordViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     /** 收尾时把前台服务一起停掉；由界面注入（ViewModel 不该自己拿 Context） */
     private val stopService: () -> Unit = {},
+    /**
+     * 静音自动结束：连续多少分钟没人说话就停；0 表示不自动停。
+     *
+     * 从设置读（与桌面同一条配置），由外壳注入；默认关闭的写法会让用户以为"不会自动停"，
+     * 所以缺省给桌面的默认值 10 分钟。
+     */
+    private val autoStopSilenceMin: () -> Int = { SilenceWatcher.DEFAULT_MINUTES },
     /** 导入已有录音；null 表示这个构建不支持（测试里多数用例不关心） */
     private val importing: AudioImport? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -134,6 +143,21 @@ class RecordViewModel(
         _import.value = _import.value.copy(meetingId = null)
     }
 
+    /** 静音判断：整段录音只用一个实例，开始新的一场时清零 */
+    private val silence = SilenceWatcher()
+
+    /**
+     * 上一次录音是被"没人说话"自动结束的：分钟数。界面据此提示一句，
+     * 用户看到"10 分钟没人说话，已自动结束录音"才不会以为是应用崩了。
+     */
+    private val _autoStoppedAfter = MutableStateFlow<Int?>(null)
+    val autoStoppedAfter: StateFlow<Int?> = _autoStoppedAfter.asStateFlow()
+
+    /** 提示看过就清掉，避免切页回来又弹一次。 */
+    fun consumeAutoStopNotice() {
+        _autoStoppedAfter.value = null
+    }
+
     private var currentDir: File? = null
     private var systemAudio: SystemAudioTrack? = null
     private var ticker: kotlinx.coroutines.Job? = null
@@ -159,6 +183,9 @@ class RecordViewModel(
             return
         }
         currentDir = dir
+        silence.reset()
+        silence.silenceMinutes = autoStopSilenceMin()
+        _autoStoppedAfter.value = null
         _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
         session.start(clock())
         _state.value = RecordUiState.Recording(0, 0f)
@@ -219,7 +246,11 @@ class RecordViewModel(
      * 否则一小时双轨录音按下"结束"会卡住主线程。混音没完成也不影响使用：
      * [RecordingTracks.find] 会先回落到 `mic.wav`，转写时还会再补一次混音。
      */
-    fun stop() {
+    /**
+     * @param keepMs 只保留到这一刻（静音自动结束时用）：之后的内容都是一片安静，
+     *   留着只会让文件变大、转写变慢。null 表示整段都留。
+     */
+    fun stop(keepMs: Long? = null) {
         val dir = currentDir ?: return
         ticker?.cancel()
         ticker = null
@@ -246,7 +277,18 @@ class RecordViewModel(
         session.finish(clock())
         currentDir = null
         _state.value = RecordUiState.Finished(dir.name, duration)
+        // 自动结束：先把静音的尾巴截掉，再混音（否则混出来的还是整段长度）
+        if (keepMs != null) trimTail(dir, keepMs)
         mergeInBackground(dir)
+    }
+
+    /** 截掉最后没声音的那一段（只影响自动结束的录音）。 */
+    private fun trimTail(dir: File, keepMs: Long) {
+        viewModelScope.launch(io) {
+            listOf(MIC_TRACK, SYSTEM_TRACK).forEach { name ->
+                runCatching { WavTrim.trimTo(File(dir, name), keepMs) }
+            }
+        }
     }
 
     /** 后台把原始音轨合成 `录音.wav`；失败不打扰用户，转写时还有一次机会。 */
@@ -334,8 +376,16 @@ class RecordViewModel(
             while (isActive) {
                 val s = _state.value
                 if (s is RecordUiState.Recording) {
-                    _state.value = RecordUiState.Recording(session.elapsedMs(clock()), capture.level())
+                    val level = capture.level()
+                    val elapsed = session.elapsedMs(clock())
+                    _state.value = RecordUiState.Recording(elapsed, level)
                     checkSystemAudioSilence()
+                    silence.observe(level, elapsed)?.let { autoStop ->
+                        // 与点"结束录音"同一条路径：先停采集，再后台混音
+                        _autoStoppedAfter.value = autoStop.minutes
+                        stop(keepMs = autoStop.keepMs)
+                        return@launch
+                    }
                 }
                 delay(TICK_MS)
             }

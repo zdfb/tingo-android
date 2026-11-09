@@ -231,4 +231,9 @@
     <string name="onboard_demo_installing">正在装…</string>
     <string name="onboard_demo_failed">示例会议装不上，可以稍后在会议库里重试</string>
     <string name="settings_replay_onboarding">重新看一遍新手引导</string>
+    <string name="record_auto_stopped">%1$d 分钟没人说话，已自动结束录音</string>
+    <string name="settings_auto_stop">没人说话时自动结束</string>
+    <string name="settings_auto_stop_hint">会议早早散了却还在录，文件会很大、转写也慢。连续这么久没人说话就自动结束，录音只保留到说完最后一句之后的 30 秒。</string>
+    <string name="settings_auto_stop_off">不自动</string>
+    <string name="settings_auto_stop_minutes">%1$d 分钟</string>
 </resources>

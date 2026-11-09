@@ -186,6 +186,8 @@ fun TingoRoot(
                     capture = MicRecorder(),
                     meetingsRoot = File(container.dataRoot, "meetings"),
                     stopService = { RecordingService.stop(recordContext) },
+                    // 静音自动结束：配置与桌面同一条语义（分钟数，0 = 不自动停）
+                    autoStopSilenceMin = { container.settings.autoStopSilenceMin },
                     // 导入与录音共用同一台引擎与同一条转写流水线
                     importing = io.github.tancheng33.tingo.importing.AudioImport(
                         engine = container.engine,
@@ -198,6 +200,7 @@ fun TingoRoot(
     )
     val recordState by recordViewModel.state.collectAsStateWithLifecycle()
     val importState by recordViewModel.import.collectAsStateWithLifecycle()
+    val autoStoppedAfter by recordViewModel.autoStoppedAfter.collectAsStateWithLifecycle()
     val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
@@ -394,6 +397,7 @@ fun TingoRoot(
                         .orEmpty(),
                     statusRows = homeStatusRows(container),
                     state = recordState,
+                    autoStoppedAfter = autoStoppedAfter,
                     importProgress = importState.progress,
                     importFailure = importState.failure,
                     onPickAudio = {
@@ -577,6 +581,7 @@ fun TingoRoot(
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
                     onFetchModels = settingsViewModel::fetchModels,
                     onSaveHotwords = settingsViewModel::saveHotwords,
+                    onSaveAutoStopSilence = settingsViewModel::saveAutoStopSilence,
                     onReplayOnboarding = {
                         onboardViewModel.restart()
                         showOnboarding = true
@@ -659,6 +664,7 @@ private fun RecordRoute(
     statusRows: List<HomeStatus>,
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
+    autoStoppedAfter: Int?,
     importProgress: Float?,
     importFailure: RecordViewModel.ImportFailure?,
     onPickAudio: () -> Unit,
@@ -688,6 +694,7 @@ private fun RecordRoute(
         onDiscard = onDiscard,
         onOpenMeeting = onOpenMeeting,
         onPickAudio = onPickAudio,
+        autoStoppedAfter = autoStoppedAfter,
         importProgress = importProgress,
         importFailure = importFailure,
     )

@@ -10,7 +10,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 |---|---|---|---|---|
 | 1 | 录音（麦克风） | `/api/record/*` | 已有（前台服务） | — |
 | 2 | 系统内录 | `/api/record/*`（macOS 系统音频） | 已有（AudioPlaybackCapture，尽力而为） | — |
-| 3 | 静音/结束自动停录 | `autostop.rs` | 无 | 缺（下一批） |
+| 3 | 静音自动停录 | `autostop.rs`（电平门限 + 保留 30 秒） | 已有：每 tick 看电平，连续 N 分钟无声自动结束并截掉尾巴 | **未做"会议软件退出即结束"**（Android 拿不到别的应用的运行状态） |
 | 4 | 转写（Paraformer + 标点 + 声纹聚类） | `asr.rs` + `cluster.rs` | 已有（sherpa-onnx） | — |
 | 5 | Apple Speech 可选后端 | `apple_speech.rs` | 不适用（macOS 专有） | 不迁移 |
 | 6 | 纪要生成 | `summarize.rs`（LLM API） | 已有（本轮改为远端 API） | — |

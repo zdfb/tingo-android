@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -58,7 +59,10 @@ class RecordViewModelTest {
             return durationMs
         }
 
-        override fun level(): Float = 0.5f
+        /** 电平：用例要模拟"没人说话"时调低 */
+        var level: Float = 0.5f
+
+        override fun level(): Float = level
     }
 
     @Before
@@ -225,6 +229,60 @@ class RecordViewModelTest {
 
         assertEquals(RecordUiState.Idle, vm.state.value)
     }
+    @Test
+    fun autoStopsAfterConfiguredSilenceAndKeepsTheTail() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val root = root()
+        val vm = RecordViewModel(
+            capture,
+            root,
+            clock = { now },
+            autoStopSilenceMin = { 1 },
+            io = dispatcher,
+            scope = { backgroundScope },
+        )
+        vm.start()
+        // 先"说" 5 秒，然后一直安静
+        now = 5_000
+        advanceTimeBy(500)
+        capture.level = 0f
+        now = 5_000L + 61_000
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        // 到点自动结束，并告诉用户为什么
+        assertEquals(1, vm.autoStoppedAfter.value)
+        assertTrue("应当已经结束录音", vm.state.value is RecordUiState.Finished)
+        assertEquals(1, capture.stopped)
+        // 静音的尾巴要被截掉：只留到最后有声之后 30 秒
+        val dir = File(root, (vm.state.value as RecordUiState.Finished).meetingId)
+        val mic = File(dir, "mic.wav")
+        val format = io.github.tancheng33.tingo.transcription.WavReader.format(mic)
+        assertTrue("录音不该还是整段长度：${format.durationMs}", format.durationMs < 40_000)
+        vm.consumeAutoStopNotice()
+        assertNull(vm.autoStoppedAfter.value)
+    }
+
+    @Test
+    fun silenceDisabledNeverAutoStops() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val vm = RecordViewModel(
+            capture,
+            root(),
+            clock = { now },
+            autoStopSilenceMin = { 0 },
+            io = dispatcher,
+            scope = { backgroundScope },
+        )
+        vm.start()
+        capture.level = 0f
+        now = 3 * 60 * 60 * 1_000L
+        advanceTimeBy(500)
+
+        assertTrue("关掉自动结束就该一直录", vm.state.value is RecordUiState.Recording)
+        assertNull(vm.autoStoppedAfter.value)
+    }
+
 }
 
 /** 系统内录"全是静音"= 没抓到：不能把静音当成抓到了。 */

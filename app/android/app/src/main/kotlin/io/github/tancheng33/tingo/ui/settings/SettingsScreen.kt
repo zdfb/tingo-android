@@ -64,6 +64,7 @@ fun SettingsScreen(
     onFetchModels: (LlmConfig) -> Unit = {},
     onSaveHotwords: (List<String>) -> Unit = {},
     onReplayOnboarding: () -> Unit = {},
+    onSaveAutoStopSilence: (Int) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
     libraryBusy: Boolean = false,
@@ -125,6 +126,10 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
+
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+
+        AutoStopSection(minutes = models.autoStopSilenceMin, onSelect = onSaveAutoStopSilence)
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
@@ -563,6 +568,43 @@ private fun HotwordsSection(words: List<String>, failed: Boolean, onSave: (List<
                     stringResource(R.string.settings_llm_saved),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.green,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 静音自动结束录音。
+ *
+ * 开会开到最后没人说话时还挂着录音，文件变大、转写变慢、播放条后面全是空白。
+ * 桌面给的是"连续 N 分钟没人说话就停"（0 = 不自动停），这里给几个常用值而不是自由输入：
+ * 手机上点一下比敲数字顺手。
+ */
+@Composable
+private fun AutoStopSection(minutes: Int, onSelect: (Int) -> Unit) {
+    val colors = TingoTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.settings_auto_stop),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        Text(
+            stringResource(R.string.settings_auto_stop_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.muted,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 5, 10, 30).forEach { option ->
+                PillFilter(
+                    label = if (option == 0) {
+                        stringResource(R.string.settings_auto_stop_off)
+                    } else {
+                        stringResource(R.string.settings_auto_stop_minutes, option)
+                    },
+                    selected = option == minutes,
+                    onClick = { onSelect(option) },
                 )
             }
         }

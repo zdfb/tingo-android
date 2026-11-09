@@ -75,6 +75,8 @@ data class SettingsUiState(
     val hotwords: List<String> = emptyList(),
     /** 上一次保存热词失败了（界面据此提示，而不是照样说"已保存"） */
     val hotwordsFailed: Boolean = false,
+    /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
+    val autoStopSilenceMin: Int = 10,
     /** 拉取模型列表的结果：null 表示没拉过 */
     val models: ModelListState? = null,
     /** 删除失败时给出原因，而不是静默什么都不发生 */
@@ -136,6 +138,12 @@ class SettingsViewModel(
                 hotwordsFailed = result.isFailure,
             )
         }
+    }
+
+    /** 保存"几分钟没说话就自动结束"；0 表示不自动结束。 */
+    fun saveAutoStopSilence(minutes: Int) {
+        settings.autoStopSilenceMin = minutes
+        _state.value = _state.value.copy(autoStopSilenceMin = settings.autoStopSilenceMin)
     }
 
     /** 拉取表单里那份配置的模型列表（OpenAI 兼容是 `GET {base}/v1/models`）。 */
@@ -209,7 +217,14 @@ class SettingsViewModel(
         val next = try {
             val stats = runCatching { storageStats() }.getOrNull()
             val hotwords = runCatching { hotwordsPort.load() }.getOrDefault(emptyList())
-            _state.value.copy(loading = false, asr = groupOf(catalog), llmConfig = settings.llm, storage = stats, hotwords = hotwords)
+            _state.value.copy(
+                loading = false,
+                asr = groupOf(catalog),
+                llmConfig = settings.llm,
+                storage = stats,
+                hotwords = hotwords,
+                autoStopSilenceMin = settings.autoStopSilenceMin,
+            )
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading
             _state.value.copy(loading = false)
