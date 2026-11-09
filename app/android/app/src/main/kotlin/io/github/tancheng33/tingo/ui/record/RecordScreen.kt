@@ -137,11 +137,6 @@ fun RecordScreen(
                         emphasis = true,
                     )
                     WarningLine(
-                        text = stringResource(R.string.record_notification_denied),
-                        visible = notificationsDenied,
-                        emphasis = false,
-                    )
-                    WarningLine(
                         text = stringResource(R.string.record_system_audio_denied),
                         visible = systemAudioDenied,
                         emphasis = true,
@@ -168,6 +163,12 @@ fun RecordScreen(
                         text = stringResource(R.string.record_system_audio_missing),
                         visible = systemAudioMissing,
                         emphasis = true,
+                    )
+                    // 只在真的在录的时候提：没有通知权限时状态栏看不到进度，用户会以为没在录
+                    WarningLine(
+                        text = stringResource(R.string.record_notification_denied),
+                        visible = notificationsDenied,
+                        emphasis = false,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
                         GhostPill(label = stringResource(R.string.record_pause), onClick = onPause)
