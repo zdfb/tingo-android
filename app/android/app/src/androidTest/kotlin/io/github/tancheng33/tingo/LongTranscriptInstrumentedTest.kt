@@ -53,12 +53,13 @@ class LongTranscriptInstrumentedTest {
             assertTrue("这份转写稿本应超出上下文，实际 $rawTokens", rawTokens > 4_096 - 256)
 
             val maxTokens = 512
-            val fitted = MinutesPrompt.trimToTokenBudget(prompt, 4_096 - maxTokens - 256) {
-                LlamaBridge.countTokens(handle, it)
-            }
+            val budget = 4_096 - maxTokens - 256
+            val result = MinutesPrompt.trimToTokenBudget(prompt, budget) { LlamaBridge.countTokens(handle, it) }
+            val fitted = result.prompt ?: error("装不下：预算 $budget")
             val fittedTokens = LlamaBridge.countTokens(handle, fitted)
+            assertTrue("必须报告裁剪（否则用户不知道纪要只覆盖一段）", result.trimmed)
             android.util.Log.i("TingoMinutes", "裁剪后 token 数 = $fittedTokens")
-            assertTrue("裁剪后必须装进上下文，实际 $fittedTokens", fittedTokens <= 4_096 - maxTokens - 256)
+            assertTrue("裁剪后必须装进上下文，实际 $fittedTokens", fittedTokens <= budget)
             assertTrue("裁剪要明确告知模型内容被省略", fitted.contains("已省略"))
 
             val text = LlamaBridge.generate(handle, fitted, maxTokens)

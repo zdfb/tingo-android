@@ -6,6 +6,7 @@
 #include <android/log.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -26,6 +27,8 @@ struct Session {
     int n_ctx = 4096;
     /** 一次 llama_decode 的上限；预填充要按它切块，否则超长 prompt 会 abort */
     int n_batch = 512;
+    /** 用户取消后置位：生成循环每步检查一次，让它能真的停下来 */
+    std::atomic<bool> cancelled{false};
 };
 
 void free_session(Session *s) {
@@ -114,6 +117,7 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
 
     const std::string text = jstring_to_utf8(env, prompt);
 
+    session->cancelled.store(false);
     // 清空 KV 缓存：每次生成都是独立的
     llama_memory_t memory = llama_get_memory(session->ctx);
     if (memory) llama_memory_clear(memory, true);
@@ -143,6 +147,10 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
     const int limit = max_tokens > 0 ? max_tokens : 512;
     char piece[256];
     for (int produced = 0; produced < limit; ++produced) {
+        if (session->cancelled.load()) {
+            LOGI("用户取消，已生成 %d token", produced);
+            break;
+        }
         llama_token token = llama_sampler_sample(session->sampler, session->ctx, -1);
         if (llama_vocab_is_eog(session->vocab, token)) break;
 
@@ -167,6 +175,12 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
  * 提示词预算必须按 token 算而不是按字符算：中文大约 1 字 1 token，但标点、数字、
  * 英文混排的比值并不固定。按字符猜上限，长会议会直接超出上下文。
  */
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeCancel(JNIEnv *, jclass, jlong handle) {
+    auto *session = reinterpret_cast<Session *>(handle);
+    if (session != nullptr) session->cancelled.store(true);
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeCountTokens(
         JNIEnv *env, jclass, jlong handle, jstring text) {
@@ -174,7 +188,7 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeCountTokens(
     if (session == nullptr) return 0;
     const std::string utf8 = jstring_to_utf8(env, text);
     const int count = -llama_tokenize(session->vocab, utf8.c_str(),
-                                      static_cast<int32_t>(utf8.size()), nullptr, 0, false, true);
+                                      static_cast<int32_t>(utf8.size()), nullptr, 0, true, true);
     return count > 0 ? count : 0;
 }
 

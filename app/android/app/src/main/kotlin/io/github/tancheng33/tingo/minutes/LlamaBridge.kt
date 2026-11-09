@@ -41,6 +41,8 @@ object LlamaBridge {
         val raw = nativeBench(handle, prompt, maxTokens)
         val parts = raw.split(',')
         if (parts.size != 4) return null
+        // 原生层用 "0,0,0,0" 表示失败：这不是一次有效测量，必须返回 null 而不是当成慢速成功
+        if (parts[1].toLongOrNull() == 0L && parts[3].toLongOrNull() == 0L) return null
         return Bench(
             promptTokens = parts[0].toIntOrNull() ?: return null,
             prefillMs = parts[1].toLongOrNull() ?: return null,
@@ -58,14 +60,11 @@ object LlamaBridge {
     ) {
         /** 预填充速度（token/s）；耗时 0 时按"极快"处理，避免除零。 */
         val prefillTokensPerSecond: Double
-            get() = if (prefillMs <= 0) Double.POSITIVE_INFINITY else promptTokens * 1000.0 / prefillMs
+            get() = promptTokens * 1000.0 / prefillMs.coerceAtLeast(1)
 
         /** 生成速度（token/s），这是用户体感最直接的那个数。 */
         val decodeTokensPerSecond: Double
-            get() = if (decodeMs <= 0) Double.POSITIVE_INFINITY else decodeTokens * 1000.0 / decodeMs
-
-        /** 首字延迟：等预填充完成，用户才看到第一个字。 */
-        val timeToFirstTokenMs: Long get() = prefillMs
+            get() = decodeTokens * 1000.0 / decodeMs.coerceAtLeast(1)
     }
 
     /**
@@ -77,9 +76,16 @@ object LlamaBridge {
     fun countTokens(handle: Long, text: String): Int =
         if (handle == 0L || !isAvailable) 0 else nativeCountTokens(handle, text)
 
+    /** 请原生层停止当前生成；已产出的部分保留，返回值可能不完整。 */
+    fun cancel(handle: Long) {
+        if (handle != 0L && isAvailable) nativeCancel(handle)
+    }
+
     private external fun nativeLoad(modelPath: String, nThreads: Int, nCtx: Int): Long
 
     private external fun nativeCountTokens(handle: Long, text: String): Int
+
+    private external fun nativeCancel(handle: Long)
 
     private external fun nativeBench(handle: Long, prompt: String, maxTokens: Int): String
 
