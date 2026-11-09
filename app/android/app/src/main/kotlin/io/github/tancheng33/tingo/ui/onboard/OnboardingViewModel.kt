@@ -75,6 +75,7 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(installingDemo = true, demoFailed = false)
         viewModelScope.launch(io) {
             val id = installee.install(english)
+            if (id != null) settings.onboarded = true
             _state.value = _state.value.copy(
                 installingDemo = false,
                 demoFailed = id == null,

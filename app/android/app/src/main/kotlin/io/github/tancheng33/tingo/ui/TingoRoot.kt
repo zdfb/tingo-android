@@ -81,6 +81,10 @@ import io.github.tancheng33.tingo.BuildConfig
 import io.github.tancheng33.tingo.export.DocxWriter
 import io.github.tancheng33.tingo.export.PdfWriter
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel
+import io.github.tancheng33.tingo.ui.onboard.OnboardingScreen
+import io.github.tancheng33.tingo.importing.DemoMeeting
+import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
@@ -286,14 +290,14 @@ fun TingoRoot(
         }
     }
 
-    val onboardViewModel: io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel = viewModel(
+    val onboardViewModel: OnboardingViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel(
+                OnboardingViewModel(
                     settings = container.settings,
                     store = container.models,
                     catalog = container.catalog,
-                    demo = io.github.tancheng33.tingo.importing.DemoMeeting(container.engine, recordContext),
+                    demo = DemoMeeting(container.engine, recordContext),
                 )
             }
         },
@@ -302,7 +306,7 @@ fun TingoRoot(
     var showOnboarding by rememberSaveable { mutableStateOf(false) }
     val hasMeetings = (libraryState as? LibraryUiState.Content)?.items?.isNotEmpty() == true
     // 第一次打开、而且库里还没有会议时才拦人：老用户升级上来不该被引导一次
-    androidx.compose.runtime.LaunchedEffect(hasMeetings, libraryState) {
+    androidx.compose.runtime.LaunchedEffect(hasMeetings) {
         if (libraryState is LibraryUiState.Content && onboardViewModel.shouldOnboard(hasMeetings)) {
             onboardViewModel.refreshModel()
             showOnboarding = true
@@ -324,10 +328,9 @@ fun TingoRoot(
     }
 
     if (showOnboarding) {
-        io.github.tancheng33.tingo.ui.onboard.OnboardingScreen(
+        OnboardingScreen(
             state = onboardState,
             steps = onboardViewModel.steps,
-            modelReady = onboardState.modelReady,
             llmConfigured = container.settings.llm.isConfigured,
             micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
                 recordContext,

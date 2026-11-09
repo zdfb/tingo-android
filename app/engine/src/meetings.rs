@@ -94,6 +94,19 @@ pub fn local_time_from_millis(ms: i64) -> chrono::NaiveDateTime {
         .unwrap_or_else(|| chrono::Local::now().naive_local())
 }
 
+/// 这个文件是不是支持导入的音频（与 `find_audio` 同一套判断）。
+pub fn is_audio_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| AUDIO_EXTS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// 示例会议是不是真的装好了：转写与纪要都在才算（音频可选）。
+fn is_demo_installed(dir: &Path) -> bool {
+    dir.join(TRANSCRIPT_JSON).is_file() && dir.join(MINUTES).is_file()
+}
+
 /// 示例会议的文件夹名：素材是 2026-10-28 14:00 的会（桌面与 Android 同一套命名）。
 pub fn demo_folder(en: bool) -> String {
     let title = if en {
@@ -109,10 +122,18 @@ pub fn demo_folder(en: bool) -> String {
 /// `source` 里必须有 `transcript.json` 与纪要（`纪要.md` 或英文版），音频可选。
 /// 桌面从 App 资源里取素材，Android 从 assets 里解出来——两边都要同一套"装进库"的逻辑。
 pub fn install_demo(root: &Path, source: &Path, en: bool) -> std::io::Result<PathBuf> {
-    // 文件夹名固定（带示例的日期）：装过一次就不再重复装
-    let dir = root.join(demo_folder(en));
-    if dir.is_dir() {
-        return Ok(dir);
+    // 文件夹名固定（带示例的日期）：装过一次就不再重复装。
+    // 两种语言的示例各自一份——但同时只会装其中一份：先装过的语言算数，
+    // 否则用户切一次界面语言就会多出一场示例会议。
+    for candidate in [demo_folder(false), demo_folder(true)] {
+        let dir = root.join(&candidate);
+        if is_demo_installed(&dir) {
+            return Ok(dir);
+        }
+        // 装到一半的目录（进程被杀）不能当成已装好：它会出现列表里但打不开
+        if dir.is_dir() {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
     let minutes = if en {
         source.join("纪要.en.md")
@@ -125,6 +146,7 @@ pub fn install_demo(root: &Path, source: &Path, en: bool) -> std::io::Result<Pat
             "示例会议的素材不全",
         ));
     }
+    let dir = root.join(demo_folder(en));
     let install = || -> std::io::Result<()> {
         std::fs::create_dir_all(&dir)?;
         std::fs::copy(source.join(TRANSCRIPT_JSON), dir.join(TRANSCRIPT_JSON))?;
@@ -133,12 +155,7 @@ pub fn install_demo(root: &Path, source: &Path, en: bool) -> std::io::Result<Pat
         if let Ok(entries) = std::fs::read_dir(source) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                let ext = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or_default()
-                    .to_lowercase();
-                if AUDIO_EXTS.contains(&ext.as_str()) {
+                if is_audio_file(&path) {
                     let target = dir.join(path.file_name().unwrap());
                     std::fs::copy(&path, target)?;
                 }
@@ -184,12 +201,7 @@ pub fn find_audio(dir: &Path) -> Option<PathBuf> {
     files.sort();
     files.into_iter().find(|p| {
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        let ext = p
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        AUDIO_EXTS.contains(&ext.as_str()) && !RAW_TRACKS.contains(&name)
+        is_audio_file(p) && !RAW_TRACKS.contains(&name)
     })
 }
 

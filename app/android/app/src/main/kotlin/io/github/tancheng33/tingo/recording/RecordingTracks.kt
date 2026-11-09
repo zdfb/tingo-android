@@ -39,10 +39,28 @@ object RecordingTracks {
         return TrackMerger.mixInto(meetingDir)
     }
 
-    /** 会议可用的音频文件；`录音.wav` 优先，其次才是残留的原始音轨。 */
-    fun find(meetingDir: File): File? = (listOf(MIXED) + RAW)
-        .map { File(meetingDir, it) }
-        .firstOrNull { isComplete(it) }
+    /**
+     * 会议可用的音频文件；`录音.wav` 优先，其次才是残留的原始音轨，最后是导入/示例带来的原始格式。
+     *
+     * 导入与示例会议存的可能是 m4a（桌面端本来就是"保留原文件"）。
+     * 只认 wav 会让这类会议"看得见、点不了播放"——示例会议正是这样被漏掉的。
+     */
+    fun find(meetingDir: File): File? =
+        (listOf(MIXED) + RAW).map { File(meetingDir, it) }.firstOrNull { isComplete(it) }
+            ?: importedAudio(meetingDir)
+
+    /** 可以交给播放器的格式（MediaPlayer 都支持）。 */
+    private val PLAYABLE = setOf("wav", "m4a", "mp3", "mp4", "aac", "flac", "ogg", "webm", "mov", "mkv")
+
+    /** 会议目录里任何可播放的音频（跳过原始音轨：那几路要么已合成，要么不完整）。 */
+    private fun importedAudio(meetingDir: File): File? = meetingDir.listFiles().orEmpty()
+        .filter { file ->
+            file.isFile &&
+                file.name !in RAW &&
+                file.name != MIXED &&
+                file.extension.lowercase() in PLAYABLE
+        }
+        .maxByOrNull { it.lastModified() }
 
     /**
      * 这个文件是不是一条完整的音轨：体积大于头，且头里的 data 长度与文件大小一致。

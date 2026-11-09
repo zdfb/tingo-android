@@ -35,7 +35,6 @@ import io.github.tancheng33.tingo.ui.theme.TingoTheme
 fun OnboardingScreen(
     state: OnboardingViewModel.UiState,
     steps: List<OnboardingViewModel.Step>,
-    modelReady: Boolean,
     llmConfigured: Boolean,
     micGranted: Boolean,
     systemAudioSupported: Boolean,
@@ -65,7 +64,7 @@ fun OnboardingScreen(
         ) {
             when (state.step) {
                 OnboardingViewModel.Step.HELLO -> Welcome()
-                OnboardingViewModel.Step.MODEL -> ModelStep(ready = modelReady)
+                OnboardingViewModel.Step.MODEL -> ModelStep(ready = state.modelReady)
                 OnboardingViewModel.Step.PERMISSION -> PermissionStep(
                     micGranted = micGranted,
                     systemAudioSupported = systemAudioSupported,

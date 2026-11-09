@@ -68,8 +68,9 @@ class AppSettings(private val store: KeyValueStore) {
     /**
      * 新手引导走完了没有。
      *
-     * 桌面端记在 localStorage（拿不到就当已走过）；这里记在应用私有偏好里，
-     * 拿不到时同样按"已走过"处理——宁可少弹一次引导，也不要每次都拦人。
+     * 桌面端记在 localStorage；这里记在应用私有偏好里。没有这个键 = 没走过（新装的用户），
+     * 所以缺省按 false 处理，与桌面一致。真正的"别拦人"判断在
+     * `OnboardingViewModel.shouldOnboard`：库里已经有会议的老用户不该被拦。
      */
     var onboarded: Boolean
         get() = store.getString(KEY_ONBOARDED) == "1"

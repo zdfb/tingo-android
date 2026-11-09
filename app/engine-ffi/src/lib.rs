@@ -2165,6 +2165,44 @@ mod tests {
     }
 
     #[test]
+    fn a_second_language_does_not_add_a_second_sample() {
+        let root = temp_root("demo-two-langs");
+        let sample = sample_dir(&root, true);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let zh = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), false)
+            .unwrap();
+        let en = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), true)
+            .unwrap();
+
+        // 切一次界面语言不该多出一场示例会议
+        assert_eq!(zh.id, en.id);
+        assert_eq!(engine.scan_library().unwrap().iter().filter(|m| m.id.contains("示例") || m.id.contains("Sample")).count(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn half_installed_demo_is_replaced_instead_of_returned() {
+        let root = temp_root("demo-half");
+        let sample = sample_dir(&root, false);
+        let engine = TingoEngine::new(root.display().to_string());
+        // 装到一半：目录在，但没有纪要（进程被杀就会这样）
+        let broken = root.join("meetings").join(tingo_engine::meetings::demo_folder(false));
+        std::fs::create_dir_all(&broken).unwrap();
+        std::fs::write(broken.join("transcript.json"), "{}").unwrap();
+
+        let demo = engine
+            .install_demo_meeting(sample.to_string_lossy().into_owned(), false)
+            .unwrap();
+
+        // 半成品会出现在列表里但打不开，比没有更糟：应当被重新装一遍
+        assert!(std::path::Path::new(&demo.dir).join("纪要.md").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn english_demo_uses_the_english_minutes() {
         let root = temp_root("demo-en");
         let sample = sample_dir(&root, true);
