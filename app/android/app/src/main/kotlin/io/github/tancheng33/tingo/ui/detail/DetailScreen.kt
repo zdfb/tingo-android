@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
+import io.github.tancheng33.tingo.ui.components.PillTabs
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
@@ -138,19 +139,21 @@ fun DetailScreen(
                 }
                 // 分段控件（桌面版同样的"灰底 + 白色浮起项"），比 M3 的 TabRow 更接近桌面观感
                 if (showMinutesTab) {
-                    SegmentedTabs(
+                    PillTabs(
                         tabs = listOf(
                             stringResource(R.string.detail_tab_minutes),
                             stringResource(R.string.detail_tab_transcript),
                         ),
                         selected = tab,
                         onSelect = { tab = it },
+                        modifier = Modifier.padding(horizontal = TingoDimens.gutter),
                     )
                 } else {
-                    SegmentedTabs(
+                    PillTabs(
                         tabs = listOf(stringResource(R.string.detail_tab_transcript)),
                         selected = 0,
                         onSelect = {},
+                        modifier = Modifier.padding(horizontal = TingoDimens.gutter),
                     )
                 }
                 if (showMinutesTab && tab == 0) {
@@ -393,46 +396,3 @@ internal fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.INTERNAL -> stringResource(R.string.error_internal)
 }
 
-/** 灰底分段控件：选中项是浮起的白卡片。 */
-@Composable
-private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    val colors = TingoTheme.colors
-    Row(
-        modifier = Modifier
-            .padding(horizontal = TingoDimens.gutter)
-            .fillMaxWidth()
-            .background(colors.seg, TingoDimens.controlShape)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        tabs.forEachIndexed { index, label ->
-            val active = index == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .background(if (active) colors.card else colors.seg, TingoDimens.controlShape)
-                    .then(
-                        if (active) {
-                            Modifier.border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.controlShape)
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clickable(enabled = tabs.size > 1) { onSelect(index) }
-                    .semantics {
-                        role = Role.Tab
-                        this.selected = active
-                    }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (active) colors.text else colors.muted,
-                )
-            }
-        }
-    }
-}

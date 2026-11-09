@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
+import io.github.tancheng33.tingo.ui.components.PillButton
+import io.github.tancheng33.tingo.ui.components.PillFilter
+import io.github.tancheng33.tingo.ui.components.PillKind
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,9 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.setValue
@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.settings.AppLanguage
@@ -71,35 +70,19 @@ fun SettingsScreen(
             Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppLanguage.entries.forEach { option ->
-                    val active = option == language
-                    val colors = TingoTheme.colors
-                    Box(
-                        modifier = Modifier
-                            .background(if (active) colors.blueSoft else colors.card, TingoDimens.pillShape)
-                            .border(
-                                BorderStroke(
-                                    TingoDimens.hairline,
-                                    if (active) colors.blueSoft else colors.line,
-                                ),
-                                TingoDimens.pillShape,
-                            )
-                            .clickable { onLanguageChange(option) }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            text = when (option) {
-                                AppLanguage.ZH -> stringResource(R.string.settings_language_zh)
-                                AppLanguage.EN -> stringResource(R.string.settings_language_en)
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (active) colors.blue else colors.muted,
-                        )
-                    }
+                    PillFilter(
+                        label = when (option) {
+                            AppLanguage.ZH -> stringResource(R.string.settings_language_zh)
+                            AppLanguage.EN -> stringResource(R.string.settings_language_en)
+                        },
+                        selected = option == language,
+                        onClick = { onLanguageChange(option) },
+                    )
                 }
             }
         }
 
-        HorizontalDivider()
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
@@ -111,7 +94,7 @@ fun SettingsScreen(
             )
         }
 
-        HorizontalDivider()
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
@@ -151,7 +134,7 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider()
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
@@ -161,36 +144,17 @@ fun SettingsScreen(
                 color = TingoTheme.colors.muted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val colors = TingoTheme.colors
-                Box(
-                    modifier = Modifier
-                        .height(44.dp)
-                        .background(colors.black, TingoDimens.pillShape)
-                        .clickable(enabled = !libraryBusy, onClick = onBackupLibrary)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_library_backup),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onBlack,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .height(44.dp)
-                        .background(colors.card, TingoDimens.pillShape)
-                        .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.pillShape)
-                        .clickable(enabled = !libraryBusy, onClick = onRestoreLibrary)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_library_restore),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.text2,
-                    )
-                }
+                PillButton(
+                    label = stringResource(R.string.settings_library_backup),
+                    onClick = onBackupLibrary,
+                    enabled = !libraryBusy,
+                )
+                PillButton(
+                    label = stringResource(R.string.settings_library_restore),
+                    onClick = onRestoreLibrary,
+                    kind = PillKind.Ghost,
+                    enabled = !libraryBusy,
+                )
             }
             libraryResult?.let { result ->
                 Text(
@@ -210,7 +174,7 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider()
+        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
@@ -265,13 +229,10 @@ private fun ModelRow(label: String, group: ModelGroup, onDelete: () -> Unit) {
             )
         }
         if (!group.isEmpty) {
-            Text(
-                text = stringResource(R.string.settings_models_delete),
-                style = MaterialTheme.typography.labelLarge,
-                color = TingoTheme.colors.red,
-                modifier = Modifier
-                    .clickable { confirming = true }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            PillButton(
+                label = stringResource(R.string.settings_models_delete),
+                onClick = { confirming = true },
+                kind = PillKind.Soft,
             )
         }
     }

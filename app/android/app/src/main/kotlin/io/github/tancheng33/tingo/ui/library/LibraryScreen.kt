@@ -50,6 +50,7 @@ import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.ui.detail.failureText
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
+import io.github.tancheng33.tingo.ui.components.PillFilter
 import io.github.tancheng33.tingo.ui.theme.TingoType
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -221,35 +222,12 @@ private fun LibraryHeader(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight)) {
-            FilterPill(
-                selected = archivedOnly,
+            PillFilter(
                 label = stringResource(R.string.library_filter_archived),
+                selected = archivedOnly,
                 onClick = { onArchivedOnlyChange(!archivedOnly) },
             )
         }
-    }
-}
-
-/** 小胶囊筛选：选中时用主色淡底 + 主色字，未选中是描边灰。 */
-@Composable
-private fun FilterPill(selected: Boolean, label: String, onClick: () -> Unit) {
-    val colors = TingoTheme.colors
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .background(if (selected) colors.blueSoft else colors.card, TingoDimens.pillShape)
-            .border(
-                BorderStroke(TingoDimens.hairline, if (selected) colors.blueSoft else colors.line),
-                TingoDimens.pillShape,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) colors.blue else colors.muted,
-        )
     }
 }
 

@@ -21,7 +21,7 @@ object TingoColors {
     val hover = Color(0xFFF4F4F7)
     val text = Color(0xFF0A0A0A)
     val text2 = Color(0xFF27251E)
-    val muted = Color(0xFF7D8187)
+    val muted = Color(0xFF6B7076)
     val faint = Color(0xFFA3A7AD)
     val black = Color(0xFF000000)
     /** 黑底上写字用的颜色（深色模式下黑底其实是近白，所以不能写死白） */
@@ -30,7 +30,7 @@ object TingoColors {
     val blue = Color(0xFF1F4BFF)
     val blueSoft = Color(0xFFE9EFFF)
     val cyan = Color(0xFF34C6F4)
-    val red = Color(0xFFF04438)
+    val red = Color(0xFFD92D20)
     val green = Color(0xFF12B76A)
     val amber = Color(0xFFF79009)
 }
@@ -64,6 +64,8 @@ object TingoDimens {
     val radiusControl = 10.dp
     val radiusPill = 999.dp
     val hairline = 1.dp
+    /** 最小触控高度：Material 建议 48dp，自绘控件必须自己保证 */
+    val touchTarget = 48.dp
     val gutter = 20.dp
     val gap = 12.dp
     val gapTight = 8.dp

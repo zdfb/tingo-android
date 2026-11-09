@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
+import io.github.tancheng33.tingo.ui.components.PillButton
+import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -118,7 +120,7 @@ fun RecordScreen(
                         supported = android.os.Build.VERSION.SDK_INT >= SystemAudioSupport.MIN_SDK,
                         onChange = onSystemAudioChange,
                     )
-                    PrimaryPill(
+                    PillButton(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
@@ -142,8 +144,8 @@ fun RecordScreen(
                         emphasis = false,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
-                        GhostPill(label = stringResource(R.string.record_pause), onClick = onPause)
-                        PrimaryPill(label = stringResource(R.string.record_stop), onClick = onStop)
+                        PillButton(label = stringResource(R.string.record_pause), onClick = onPause, kind = PillKind.Ghost)
+                        PillButton(label = stringResource(R.string.record_stop), onClick = onStop)
                     }
                     DiscardLink(onClick = onDiscard)
                 }
@@ -159,8 +161,8 @@ fun RecordScreen(
                         color = TingoTheme.colors.muted,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
-                        PrimaryPill(label = stringResource(R.string.record_resume), onClick = onResume)
-                        GhostPill(label = stringResource(R.string.record_stop), onClick = onStop)
+                        PillButton(label = stringResource(R.string.record_resume), onClick = onResume)
+                        PillButton(label = stringResource(R.string.record_stop), onClick = onStop)
                     }
                     DiscardLink(onClick = onDiscard)
                 }
@@ -179,7 +181,7 @@ fun RecordScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = TingoTheme.colors.muted,
                     )
-                    PrimaryPill(
+                    PillButton(
                         label = stringResource(R.string.record_open_meeting),
                         onClick = { onOpenMeeting(state.meetingId) },
                     )
@@ -198,7 +200,7 @@ fun RecordScreen(
                         },
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    PrimaryPill(
+                    PillButton(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
@@ -274,43 +276,6 @@ private fun WarningLine(text: String, visible: Boolean, emphasis: Boolean) {
             .background(if (emphasis) colors.red.copy(alpha = 0.08f) else colors.seg, TingoDimens.controlShape)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )
-}
-
-/** 黑色胶囊主按钮：桌面版的主按钮就是这个样子（黑底白字、圆角拉满）。 */
-@Composable
-private fun PrimaryPill(label: String, onClick: () -> Unit) {
-    val colors = TingoTheme.colors
-    Box(
-        modifier = Modifier
-            .height(52.dp)
-            .background(colors.black, TingoDimens.pillShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 36.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-            color = colors.onBlack,
-        )
-    }
-}
-
-/** 次要动作：描边胶囊。 */
-@Composable
-private fun GhostPill(label: String, onClick: () -> Unit) {
-    val colors = TingoTheme.colors
-    Box(
-        modifier = Modifier
-            .height(52.dp)
-            .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.pillShape)
-            .background(colors.card, TingoDimens.pillShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 28.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = label, style = TextStyle(fontSize = 15.sp), color = colors.text2)
-    }
 }
 
 @Composable
