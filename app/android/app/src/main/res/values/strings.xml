@@ -179,4 +179,7 @@
     <string name="detail_history_open">查看</string>
     <string name="detail_history_restore">恢复这一版</string>
     <string name="detail_export_srt">导出 SRT 字幕</string>
+    <string name="home_recent">最近</string>
+    <string name="detail_history_preview_title">历史版本（只读）</string>
+    <string name="detail_history_delete_confirm">删除后无法恢复，再点一次</string>
 </resources>

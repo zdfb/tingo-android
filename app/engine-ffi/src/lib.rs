@@ -233,23 +233,10 @@ fn version_info(v: &minutes_history::Version) -> MinutesVersionInfo {
         id: v.id.clone(),
         saved_at: v.saved_at,
         preview: v.text.trim().chars().take(200).collect(),
-        chars: v.text.chars().count() as u32,
     }
 }
 
-/// 导出文件名的主干：纪要标题 → 会议主题；与桌面 `export_stem` 一致。
-fn export_stem(dir: &Path, id: &str) -> String {
-    let minutes = std::fs::read_to_string(dir.join(meetings::MINUTES)).unwrap_or_default();
-    let topic = id.splitn(3, '_').nth(2).unwrap_or(id);
-    let name = meetings::safe_name(
-        &meetings::minutes_title(&minutes).unwrap_or_else(|| topic.to_string()),
-    );
-    if name.is_empty() {
-        meetings::safe_name(topic)
-    } else {
-        name
-    }
-}
+
 /// 读会议目录里的转写；没有转写时报 `Missing`（界面据此提示"先生成转写"）。
 fn load_transcript(dir: &Path) -> Result<engine_transcript::Transcript, EngineError> {
     let path = dir.join("transcript.json");
@@ -446,7 +433,6 @@ pub struct MinutesVersionInfo {
     pub saved_at: u64,
     /// 前 200 字，列表里当摘要用
     pub preview: String,
-    pub chars: u32,
 }
 /// 引擎实例：持有注入的目录，所有用例函数都是它的方法。
 #[derive(uniffi::Object)]
@@ -684,7 +670,7 @@ impl TingoEngine {
     pub fn save_minutes(&self, id: String, text: String) -> Result<(), EngineError> {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
         guard("save_minutes", move || {
-            minutes_history::save(&dir, &format!("{}\n", text.trim_end()))
+            minutes_history::save(&dir, &meetings::minutes_with_trailing_newline(&text))
                 .map_err(|e| io_error(e, "save_minutes"))
         })
     }
@@ -695,7 +681,7 @@ impl TingoEngine {
         guard("export_srt", move || {
             let tr = load_transcript(&dir)?;
             let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
-            let stem = export_stem(&dir, &id);
+            let stem = meetings::export_stem(&dir, &id);
             let out = dir.join(format!("{stem}.srt"));
             std::fs::write(&out, tr.to_srt(lang)).map_err(|e| io_error(e, "export_srt"))?;
             Ok(out.to_string_lossy().into_owned())

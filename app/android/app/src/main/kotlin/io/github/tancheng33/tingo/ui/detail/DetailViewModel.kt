@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -54,6 +55,8 @@ data class DetailUiState(
     val guessNote: GuessNote? = null,
     /** 纪要历史版本（列表，含预览） */
     val history: List<MinutesVersionInfo> = emptyList(),
+    /** 历史读取失败的原因；只影响历史那一栏 */
+    val historyFailure: FailureKind? = null,
     /** 正在查看的历史版本全文；null 表示没在预览 */
     val preview: VersionPreview? = null,
     val minutes: MinutesDoc? = null,
@@ -90,10 +93,11 @@ class DetailViewModel(
             val versions = try {
                 engine.minutesHistory(meetingId)
             } catch (e: TingoFailure) {
-                _state.value = _state.value.copy(failure = e.kind)
+                // 历史读不出来只影响这一栏：不能让整页转写和播放都变成错误页
+                _state.value = _state.value.copy(historyFailure = e.kind)
                 return@launch
             }
-            _state.value = _state.value.copy(history = versions)
+            _state.value = _state.value.copy(history = versions, historyFailure = null)
         }
     }
 
@@ -103,7 +107,7 @@ class DetailViewModel(
             val text = try {
                 engine.minutesVersion(meetingId, versionId)
             } catch (e: TingoFailure) {
-                _state.value = _state.value.copy(failure = e.kind)
+                _state.value = _state.value.copy(historyFailure = e.kind)
                 return@launch
             }
             _state.value = _state.value.copy(preview = VersionPreview(versionId, text))
@@ -159,12 +163,18 @@ class DetailViewModel(
         }
     }
 
-    /** 导出 SRT；返回文件路径，失败返回 null。 */
-    suspend fun exportSrt(language: String): String? = try {
-        engine.exportSrt(meetingId, language)
-    } catch (e: TingoFailure) {
-        _state.value = _state.value.copy(failure = e.kind)
-        null
+    /**
+     * 导出 SRT；返回文件路径，失败返回 null。
+     *
+     * 要读整份转写再排版写盘，不能在主线程做。
+     */
+    suspend fun exportSrt(language: String): String? = withContext(io) {
+        try {
+            engine.exportSrt(meetingId, language)
+        } catch (e: TingoFailure) {
+            _state.value = _state.value.copy(failure = e.kind)
+            null
+        }
     }
 
     /**
@@ -317,9 +327,13 @@ class DetailViewModel(
                 _state.value = next
                 return@launch
             }
-            _state.value = next.copy(playback = _state.value.playback)
+            // 保留历史与预览：load() 会重建整个状态，不带上就被抹成空，界面会闪一下"没有历史"
+            _state.value = next.copy(
+                playback = _state.value.playback,
+                history = _state.value.history,
+                preview = _state.value.preview,
+            )
             preparePlayback()
-            loadHistory()
         }
     }
 

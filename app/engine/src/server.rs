@@ -1534,17 +1534,9 @@ async fn post_pdf(
 }
 
 /// 导出文件的文件名（不含扩展名）：纪要标题，没有纪要时用文件夹里的会议名
+/// 导出文件名主干：与 Android 共用 [`meetings::export_stem`]，两条路径不再各写一份。
 fn export_stem(dir: &Path, id: &str) -> String {
-    let minutes = std::fs::read_to_string(dir.join(MINUTES)).unwrap_or_default();
-    let topic = id.splitn(3, '_').nth(2).unwrap_or(id);
-    let name = obsidian::safe_name(
-        &meetings::minutes_title(&minutes).unwrap_or_else(|| topic.to_string()),
-    );
-    if name.is_empty() {
-        obsidian::safe_name(topic)
-    } else {
-        name
-    }
+    meetings::export_stem(dir, id)
 }
 
 /// 导出 SRT 字幕（按句，说话人名跟界面语言），存进会议文件夹并在访达里选中

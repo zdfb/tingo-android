@@ -146,6 +146,8 @@ class LibraryManageInstrumentedTest {
         engine.restoreMinutesVersion("2026-11-06_0900_周会", history[0].id)
         val current = File(dir, "纪要.md").readText()
         assertTrue("恢复后应当是旧版内容：$current", current.contains("先修首屏"))
+        // 只断言"旧内容在"是不够的：恢复若是空操作，两个版本都含这一句，测试照样绿
+        assertTrue("恢复后不该保留后加的那条待办：$current", !current.contains("再看注册页"))
 
         val srt = File(engine.exportSrt("2026-11-06_0900_周会", "zh"))
         assertTrue("SRT 没落盘：$srt", srt.isFile)

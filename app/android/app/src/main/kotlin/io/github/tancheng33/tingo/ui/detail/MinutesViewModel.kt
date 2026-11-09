@@ -44,6 +44,11 @@ sealed interface MinutesUiState {
  */
 class MinutesViewModel(
     private val serviceFactory: () -> MinutesService,
+    /**
+     * 最终纪要的保存动作。null 表示直接写文件；Android 注入引擎的保存路径，
+     * 让"重新生成"也把上一版归档进历史。
+     */
+    private val saveMinutes: ((String) -> Unit)? = null,
     /** 模型服务是否已配置齐（地址、密钥、模型名） */
     private val isConfigured: () -> Boolean,
     private val meetingDir: File,
@@ -79,7 +84,12 @@ class MinutesViewModel(
         job = viewModelScope.launch(io) {
             try {
                 _state.value = MinutesUiState.Generating
-                val file = serviceFactory().generate(transcript, meetingDir)
+                val service = serviceFactory()
+                val file = service.generate(
+                    transcript,
+                    meetingDir,
+                    saveFinal = saveMinutes ?: { text -> service.write(meetingDir, text); Unit },
+                )
                 _state.value = MinutesUiState.Done(file)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _state.value = MinutesUiState.Idle

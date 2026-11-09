@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.components.PillTabs
@@ -98,6 +99,9 @@ fun DetailScreen(
     onSaveMinutes: (String) -> Unit = {},
     onExportSrt: () -> Unit = {},
     history: List<io.github.tancheng33.tingo.engine.MinutesVersionInfo> = emptyList(),
+    /** 正在查看的历史版本全文；非空时盖一层只读面板 */
+    preview: VersionPreview? = null,
+    onClosePreview: () -> Unit = {},
     onOpenVersion: (String) -> Unit = {},
     onRestoreVersion: (String) -> Unit = {},
     onDeleteVersion: (String) -> Unit = {},
@@ -237,6 +241,13 @@ fun DetailScreen(
                             editOpen = false
                             onSaveMinutes(text)
                         },
+                    )
+                }
+                if (preview != null) {
+                    VersionPreviewDialog(
+                        preview = preview,
+                        onClose = onClosePreview,
+                        onRestore = { onRestoreVersion(preview.id) },
                     )
                 }
                 if (historyOpen) {
@@ -778,17 +789,17 @@ private fun HistorySheet(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .semantics { contentDescription = version.id },
+                                .padding(vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            val savedAt = remember(version.id) { formatSavedAt(version.savedAt) }
                             Text(
-                                text = formatSavedAt(version.savedAt),
+                                text = savedAt,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = colors.text,
                             )
                             Text(
-                                text = version.preview.replace('\n', ' ').take(120),
+                                text = version.preview.replace('\n', ' '),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.muted,
                                 maxLines = 2,
@@ -801,8 +812,19 @@ private fun HistorySheet(
                                 TextButton(onClick = { onRestore(version.id) }) {
                                     Text(stringResource(R.string.detail_history_restore), color = colors.blue)
                                 }
-                                TextButton(onClick = { onDelete(version.id) }) {
-                                    Text(stringResource(R.string.library_delete), color = colors.red)
+                                // 删除后无法恢复：第一次点变成"再点一次"，与桌面一致
+                                var confirming by remember(version.id) { mutableStateOf(false) }
+                                TextButton(
+                                    onClick = {
+                                        if (confirming) onDelete(version.id) else confirming = true
+                                    },
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            if (confirming) R.string.detail_history_delete_confirm else R.string.library_delete,
+                                        ),
+                                        color = colors.red,
+                                    )
                                 }
                             }
                         }
@@ -822,4 +844,41 @@ private fun formatSavedAt(millis: ULong): String {
     val fmt = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
     fmt.timeZone = zone
     return fmt.format(java.util.Date(millis.toLong()))
+}
+
+/** 历史版本的只读预览：能看全文，也能直接恢复成当前版本。 */
+@Composable
+private fun VersionPreviewDialog(
+    preview: VersionPreview,
+    onClose: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    val colors = TingoTheme.colors
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = colors.card,
+        title = { Text(stringResource(R.string.detail_history_preview_title), color = colors.text) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = preview.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.text,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onRestore) {
+                Text(stringResource(R.string.detail_history_restore), color = colors.blue)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onClose) { Text(stringResource(R.string.action_close), color = colors.muted) }
+        },
+    )
 }

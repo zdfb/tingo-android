@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import io.github.tancheng33.tingo.data.MeetingCard
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -50,6 +54,15 @@ import io.github.tancheng33.tingo.ui.clockOf
  * 权限在这里请求而不是在启动时一次性要：只在用户真的要录音时才打扰他，
  * 拒绝之后仍然可以浏览会议库。
  */
+/**
+ * 首页底部的一行状态：对应桌面侧栏的环境块。
+ *
+ * @param level 决定圆点颜色；[StatusLevel.None] 表示正常
+ */
+data class HomeStatus(val label: String, val level: StatusLevel = StatusLevel.None)
+
+enum class StatusLevel { None, Warn, Bad }
+
 @Composable
 fun RecordScreen(
     state: RecordUiState,
@@ -66,6 +79,11 @@ fun RecordScreen(
     systemAudioMissing: Boolean = false,
     /** 用户拒绝了屏幕录制授权 */
     systemAudioDenied: Boolean = false,
+    /** 最近几场会议：桌面端侧栏的"最近"在手机上落在录制页下方 */
+    recent: List<MeetingCard> = emptyList(),
+    onOpenRecent: (String) -> Unit = {},
+    /** 底部状态行：识别模型、纪要服务、版本，对应桌面侧栏的环境块 */
+    statusRows: List<HomeStatus> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -124,6 +142,7 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
 
                 is RecordUiState.Recording -> Column(
@@ -204,6 +223,7 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
             }
         }
@@ -321,5 +341,83 @@ private fun LevelBar(level: Float) {
                 .fillMaxWidth(level.coerceIn(0f, 1f))
                 .background(colors.blue, TingoDimens.pillShape),
         )
+    }
+}
+
+/**
+ * 首页的"最近"与状态行。
+ *
+ * 桌面端这两块在侧栏（"最近"列表 + 环境块）；手机没有侧栏，放在录制按钮下方，
+ * 顺手能给"上一次会议在哪"和"现在能不能生成纪要"一个一眼可见的答案。
+ */
+@Composable
+private fun RecentAndStatus(
+    recent: List<MeetingCard>,
+    statusRows: List<HomeStatus>,
+    onOpenRecent: (String) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    if (recent.isNotEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(R.string.home_recent),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.muted,
+            )
+            recent.forEach { card ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.card, TingoDimens.cardShape)
+                        .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
+                        .clickable { onOpenRecent(card.id) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = card.title.ifBlank { card.id },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.text,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = listOfNotNull(card.date.takeIf { it.isNotBlank() }, card.time.takeIf { it.isNotBlank() })
+                                .joinToString(" "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.muted,
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (statusRows.isNotEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            statusRows.forEach { row ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (row.level) {
+                                    StatusLevel.None -> colors.green
+                                    StatusLevel.Warn -> colors.amber
+                                    StatusLevel.Bad -> colors.red
+                                },
+                            ),
+                    )
+                    Text(row.label, style = MaterialTheme.typography.labelSmall, color = colors.muted)
+                }
+            }
+        }
     }
 }

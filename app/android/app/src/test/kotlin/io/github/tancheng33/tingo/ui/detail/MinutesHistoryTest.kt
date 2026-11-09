@@ -65,7 +65,30 @@ class MinutesHistoryTest {
         }
     }
 
-    private val version = MinutesVersionInfo(id = "1-2", savedAt = 1_700_000_000_000uL, preview = "旧版", chars = 4u)
+    private companion object {
+        /** 一份能通过自检的最小纪要。 */
+        val MINUTES = listOf(
+            "# 周会",
+            "",
+            "## 一句话总结",
+            "先修首屏。",
+            "",
+            "## 议题与讨论",
+            "- 首屏慢",
+            "",
+            "## 决议",
+            "- 先修首屏",
+            "",
+            "## 待办",
+            "- 林舟：本周内修完",
+            "",
+            "## 待定问题与风险",
+            "- 排期紧",
+            "",
+        ).joinToString("\n")
+    }
+
+    private val version = MinutesVersionInfo(id = "1-2", savedAt = 1_700_000_000_000uL, preview = "旧版")
 
     @Test
     fun openingAVersionLoadsItsFullText() = runTest(dispatcher) {
@@ -97,7 +120,7 @@ class MinutesHistoryTest {
     }
 
     @Test
-    fun deletingAVersionAsksTheEngineAndRefreshesTheList() = runTest(dispatcher) {
+    fun deletingAVersionAsksTheEngine() = runTest(dispatcher) {
         val engine = engine(listOf(version))
         val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
         advanceUntilIdle()
@@ -119,6 +142,46 @@ class MinutesHistoryTest {
 
         assertEquals("m", engine.saved.single().first)
         assertTrue(engine.saved.single().second.contains("改过的一版"))
+    }
+
+    @Test
+    fun regeneratingMinutesSavesThroughTheEngineSoHistorySurvives() = runTest(dispatcher) {
+        val engine = engine()
+        // 生成器只回一段 markdown；保存动作应当交给引擎（此前是直接写文件，旧版就丢了）
+        val service = io.github.tancheng33.tingo.minutes.MinutesService(
+            generator = object : io.github.tancheng33.tingo.minutes.MinutesGenerator {
+                override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String {
+                    onToken("# 周会")
+                    // 必须凑齐纪要模板要求的章节，否则会走"校验不过 → 重试 → 抛异常"那条路
+                    return MINUTES
+                }
+            },
+        )
+        val dir = kotlin.io.path.createTempDirectory("minutes").toFile()
+        val vm = MinutesViewModel(
+            serviceFactory = { service },
+            isConfigured = { true },
+            meetingDir = dir,
+            saveMinutes = { text -> engine.saveMinutes("m", text) },
+            io = dispatcher,
+        )
+        // 有转写才允许生成
+        io.github.tancheng33.tingo.transcription.TranscriptWriter.write(
+            dir,
+            io.github.tancheng33.tingo.transcription.Transcript(
+                source = "录音.wav",
+                durationMs = 3000L,
+                sentences = listOf(
+                    io.github.tancheng33.tingo.transcription.TranscriptSentence(0, 0L, 3000L, "先修首屏"),
+                ),
+            ),
+        )
+        advanceUntilIdle()
+
+        vm.start()
+        advanceUntilIdle()
+
+        assertTrue("生成后应经引擎保存：${engine.saved}", engine.saved.any { it.first == "m" })
     }
 
     @Test

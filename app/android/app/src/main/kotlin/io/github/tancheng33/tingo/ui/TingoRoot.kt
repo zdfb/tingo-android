@@ -3,6 +3,8 @@ package io.github.tancheng33.tingo.ui
 import android.app.Activity
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import io.github.tancheng33.tingo.ui.record.HomeStatus
+import io.github.tancheng33.tingo.ui.record.StatusLevel
 import io.github.tancheng33.tingo.ui.record.RecordUiState
 import java.io.File
 
@@ -75,7 +77,9 @@ import io.github.tancheng33.tingo.ui.detail.MinutesUiState
 import io.github.tancheng33.tingo.ui.detail.TranscriptionUiState
 import io.github.tancheng33.tingo.data.MeetingExporter
 import io.github.tancheng33.tingo.AppContainer
+import io.github.tancheng33.tingo.BuildConfig
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.minutes.remote.LlmChat
@@ -288,6 +292,12 @@ fun TingoRoot(
         ) {
             composable(TopDestination.RECORD.route) {
                 RecordRoute(
+                    recent = (libraryState as? LibraryUiState.Content)
+                        ?.items
+                        ?.filter { !it.archived }
+                        ?.take(3)
+                        .orEmpty(),
+                    statusRows = homeStatusRows(container),
                     state = recordState,
                     systemAudioStatus = recordSystemAudioStatus,
                     systemAudioEnabled = systemAudioEnabled,
@@ -460,14 +470,14 @@ fun TingoRoot(
 }
 
 /** 用系统分享面板把导出的文件交给别的应用；FileProvider 只授权 cache/exports。 */
-private fun shareFile(context: android.content.Context, file: File) {
+private fun shareFile(context: android.content.Context, file: File, mime: String = "text/markdown") {
     val uri = androidx.core.content.FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
         file,
     )
     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "text/markdown"
+        type = mime
         putExtra(android.content.Intent.EXTRA_STREAM, uri)
         putExtra(android.content.Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -477,8 +487,31 @@ private fun shareFile(context: android.content.Context, file: File) {
     )
 }
 
+/** 首页底部的状态行：识别模型、纪要服务、版本（对应桌面侧栏的环境块）。 */
+private fun homeStatusRows(container: AppContainer): List<HomeStatus> {
+    val modelsReady = container.catalog.files.all { container.models.isReady(it) }
+    val llm = container.settings.llm
+    return listOf(
+        HomeStatus(
+            label = if (modelsReady) {
+                "识别模型已就绪"
+            } else {
+                "识别模型未就位"
+            },
+            level = if (modelsReady) StatusLevel.None else StatusLevel.Warn,
+        ),
+        HomeStatus(
+            label = if (llm.isConfigured) llm.model else "未配置纪要服务",
+            level = if (llm.isConfigured) StatusLevel.None else StatusLevel.Bad,
+        ),
+        HomeStatus(label = "v${BuildConfig.VERSION_NAME}"),
+    )
+}
+
 @Composable
 private fun RecordRoute(
+    recent: List<MeetingCard>,
+    statusRows: List<HomeStatus>,
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
     systemAudioStatus: RecordViewModel.SystemAudioStatus,
@@ -493,6 +526,9 @@ private fun RecordRoute(
 ) {
     RecordScreen(
         state = state,
+        recent = recent,
+        statusRows = statusRows,
+        onOpenRecent = onOpenMeeting,
         onStart = onStart,
         systemAudioEnabled = systemAudioEnabled,
         onSystemAudioChange = onSystemAudioChange,
@@ -521,6 +557,10 @@ private fun DetailRoute(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
+    // 界面语言：转写里的"说话人N/Speaker N"、SRT 字幕都要跟界面一致。
+    // 用应用设置里的语言，而不是系统语言——两者可以不同（设置页能单独切）。
+    // 引擎只认 "zh"/"en"，设置里存的是 "zh-CN"/"en"
+    val uiLang = if (container.settings.language == io.github.tancheng33.tingo.settings.AppLanguage.EN) "en" else "zh"
     // 归档 zip 的标题在"点导出"那一刻才知道（标题来自纪要），用持有者跨过 launcher 的声明顺序
     val pendingBundleTitle = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
 
@@ -610,6 +650,8 @@ private fun DetailRoute(
                     },
                     isConfigured = { container.settings.llm.isConfigured },
                     meetingDir = meetingDir,
+                    // 重新生成也要把上一版归档：与手工编辑走同一条保存路径
+                    saveMinutes = { text -> container.engine.saveMinutes(meetingId, text) },
                 )
             }
         },
@@ -661,9 +703,7 @@ private fun DetailRoute(
             onRenameSpeaker = viewModel::renameSpeaker,
             onApplyGuess = viewModel::applyGuess,
             // 界面语言跟着系统走：提示词里的"说话人N"要和界面一致
-            onGuessSpeakers = {
-                viewModel.guessSpeakers(if (java.util.Locale.getDefault().language == "en") "en" else "zh")
-            },
+            onGuessSpeakers = { viewModel.guessSpeakers(uiLang) },
             onRename = { title ->
                 viewModel.rename(title)
                 onChanged()
@@ -673,6 +713,8 @@ private fun DetailRoute(
                 onChanged()
             },
             history = state.history,
+            preview = state.preview,
+            onClosePreview = viewModel::closePreview,
             onSaveMinutes = viewModel::saveMinutes,
             onOpenVersion = viewModel::openVersion,
             onRestoreVersion = viewModel::restoreVersion,
@@ -680,10 +722,7 @@ private fun DetailRoute(
             onExportSrt = {
                 exportScope.launch {
                     // 导出是引擎写的文件（命名与桌面一致），这里只负责把文件分享出去
-                    // 界面语言：转写里的"说话人N/Speaker N"要跟界面一致
-                    val path = viewModel.exportSrt(
-                        if (java.util.Locale.getDefault().language == "en") "en" else "zh",
-                    )
+                    val path = viewModel.exportSrt(uiLang)
                     if (path != null) shareFile(context, File(path))
                 }
             },

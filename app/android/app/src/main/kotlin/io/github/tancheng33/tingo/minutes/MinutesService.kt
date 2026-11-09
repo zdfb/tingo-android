@@ -28,7 +28,19 @@ class MinutesService(
     /**
      * @return 写好的 `纪要.md`
      */
-    suspend fun generate(transcript: Transcript, meetingDir: File, onToken: (String) -> Unit = {}): File {
+    suspend fun generate(
+        transcript: Transcript,
+        meetingDir: File,
+        onToken: (String) -> Unit = {},
+        /**
+         * 最终纪要怎么写。
+         *
+         * 默认直接覆盖文件；Android 侧传的是"经引擎保存"——引擎会先把上一版归档进
+         * `minutes-history`。重新生成必须走这条路，否则再生成一次就把之前那版悄悄抹掉了，
+         * 而历史版本存在的意义就是能退回去。
+         */
+        saveFinal: (String) -> Unit = { write(meetingDir, it) },
+    ): File {
         require(transcript.sentences.isNotEmpty()) { "没有转写内容，无法生成纪要" }
 
         val prompt = MinutesPrompt.build(transcript)
@@ -45,7 +57,8 @@ class MinutesService(
             throw MinutesRejected(problems, draft)
         }
 
-        return write(meetingDir, markdown)
+        saveFinal(markdown)
+        return File(meetingDir, FILE_NAME)
     }
 
     /** 先写临时文件再改名：被系统杀掉时不会留下半截纪要。 */

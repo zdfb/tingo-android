@@ -14,6 +14,27 @@ use crate::transcript::{fmt_ts, Transcript};
 
 pub const AUDIO: &str = "录音.m4a";
 
+/// 导出文件名的主干：纪要标题优先，其次会议主题（`日期_时间_主题` 里的主题部分）。
+///
+/// 桌面写 SRT/Word 与 Android 导出 SRT 都用它——各写一份必然漂移。
+pub fn export_stem(dir: &Path, id: &str) -> String {
+    let minutes = std::fs::read_to_string(dir.join(MINUTES)).unwrap_or_default();
+    let topic = id.splitn(3, '_').nth(2).unwrap_or(id);
+    let name = safe_name(&minutes_title(&minutes).unwrap_or_else(|| topic.to_string()));
+    if name.is_empty() {
+        safe_name(topic)
+    } else {
+        name
+    }
+}
+
+/// 纪要写盘时的统一收尾：去掉尾部空白，末尾留一个换行。
+///
+/// 模型生成与手工编辑走同一个函数，否则"保存后 diff 多一行"这种事会反复出现。
+pub fn minutes_with_trailing_newline(text: &str) -> String {
+    format!("{}\n", text.trim_end())
+}
+
 /// 文件名里不能出现的字符（Obsidian 链接也不认 # ^ [ ] |）。
 ///
 /// 导出 SRT / 笔记时用；放在这里而不是 obsidian 模块，是因为两个平台都要用。
