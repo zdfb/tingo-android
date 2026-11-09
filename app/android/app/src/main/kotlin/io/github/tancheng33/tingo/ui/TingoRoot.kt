@@ -488,7 +488,7 @@ private fun shareFile(context: android.content.Context, file: File, mime: String
 }
 
 /** 首页底部的状态行：识别模型、纪要服务、版本（对应桌面侧栏的环境块）。 */
-private fun homeStatusRows(container: AppContainer): List<HomeStatus> {
+internal fun homeStatusRows(container: AppContainer): List<HomeStatus> {
     val modelsReady = container.catalog.files.all { container.models.isReady(it) }
     val llm = container.settings.llm
     return listOf(
@@ -559,8 +559,7 @@ private fun DetailRoute(
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
     // 界面语言：转写里的"说话人N/Speaker N"、SRT 字幕都要跟界面一致。
     // 用应用设置里的语言，而不是系统语言——两者可以不同（设置页能单独切）。
-    // 引擎只认 "zh"/"en"，设置里存的是 "zh-CN"/"en"
-    val uiLang = if (container.settings.language == io.github.tancheng33.tingo.settings.AppLanguage.EN) "en" else "zh"
+    val uiLang = container.uiLanguage()
     // 归档 zip 的标题在"点导出"那一刻才知道（标题来自纪要），用持有者跨过 launcher 的声明顺序
     val pendingBundleTitle = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
 

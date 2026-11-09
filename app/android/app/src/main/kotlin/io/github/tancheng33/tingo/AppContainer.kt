@@ -14,6 +14,7 @@ import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.recording.InterruptedRecordings
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.models.UrlFetcher
+import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.settings.SharedPrefsStore
 import io.github.tancheng33.tingo.models.AssetModelBundle
@@ -87,6 +88,14 @@ class AppContainer(context: Context) {
             return asrOk
         }
     }
+
+    /**
+     * 引擎认的语言标识：`zh` / `en`。
+     *
+     * 引擎只认这两个值，而设置里存的是 `zh-CN` / `en`；界面与导出都要用同一个判断，
+     * 否则会出现"界面英文、字幕中文"。
+     */
+    fun uiLanguage(): String = if (settings.language == AppLanguage.EN) "en" else "zh"
 
     /** 启动时在后台解包内置模型；不阻塞首帧。 */
     fun installBundledModelsOnStart() {
