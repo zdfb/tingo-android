@@ -6,6 +6,7 @@
 //! 边界刻意保持窄：ASR 在 Android 上由 Kotlin 侧承担，因此这里不引入 sherpa 相关模块。
 
 use std::panic::{self, AssertUnwindSafe};
+use chrono::TimeZone;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -227,6 +228,17 @@ pub struct TrashItem {
 
 
 
+
+
+/// 毫秒时间戳 → 本地时间；0 表示"不知道，用现在"。
+fn millis_to_naive(ms: i64) -> chrono::NaiveDateTime {
+    if ms <= 0 {
+        return chrono::Local::now().naive_local();
+    }
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|d| d.with_timezone(&chrono::Local).naive_local())
+        .unwrap_or_else(|| chrono::Local::now().naive_local())
+}
 
 /// 热词归一化：去空白、去重、限数。空表是合法的（用户清空）。
 fn normalize_hotwords(words: Vec<String>) -> Vec<String> {
@@ -678,6 +690,46 @@ impl TingoEngine {
             // 读的时候也归一化：手改过的 config 可能塞进远超上限的词，不能让提示词被它撑爆
             let words = normalize_hotwords(tingo_engine::config::load(&path).hotwords);
             Ok(tingo_engine::summarize::glossary_sentence(&words, lang))
+        })
+    }
+
+
+    /// 把一段已经在本机解码好的 wav 导入会议库：建会议文件夹、写 `录音.wav`，返回会议 id。
+    ///
+    /// 桌面端是浏览器上传原文件、引擎自己调 `afconvert` 解码；手机上解码由宿主用
+    /// `MediaCodec` 完成（引擎不带平台解码器），这里只负责"落成一场会议"。
+    pub fn import_audio(
+        &self,
+        wav_path: String,
+        title: String,
+        modified_ms: i64,
+    ) -> Result<String, EngineError> {
+        let source = PathBuf::from(&wav_path);
+        guard("import_audio", move || {
+            let bytes = std::fs::read(&source).map_err(|e| io_error(e, "import_audio"))?;
+            if bytes.is_empty() {
+                return Err(EngineError::InvalidInput {
+                    detail: "录音是空的".to_string(),
+                });
+            }
+            let when = millis_to_naive(modified_ms);
+            let stem = source
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("会议")
+                .to_string();
+            let wanted = if title.trim().is_empty() { stem } else { title.clone() };
+            let dir = tingo_engine::meetings::new_folder(&self.paths.meetings_root, &wanted, when);
+            std::fs::create_dir_all(&dir).map_err(|e| io_error(e, "import_audio"))?;
+            let id = dir
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .ok_or_else(|| EngineError::Internal {
+                    detail: "会议文件夹没有名字".to_string(),
+                })?;
+            // 文件名必须是 `录音.wav`：播放与转写都按这个名字找（与录制结束时合成的一致）
+            std::fs::write(dir.join("录音.wav"), bytes).map_err(|e| io_error(e, "import_audio"))?;
+            Ok(id)
         })
     }
 
@@ -1972,6 +2024,71 @@ mod tests {
         std::fs::write(&path, text).unwrap();
 
         assert_eq!(engine.hotwords().unwrap().len(), MAX_HOTWORDS);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 导入录音 ----
+
+    #[test]
+    fn import_creates_a_meeting_with_the_standard_audio_name() {
+        let root = temp_root("import");
+        let engine = TingoEngine::new(root.display().to_string());
+        let source = root.join("周会录音.wav").to_path_buf();
+        let fake = vec![0u8; 4_000];
+        std::fs::write(&source, &fake).unwrap();
+
+        let id = engine
+            .import_audio(source.to_string_lossy().into_owned(), "产品周会".to_string(), 0)
+            .unwrap();
+
+        assert!(id.contains("产品周会"), "会议名应取用户给的标题：{id}");
+        // 播放与转写都按 `录音.wav` 找音频，导入必须落成同一个名字
+        let audio = root.join("meetings").join(&id).join("录音.wav");
+        assert!(audio.is_file(), "缺录音.wav：{}", audio.display());
+        assert_eq!(std::fs::read(&audio).unwrap().len(), 4_000);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn import_uses_the_file_mtime_for_the_folder_name() {
+        let root = temp_root("import-mtime");
+        let engine = TingoEngine::new(root.display().to_string());
+        let source = root.join("旧录音.wav").to_path_buf();
+        std::fs::write(&source, vec![1u8; 1_000]).unwrap();
+        // 2026-11-05 14:30 本地时间
+        let ms = chrono::Local
+            .with_ymd_and_hms(2026, 11, 5, 14, 30, 0)
+            .unwrap()
+            .timestamp_millis();
+
+        let id = engine
+            .import_audio(source.to_string_lossy().into_owned(), String::new(), ms)
+            .unwrap();
+
+        // 导入的文件时间就是这场会议的时间：不能拿"今天"糊弄过去
+        assert!(id.starts_with("2026-11-05_1430_"), "实际：{id}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn empty_import_is_rejected() {
+        let root = temp_root("import-empty");
+        let engine = TingoEngine::new(root.display().to_string());
+        let source = root.join("空.wav").to_path_buf();
+        std::fs::write(&source, b"").unwrap();
+
+        let result = engine.import_audio(source.to_string_lossy().into_owned(), "空".to_string(), 0);
+        assert!(matches!(result, Err(EngineError::InvalidInput { .. })), "实际：{result:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn missing_import_source_is_missing_not_internal() {
+        let root = temp_root("import-missing");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.import_audio("/nonexistent/x.wav".to_string(), "x".to_string(), 0);
+        assert!(matches!(result, Err(EngineError::Missing { .. })), "实际：{result:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

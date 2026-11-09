@@ -32,7 +32,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 已有（命名与桌面一致，导出后走系统分享） | — |
 | 23 | 导出 PDF | `/api/meetings/{id}/pdf`（系统 WebKit 打印） | 已有（`PdfDocument` 排 A4） | 实现不同；**尚未画鱼骨图示意，也无品牌页眉页脚** |
 | 24 | 导出 Excalidraw（鱼骨图） | `/api/meetings/{id}/excalidraw` | 已有（复用引擎 `fishbone::excalidraw`，与桌面同一份） | — |
-| 25 | 导入音频 | `/api/import` | 无 | 缺 |
+| 25 | 导入音频 | `/api/import`（引擎调 macOS `afconvert` 解码） | 已有：系统选择器 → `MediaCodec` 解码成 16k 单声道 → 引擎落库 → 转写 | 解码器不同，链路一致 |
 | 26 | 内置示例会议 / 新手引导 | `/api/demo` + `welcome.ts` | 无 | 缺 |
 | 27 | 检查更新（校验安装包） | `update.rs` | 无（走应用商店，不迁移自更新） | 不做自更新 |
 | 28 | Obsidian 导出 | `/api/meetings/{id}/obsidian` | 无 | 缺（可后置） |
@@ -73,6 +73,11 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 顺序：先把首页（新会议）与会议库的视觉对齐，再统一弹层与提示，最后做导入与引导。
 
 已知差距（写在明处，不装作已经一致）：
+
+- 导入只接受音频/视频文件（十个扩展名，与桌面一致）；导入后库里存的是 16 kHz 单声道 wav，
+  原文件不进库（桌面保留原扩展名，解码在转写时发生）
+- 会议库位置不可切换：Android 的库固定在应用外部目录（可被"文件"App 看到），
+  桌面可以指向任意目录（#31 仍缺）
 
 - 导出仅覆盖"当前版本"，桌面还能导出某个历史版本（`?version=`）
 - Android 的 PDF只有文字排版，没有品牌页眉页脚，也没有鱼骨图示意（桌面用 HTML/CSS 画）

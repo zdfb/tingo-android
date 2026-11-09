@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +86,12 @@ fun RecordScreen(
     onOpenRecent: (String) -> Unit = {},
     /** 底部状态行：识别模型、纪要服务、版本，对应桌面侧栏的环境块 */
     statusRows: List<HomeStatus> = emptyList(),
+    /** 导入已有录音：桌面端是把文件拖进窗口，手机上是选文件 */
+    onPickAudio: () -> Unit = {},
+    /** 导入进度 0..1；null 表示没有在导入 */
+    importProgress: Float? = null,
+    /** 这一次导入失败了（解码不了、写盘失败等） */
+    importFailed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -142,6 +150,14 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    // 桌面端把音频拖进窗口就导入；手机上给一个明确的入口
+                    PillButton(
+                        label = stringResource(R.string.record_import),
+                        onClick = onPickAudio,
+                        kind = PillKind.Ghost,
+                        enabled = importProgress == null,
+                    )
+                    ImportStatus(progress = importProgress, failed = importFailed)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
 
@@ -223,6 +239,14 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
+                    // 桌面端把音频拖进窗口就导入；手机上给一个明确的入口
+                    PillButton(
+                        label = stringResource(R.string.record_import),
+                        onClick = onPickAudio,
+                        kind = PillKind.Ghost,
+                        enabled = importProgress == null,
+                    )
+                    ImportStatus(progress = importProgress, failed = importFailed)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
             }
@@ -284,6 +308,37 @@ private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (B
  *
  * @param emphasis true 表示这次录音确实少了东西（红字）；false 表示只是提醒（次要色）
  */
+/**
+ * 导入进度与结果。
+ *
+ * 一小时的录音解码加转写要几分钟，没有进度条用户会以为卡死了；
+ * 失败也要明说（格式不支持、文件损坏），不能只是按钮弹回来。
+ */
+@Composable
+private fun ImportStatus(progress: Float?, failed: Boolean) {
+    val colors = TingoTheme.colors
+    when {
+        progress != null -> Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.widthIn(max = 240.dp),
+        ) {
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            Text(
+                text = stringResource(R.string.record_import_progress, (progress * 100).toInt()),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.muted,
+            )
+        }
+
+        failed -> Text(
+            text = stringResource(R.string.record_import_failed),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.red,
+        )
+    }
+}
+
 @Composable
 private fun WarningLine(text: String, visible: Boolean, emphasis: Boolean) {
     if (!visible) return

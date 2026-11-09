@@ -175,6 +175,14 @@ class FakeEnginePort(
         return "/tmp/$id.srt"
     }
 
+    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): String {
+        importedAudio += Triple(wavPath, title, modifiedMs)
+        return "2026-11-07_1000_$title"
+    }
+
+    /** 导入过的录音（用例据此断言解码产物真的交到了引擎） */
+    val importedAudio = mutableListOf<Triple<String, String, Long>>()
+
     override fun hotwords(): List<String> = hotwordList
 
     override fun setHotwords(words: List<String>): List<String> {

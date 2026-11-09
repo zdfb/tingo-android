@@ -191,4 +191,8 @@
     <string name="settings_llm_models_fetch">Fetch model list</string>
     <string name="settings_llm_models_loading">Fetching…</string>
     <string name="settings_hotwords_failed">Could not save hotwords, please retry</string>
+    <string name="record_import">Import audio</string>
+    <string name="record_import_progress">Importing %1$d%</string>
+    <string name="record_import_failed">Could not import this file: unsupported or damaged</string>
+    <string name="record_import_unsupported">Audio files only (m4a, mp3, wav, mp4, aac, flac, ogg, webm, mov, mkv)</string>
 </resources>

@@ -3,6 +3,7 @@ package io.github.tancheng33.tingo.ui.record
 import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
+import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
@@ -48,6 +49,8 @@ class RecordViewModel(
     private val clock: () -> Long = System::currentTimeMillis,
     /** 收尾时把前台服务一起停掉；由界面注入（ViewModel 不该自己拿 Context） */
     private val stopService: () -> Unit = {},
+    /** 导入已有录音；null 表示这个构建不支持（测试里多数用例不关心） */
+    private val importing: AudioImport? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
      * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
@@ -75,6 +78,50 @@ class RecordViewModel(
     val systemAudioStatus: StateFlow<SystemAudioStatus> = _systemAudioStatus.asStateFlow()
 
 
+
+    /**
+     * 导入任务的状态。
+     *
+     * 单独一条流而不是并进 [RecordUiState]：导入与录音是两条互不干扰的路径，
+     * 混进同一个状态机只会让"正在录音时能不能导入"这种问题变成一堆分支。
+     */
+    data class ImportState(
+        val progress: Float? = null,
+        val failed: Boolean = false,
+        val meetingId: String? = null,
+    )
+
+    private val _import = MutableStateFlow(ImportState())
+    val import: StateFlow<ImportState> = _import.asStateFlow()
+
+    /**
+     * 导入一段录音：解码 → 落成会议 → 转写。
+     *
+     * @param modifiedMs 文件修改时间（当作会议时间）；0 用现在
+     */
+    fun importAudio(source: File, title: String, modifiedMs: Long) {
+        val importer = importing ?: return
+        if (_import.value.progress != null) return // 已经在导入：不叠第二个
+        viewModelScope.launch(io) {
+            _import.value = ImportState(progress = 0f)
+            try {
+                val id = importer.run(source, title, modifiedMs) { fraction ->
+                    _import.value = ImportState(progress = fraction)
+                }
+                _import.value = ImportState(progress = null, meetingId = id)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _import.value = ImportState()
+                throw e
+            } catch (e: Exception) {
+                _import.value = ImportState(failed = true)
+            }
+        }
+    }
+
+    /** 界面拿走"导入完成"的信号后清掉，避免重复跳转。 */
+    fun consumeImported() {
+        _import.value = _import.value.copy(meetingId = null)
+    }
 
     private var currentDir: File? = null
     private var systemAudio: SystemAudioTrack? = null

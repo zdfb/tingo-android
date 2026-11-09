@@ -182,14 +182,32 @@ fun TingoRoot(
                     capture = MicRecorder(),
                     meetingsRoot = File(container.dataRoot, "meetings"),
                     stopService = { RecordingService.stop(recordContext) },
+                    // 导入与录音共用同一台引擎与同一条转写流水线
+                    importing = io.github.tancheng33.tingo.importing.AudioImport(
+                        engine = container.engine,
+                        transcriber = TranscriptionPipeline(container.models, container.catalog),
+                        cacheDir = File(recordContext.cacheDir, "imports").apply { mkdirs() },
+                    ),
                 )
             }
         },
     )
     val recordState by recordViewModel.state.collectAsStateWithLifecycle()
+    val importState by recordViewModel.import.collectAsStateWithLifecycle()
     val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
+    // 选文件走系统选择器（不开 SAF 持久授权：我们只读一次，马上解码进库）
+    val pickAudio = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val copied = copyPickedAudio(recordContext, uri)
+            if (copied != null) {
+                recordViewModel.importAudio(copied.file, copied.title, copied.modifiedMs)
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         RecordingKeepAlive.onServiceDestroyed = { recordViewModel.onInterrupted() }
@@ -286,6 +304,14 @@ fun TingoRoot(
         val onOpenMeeting: (String) -> Unit = { id ->
             if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
         }
+    // 导入完成就进那场会议的详情（与录音结束后的行为一致）
+    androidx.compose.runtime.LaunchedEffect(importState.meetingId) {
+        val id = importState.meetingId
+        if (id != null) {
+            recordViewModel.consumeImported()
+            onOpenMeeting(id)
+        }
+    }
 
         NavHost(
             navController = navController,
@@ -302,6 +328,14 @@ fun TingoRoot(
                         .orEmpty(),
                     statusRows = homeStatusRows(container),
                     state = recordState,
+                    importProgress = importState.progress,
+                    importFailed = importState.failed,
+                    onPickAudio = {
+                        val error = runCatching {
+                            pickAudio.launch(arrayOf("audio/*", "video/mp4", "video/x-matroska", "video/webm"))
+                        }.exceptionOrNull()
+                        if (error != null) pickAudio.launch(arrayOf("*/*"))
+                    },
                     systemAudioStatus = recordSystemAudioStatus,
                     systemAudioEnabled = systemAudioEnabled,
                     systemAudioDenied = systemAudioDenied,
@@ -546,6 +580,9 @@ private fun RecordRoute(
     statusRows: List<HomeStatus>,
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
+    importProgress: Float?,
+    importFailed: Boolean,
+    onPickAudio: () -> Unit,
     systemAudioStatus: RecordViewModel.SystemAudioStatus,
     systemAudioEnabled: Boolean,
     systemAudioDenied: Boolean,
@@ -571,8 +608,41 @@ private fun RecordRoute(
         onStop = onStop,
         onDiscard = onDiscard,
         onOpenMeeting = onOpenMeeting,
+        onPickAudio = onPickAudio,
+        importProgress = importProgress,
+        importFailed = importFailed,
     )
 }
+
+/** 选中的音频文件拷贝结果：文件本身 + 用来起名的标题 + 文件时间。 */
+private class PickedAudio(val file: File, val title: String, val modifiedMs: Long)
+
+/**
+ * 把用户选中的文件拷到缓存目录，并取回文件名与修改时间。
+ *
+ * 直接拿 content:// 去解码不行——`MediaExtractor` 支持 fd，但引擎要的是路径，
+ * 而"导入"本来就要连内容一起进库，所以先落成一份临时文件更直接。
+ */
+private fun copyPickedAudio(context: android.content.Context, uri: android.net.Uri): PickedAudio? {
+    val name = displayNameOf(context, uri) ?: "导入录音.m4a"
+    if (!io.github.tancheng33.tingo.importing.AudioDecoder.supports(name)) return null
+    val target = File(File(context.cacheDir, "picked").apply { mkdirs() }, name)
+    val copied = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: return null
+    }.getOrNull() ?: return null
+    return PickedAudio(target, io.github.tancheng33.tingo.importing.AudioDecoder.titleOf(name), copied)
+}
+
+/** 选择器给的显示名；取不到就返回 null。 */
+private fun displayNameOf(context: android.content.Context, uri: android.net.Uri): String? =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+    }.getOrNull()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

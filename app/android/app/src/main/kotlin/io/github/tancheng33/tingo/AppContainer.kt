@@ -197,6 +197,8 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun setHotwords(words: List<String>): Nothing = fail()
 
+    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): Nothing = fail()
+
     override fun minutesGlossary(language: String): String = ""
 
     override fun capabilities(): Capabilities =

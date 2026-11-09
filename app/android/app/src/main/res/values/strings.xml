@@ -191,4 +191,8 @@
     <string name="settings_llm_models_fetch">拉取模型列表</string>
     <string name="settings_llm_models_loading">正在拉取…</string>
     <string name="settings_hotwords_failed">热词没保存成功，请重试</string>
+    <string name="record_import">导入录音</string>
+    <string name="record_import_progress">正在导入 %1$d%</string>
+    <string name="record_import_failed">这个文件导入不了：格式不支持或已损坏</string>
+    <string name="record_import_unsupported">只支持音频文件（m4a、mp3、wav、mp4、aac、flac、ogg、webm、mov、mkv）</string>
 </resources>
