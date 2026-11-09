@@ -34,7 +34,7 @@ class SettingsHotwordsTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(port: HotwordsPort) = SettingsViewModel(
-        store = ModelStore(File(System.getProperty("java.io.tmpdir"), "models-test").apply { mkdirs() }, UrlFetcher()),
+        store = ModelStore(java.nio.file.Files.createTempDirectory("tingo-models").toFile(), UrlFetcher()),
         catalog = ModelCatalog(emptyList()),
         settings = AppSettings(object : io.github.tancheng33.tingo.settings.KeyValueStore {
             private val values = mutableMapOf<String, String>()
@@ -44,8 +44,15 @@ class SettingsHotwordsTest {
             }
         }),
         hotwordsPort = port,
-        meetingsRoot = File(System.getProperty("java.io.tmpdir"), "meetings-test").apply { mkdirs() },
+        meetingsRoot = java.nio.file.Files.createTempDirectory("tingo-meetings").toFile(),
         io = dispatcher,
+    )
+
+    /** 表单里正在填的配置：地址填了、模型名还没填——这正是"拉取"要服务的场景。 */
+    private fun draft() = io.github.tancheng33.tingo.settings.LlmConfig(
+        baseUrl = "https://api.example.com/v1",
+        apiKey = "",
+        model = "",
     )
 
     private class FakePort(
@@ -62,7 +69,12 @@ class SettingsHotwordsTest {
             return words
         }
 
-        override suspend fun listModels(): List<String> = models()
+        var askedWith: io.github.tancheng33.tingo.settings.LlmConfig? = null
+
+        override suspend fun listModels(config: io.github.tancheng33.tingo.settings.LlmConfig): List<String> {
+            askedWith = config
+            return models()
+        }
     }
 
     @Test
@@ -88,11 +100,43 @@ class SettingsHotwordsTest {
     }
 
     @Test
+    fun saveFailureIsSurfacedInsteadOfPretendingItWorked() = runTest(dispatcher) {
+        val port = object : HotwordsPort {
+            override suspend fun load(): List<String> = listOf("旧词")
+            override suspend fun save(words: List<String>): List<String> = error("磁盘满了")
+            override suspend fun listModels(config: io.github.tancheng33.tingo.settings.LlmConfig) = emptyList<String>()
+        }
+        val vm = viewModel(port)
+        advanceUntilIdle()
+
+        vm.saveHotwords(listOf("新词"))
+        advanceUntilIdle()
+
+        val state = vm.state.value
+        assertTrue("保存失败要能被界面看见", state.hotwordsFailed)
+        // 词表保持原样：没写进去的东西不能显示成已生效
+        assertEquals(listOf("旧词"), state.hotwords)
+    }
+
+    @Test
+    fun fetchUsesTheDraftConfigNotTheSavedOne() = runTest(dispatcher) {
+        val port = FakePort(models = { listOf("m1") })
+        val vm = viewModel(port)
+        advanceUntilIdle()
+
+        vm.fetchModels(draft())
+        advanceUntilIdle()
+
+        assertEquals("https://api.example.com/v1", port.askedWith?.baseUrl)
+        assertEquals("", port.askedWith?.model)
+    }
+
+    @Test
     fun modelListShowsWhatTheServiceReturned() = runTest(dispatcher) {
         val vm = viewModel(FakePort(models = { listOf("deepseek-chat", "deepseek-reasoner") }))
         advanceUntilIdle()
 
-        vm.fetchModels()
+        vm.fetchModels(draft())
         advanceUntilIdle()
 
         val state = vm.state.value.models as ModelListState.Ready
@@ -104,7 +148,7 @@ class SettingsHotwordsTest {
         val vm = viewModel(FakePort(models = { throw IllegalStateException("（HTTP 401）invalid api key") }))
         advanceUntilIdle()
 
-        vm.fetchModels()
+        vm.fetchModels(draft())
         advanceUntilIdle()
 
         val failed = vm.state.value.models as ModelListState.Failed

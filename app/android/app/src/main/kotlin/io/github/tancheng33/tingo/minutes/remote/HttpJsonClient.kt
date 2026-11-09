@@ -13,6 +13,9 @@ import java.net.URL
 interface HttpJsonClient {
     fun post(url: String, headers: Map<String, String>, body: String): String
 
+    /** 拉取模型列表是 GET；服务端对 POST /models 一般只回 405。 */
+    fun get(url: String, headers: Map<String, String>): String
+
     /** 服务端明确拒绝：状态码 + 响应正文（正文里通常有能直接给用户看的原因）。 */
     class HttpFailure(val code: Int, val body: String) : Exception("HTTP $code")
 
@@ -31,22 +34,32 @@ class UrlHttpJsonClient(
     private val readTimeoutMs: Int = 120_000,
 ) : HttpJsonClient {
 
-    override fun post(url: String, headers: Map<String, String>, body: String): String {
+    override fun post(url: String, headers: Map<String, String>, body: String): String =
+        send("POST", url, headers, body)
+
+    override fun get(url: String, headers: Map<String, String>): String = send("GET", url, headers, null)
+
+    private fun send(method: String, url: String, headers: Map<String, String>, body: String?): String {
         val connection = try {
             (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
+                requestMethod = method
                 connectTimeout = connectTimeoutMs
                 readTimeout = readTimeoutMs
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
                 headers.forEach { (name, value) -> setRequestProperty(name, value) }
+                if (body != null) {
+                    doOutput = true
+                    if (getRequestProperty("Content-Type") == null) {
+                        setRequestProperty("Content-Type", "application/json")
+                    }
+                }
             }
         } catch (e: IOException) {
             throw HttpJsonClient.Unreachable("连接 $url 失败：${e.message}", e)
         }
 
         try {
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            if (body != null) connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""

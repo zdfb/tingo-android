@@ -18,11 +18,17 @@ class LlmCatalogTest {
         var url: String? = null
         var headers: Map<String, String> = emptyMap()
 
-        override fun post(url: String, headers: Map<String, String>, body: String): String {
+        var method: String? = null
+
+        override fun get(url: String, headers: Map<String, String>): String {
             this.url = url
             this.headers = headers
+            this.method = "GET"
             return reply()
         }
+
+        override fun post(url: String, headers: Map<String, String>, body: String): String =
+            throw AssertionError("拉取模型列表不该用 POST")
     }
 
     private val openai = LlmConfig(
@@ -41,7 +47,32 @@ class LlmCatalogTest {
         assertEquals(listOf("a-model", "b-model"), models)
         // baseUrl 已经带 /v1 时不能拼成 /v1/v1
         assertEquals("https://api.example.com/v1/models", client.url)
+        assertEquals("GET", client.method)
         assertEquals("Bearer sk-test", client.headers["Authorization"])
+    }
+
+    @Test
+    fun worksBeforeTheModelNameIsKnown() {
+        // 这个按钮存在的意义就是"还不知道有哪些模型"，所以没有模型名也要能拉
+        val client = FakeClient { """{"data":[{"id":"deepseek-chat"}]}""" }
+        val draft = openai.copy(model = "", apiKey = "")
+
+        val models = LlmCatalog(client).list(draft)
+
+        assertEquals(listOf("deepseek-chat"), models)
+        // 本地服务常常不校验密钥；空密钥给占位而不是 "Bearer "
+        assertEquals("Bearer none", client.headers["Authorization"])
+    }
+
+    @Test
+    fun anthropicAsksForAThousandModels() {
+        val client = FakeClient { """{"data":[{"id":"claude-x"}]}""" }
+        val config = openai.copy(protocol = LlmProtocol.ANTHROPIC, apiKey = "ak")
+
+        LlmCatalog(client).list(config)
+
+        // 默认一页只给 20 个，不显式要求会截断
+        assertTrue("Anthropic 要带 limit：${client.url}", client.url?.contains("limit=1000") == true)
     }
 
     @Test
@@ -59,8 +90,10 @@ class LlmCatalogTest {
     @Test
     fun rejectedRequestCarriesTheServiceReason() {
         val client = object : HttpJsonClient {
-            override fun post(url: String, headers: Map<String, String>, body: String): String =
+            override fun get(url: String, headers: Map<String, String>): String =
                 throw HttpJsonClient.HttpFailure(401, """{"error":{"message":"invalid api key"}}""")
+
+            override fun post(url: String, headers: Map<String, String>, body: String): String = ""
         }
 
         val failure = runCatching { LlmCatalog(client).list(openai) }.exceptionOrNull()
@@ -72,8 +105,10 @@ class LlmCatalogTest {
     @Test
     fun unreachableServiceIsNotReportedAsRejection() {
         val client = object : HttpJsonClient {
-            override fun post(url: String, headers: Map<String, String>, body: String): String =
+            override fun get(url: String, headers: Map<String, String>): String =
                 throw HttpJsonClient.Unreachable("timeout")
+
+            override fun post(url: String, headers: Map<String, String>, body: String): String = ""
         }
 
         val failure = runCatching { LlmCatalog(client).list(openai) }.exceptionOrNull()

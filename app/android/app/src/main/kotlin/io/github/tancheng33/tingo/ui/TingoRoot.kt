@@ -422,8 +422,11 @@ fun TingoRoot(
                                     override suspend fun save(words: List<String>): List<String> =
                                         container.engine.setHotwords(words)
 
-                                    override suspend fun listModels(): List<String> = LlmCatalog(UrlHttpJsonClient())
-                                        .list(container.settings.llm)
+                                    override suspend fun listModels(
+                                        config: io.github.tancheng33.tingo.settings.LlmConfig,
+                                    ): List<String> = withContext(Dispatchers.IO) {
+                                        LlmCatalog(UrlHttpJsonClient()).list(config)
+                                    }
                                 },
                                 meetingsRoot = File(container.dataRoot, "meetings"),
                                 installProgress = container.installProgress,
@@ -674,8 +677,9 @@ private fun DetailRoute(
                                 configProvider = { container.settings.llm },
                                 client = UrlHttpJsonClient(),
                             ),
-                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案
-                            glossary = { container.engine.minutesGlossary(uiLang) },
+                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案。
+                            // 提示词模板只有中文，所以这段恒取中文，不跟界面语言走。
+                            glossary = { container.engine.minutesGlossary("zh") },
                         )
                     },
                     isConfigured = { container.settings.llm.isConfigured },

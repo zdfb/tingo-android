@@ -190,4 +190,5 @@
     <string name="settings_hotwords_placeholder">e.g. Project Nova, Lin Zhou, Kafka</string>
     <string name="settings_llm_models_fetch">Fetch model list</string>
     <string name="settings_llm_models_loading">Fetching…</string>
+    <string name="settings_hotwords_failed">Could not save hotwords, please retry</string>
 </resources>

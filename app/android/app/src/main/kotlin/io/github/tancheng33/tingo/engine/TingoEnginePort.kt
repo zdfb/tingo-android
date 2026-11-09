@@ -121,7 +121,7 @@ interface TingoEnginePort {
     /** 保存热词；返回归一化后的结果（去空白、去重、限数）。 */
     fun setHotwords(words: List<String>): List<String>
 
-    /** 提示词里"专有名词"那一段；没有热词时为空串。 */
+    /** 提示词里"专有名词"那段句子（不带编号）；没有热词时为空串。 */
     fun minutesGlossary(language: String): String
 
     companion object {
@@ -211,7 +211,8 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun setHotwords(words: List<String>): List<String> = mapEngineCall { engine.setHotwords(words) }
 
-    override fun minutesGlossary(language: String): String = engine.minutesGlossary(language)
+    override fun minutesGlossary(language: String): String =
+        mapEngineCall { engine.minutesGlossary(language) }
 }
 
 /** 把生成的异常翻译成 [TingoFailure]；未识别的异常一律算内部错误。 */

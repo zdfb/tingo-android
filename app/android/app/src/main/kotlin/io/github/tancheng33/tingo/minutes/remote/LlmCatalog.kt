@@ -1,42 +1,30 @@
 package io.github.tancheng33.tingo.minutes.remote
 
 import io.github.tancheng33.tingo.settings.LlmConfig
-import io.github.tancheng33.tingo.settings.LlmProtocol
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * 拉取用户配置的模型服务上有哪些模型。
  *
- * 桌面设置页给了"从服务商拉模型列表"（`/api/llm/models`），用户不用手抄模型名；
- * 手机上手抄更难受，所以这一条必须在。
+ * 桌面设置页有"从服务商拉模型列表"，用户不用手抄模型名；手机上手抄更难受，所以这一条必须在。
+ * 地址与鉴权头复用 [LlmRequests]（与生成纪要走同一份拼装逻辑），失败原因照原话给用户看。
  *
- * OpenAI 兼容协议读 `GET {base}/v1/models` 的 `data[].id`；Anthropic 读 `GET {base}/v1/models`
- * 的 `data[].id`（同一形状），两者都要带各自的鉴权头。
+ * 注意：这里吃的是**表单里正在填的**配置，不要求已经能生成——这个按钮存在的意义
+ * 正是"还没配好模型名时，先问服务端有哪些"。所以只要求地址非空。
  */
 class LlmCatalog(private val client: HttpJsonClient) {
 
     /**
      * @throws LlmUnavailable 连不上服务
      * @throws LlmRejected 服务拒绝（密钥不对、没权限）
-     * @throws IllegalStateException 返回里没有可用的模型名
+     * @throws IllegalStateException 没填地址，或返回里没有可用的模型名
      */
     fun list(config: LlmConfig): List<String> {
-        require(config.isConfigured) { "尚未配置模型服务（地址、密钥、模型名都要填）" }
-        val base = config.baseUrl.trimEnd('/').removeSuffix("/v1")
-        val headers = when (config.protocol) {
-            LlmProtocol.OPENAI -> mapOf(
-                "Authorization" to "Bearer ${config.apiKey}",
-                "Content-Type" to "application/json",
-            )
-            LlmProtocol.ANTHROPIC -> mapOf(
-                "x-api-key" to config.apiKey,
-                "anthropic-version" to "2023-06-01",
-                "Content-Type" to "application/json",
-            )
-        }
+        require(config.baseUrl.isNotBlank()) { "还没填服务地址" }
+        val request = LlmRequests.modelsRequest(config)
         val body = try {
-            client.post("$base/v1/models", headers, "")
+            client.get(request.url, request.headers)
         } catch (e: HttpJsonClient.HttpFailure) {
             throw LlmRejected("（HTTP ${e.code}）${LlmRequests.parseError(e.body) ?: "服务端没有给出原因"}")
         } catch (e: HttpJsonClient.Unreachable) {
@@ -45,7 +33,7 @@ class LlmCatalog(private val client: HttpJsonClient) {
         return parse(body)
     }
 
-    /** 从响应里取模型名：按 `data[].id` 取，去空、去重、排序。 */
+    /** 从响应里取模型名：按 `data[].id` 取（两种协议同形），去空、去重、排序。 */
     fun parse(body: String): List<String> {
         val data: JSONArray = runCatching { JSONObject(body).optJSONArray("data") }.getOrNull()
             ?: error("服务端返回里没有 data 数组")

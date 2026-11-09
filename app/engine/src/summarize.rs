@@ -328,6 +328,19 @@ fn glossary(hotwords: &[String]) -> String {
 /// 桌面与 Android 都要在同一位置加同一段说明——两处各写一份必然漂移，
 /// 所以这段文案由引擎产出，宿主只负责拼进自己的提示词里。
 pub fn glossary_in(hotwords: &[String], lang: Lang) -> String {
+    let sentence = glossary_sentence(hotwords, lang);
+    if sentence.is_empty() {
+        return String::new();
+    }
+    // 桌面提示词里这段排在要求列表第 9 条
+    format!("\n9. {sentence}")
+}
+
+/// 同一段说明，但只有句子本身（不带编号）。
+///
+/// 宿主的提示词要求条目数量不同：桌面是 1–8 再加一条，Android 只有 1–5。
+/// 编号由宿主自己排，句子由这里产出，两边说的仍是同一句话。
+pub fn glossary_sentence(hotwords: &[String], lang: Lang) -> String {
     let words: Vec<&str> = hotwords
         .iter()
         .map(|w| w.trim())
@@ -338,12 +351,12 @@ pub fn glossary_in(hotwords: &[String], lang: Lang) -> String {
     }
     if lang.is_en() {
         return format!(
-            "\n9. Proper nouns in this meeting (people, projects, systems): {}. Wherever the transcript has a homophone or near-homophone of one of them, replace it with the exact term.",
+            "Proper nouns in this meeting (people, projects, systems): {}. Wherever the transcript has a homophone or near-homophone of one of them, replace it with the exact term.",
             words.join(", ")
         );
     }
     format!(
-        "\n9. 本场会议涉及的专有名词（人名、项目、系统名）：{}。转写里与它们同音或近音的写法，一律改成这些词。",
+        "本场会议涉及的专有名词（人名、项目、系统名）：{}。转写里与它们同音或近音的写法，一律改成这些词。",
         words.join("、")
     )
 }

@@ -190,4 +190,5 @@
     <string name="settings_hotwords_placeholder">例如：星河计划、林舟、Kafka</string>
     <string name="settings_llm_models_fetch">拉取模型列表</string>
     <string name="settings_llm_models_loading">正在拉取…</string>
+    <string name="settings_hotwords_failed">热词没保存成功，请重试</string>
 </resources>

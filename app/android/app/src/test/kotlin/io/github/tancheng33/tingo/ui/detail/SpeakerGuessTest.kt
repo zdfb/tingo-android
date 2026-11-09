@@ -49,6 +49,9 @@ class SpeakerGuessTest {
             lastBody = body
             return reply()
         }
+
+        override fun get(url: String, headers: Map<String, String>): String =
+            throw AssertionError("猜名字只用 POST")
     }
 
     private fun engine(speakers: List<SpeakerInfo>) = FakeSpeakerEngine(speakers)

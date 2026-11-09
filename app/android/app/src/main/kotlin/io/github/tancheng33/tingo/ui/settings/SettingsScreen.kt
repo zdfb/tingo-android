@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,7 +61,7 @@ fun SettingsScreen(
     models: SettingsUiState = SettingsUiState(loading = false),
     onDeleteAsrModels: () -> Unit = {},
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
-    onFetchModels: () -> Unit = {},
+    onFetchModels: (LlmConfig) -> Unit = {},
     onSaveHotwords: (List<String>) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
@@ -122,7 +123,7 @@ fun SettingsScreen(
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
-        HotwordsSection(words = models.hotwords, onSave = onSaveHotwords)
+        HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
@@ -277,7 +278,7 @@ private fun LlmServiceSection(
     config: LlmConfig,
     onSave: (LlmConfig) -> Unit,
     modelList: ModelListState?,
-    onFetchModels: () -> Unit,
+    onFetchModels: (LlmConfig) -> Unit,
 ) {
     var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
@@ -315,7 +316,8 @@ private fun LlmServiceSection(
         // 手抄模型名最容易错：能连上就把它有的模型列出来，点一下即填
         ModelListPicker(
             state = modelList,
-            onFetch = onFetchModels,
+            // 用表单里正在填的地址与密钥去拉：还没保存、甚至还没有模型名时也要能拉
+            onFetch = { onFetchModels(draft) },
             onPick = { model = it },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -445,6 +447,9 @@ private fun StorageSection(
 /** 字节转 MB：设置页只需要量级，不显示小数。 */
 private fun mb(bytes: ULong): String = "${bytes / 1_000_000u} MB"
 
+/** 模型列表一次最多铺几个；其余用户自己填（列表本来只是"抄对名字"的帮助）。 */
+private const val MODEL_CHIPS_SHOWN = 20
+
 /** 模型列表：拉取中、失败（带原因）、成功（点一下填进模型名）。 */
 @Composable
 private fun ModelListPicker(state: ModelListState?, onFetch: () -> Unit, onPick: (String) -> Unit) {
@@ -462,11 +467,12 @@ private fun ModelListPicker(state: ModelListState?, onFetch: () -> Unit, onPick:
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.red,
             )
-            is ModelListState.Ready -> androidx.compose.foundation.layout.FlowRow(
+            is ModelListState.Ready -> FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                state.models.take(20).forEach { name ->
+                // 只铺前两排：拉回来几十上百个时，全铺出来会把设置页压垮
+                state.models.take(MODEL_CHIPS_SHOWN).forEach { name ->
                     PillFilter(label = name, selected = false, onClick = { onPick(name) })
                 }
             }
@@ -482,7 +488,7 @@ private fun ModelListPicker(state: ModelListState?, onFetch: () -> Unit, onPick:
  * 手机上粘贴一串词进来就能用。保存时由引擎归一化（去空白、去重、限数）。
  */
 @Composable
-private fun HotwordsSection(words: List<String>, onSave: (List<String>) -> Unit) {
+private fun HotwordsSection(words: List<String>, failed: Boolean, onSave: (List<String>) -> Unit) {
     val colors = TingoTheme.colors
     var text by remember(words) { mutableStateOf(words.joinToString("\n")) }
     var saved by remember(words) { mutableStateOf(false) }
@@ -497,14 +503,14 @@ private fun HotwordsSection(words: List<String>, onSave: (List<String>) -> Unit)
             style = MaterialTheme.typography.bodySmall,
             color = colors.muted,
         )
-        androidx.compose.foundation.text.BasicTextField(
+        BasicTextField(
             value = text,
             onValueChange = {
                 text = it
                 saved = false
             },
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
-            cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
+            cursorBrush = SolidColor(colors.blue),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 80.dp)
@@ -533,7 +539,14 @@ private fun HotwordsSection(words: List<String>, onSave: (List<String>) -> Unit)
                 },
                 kind = PillKind.Soft,
             )
-            if (saved) {
+            // 写盘失败时不能显示"已保存"：那会让用户以为热词进了配置
+            if (failed) {
+                Text(
+                    stringResource(R.string.settings_hotwords_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.red,
+                )
+            } else if (saved) {
                 Text(
                     stringResource(R.string.settings_llm_saved),
                     style = MaterialTheme.typography.bodySmall,

@@ -6,10 +6,8 @@ import io.github.tancheng33.tingo.data.LibraryBackup
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.engine.StorageStats
-import io.github.tancheng33.tingo.minutes.remote.LlmCatalog
-
-import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.settings.LlmConfig
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,14 +23,14 @@ import kotlinx.coroutines.launch
 interface HotwordsPort {
     suspend fun load(): List<String>
     suspend fun save(words: List<String>): List<String>
-    /** 向用户配置的服务要模型列表；失败要如实返回原因 */
-    suspend fun listModels(): List<String>
+    /** 向表单里正在填的服务要模型列表；失败要如实返回原因 */
+    suspend fun listModels(config: LlmConfig): List<String>
 
     /** 没有引擎时（测试/未初始化）什么都不做 */
     data object None : HotwordsPort {
         override suspend fun load(): List<String> = emptyList()
         override suspend fun save(words: List<String>): List<String> = words
-        override suspend fun listModels(): List<String> = emptyList()
+        override suspend fun listModels(config: LlmConfig): List<String> = emptyList()
     }
 }
 
@@ -75,6 +73,8 @@ data class SettingsUiState(
     val storage: StorageStats? = null,
     /** 热词（专有名词、人名、项目代号） */
     val hotwords: List<String> = emptyList(),
+    /** 上一次保存热词失败了（界面据此提示，而不是照样说"已保存"） */
+    val hotwordsFailed: Boolean = false,
     /** 拉取模型列表的结果：null 表示没拉过 */
     val models: ModelListState? = null,
     /** 删除失败时给出原因，而不是静默什么都不发生 */
@@ -129,17 +129,24 @@ class SettingsViewModel(
     /** 保存热词；返回归一化后的词表（界面据此回填）。 */
     fun saveHotwords(words: List<String>) {
         viewModelScope.launch(io) {
-            val saved = runCatching { hotwordsPort.save(words) }.getOrElse { words }
-            _state.value = _state.value.copy(hotwords = saved)
+            val result = runCatching { hotwordsPort.save(words) }
+            _state.value = _state.value.copy(
+                // 写失败就保持原样：界面不该显示"已保存"却什么都没存下
+                hotwords = result.getOrElse { _state.value.hotwords },
+                hotwordsFailed = result.isFailure,
+            )
         }
     }
 
-    /** 拉取用户配置服务的模型列表（OpenAI 兼容的 /models）。 */
-    fun fetchModels() {
+    /** 拉取表单里那份配置的模型列表（OpenAI 兼容是 `GET {base}/v1/models`）。 */
+    fun fetchModels(config: LlmConfig) {
         _state.value = _state.value.copy(models = ModelListState.Loading)
         viewModelScope.launch(io) {
             val next = try {
-                ModelListState.Ready(hotwordsPort.listModels())
+                ModelListState.Ready(hotwordsPort.listModels(config))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 协程取消不是"拉取失败"：照常往上抛，否则界面会留一条假的错误
+                throw e
             } catch (e: Exception) {
                 ModelListState.Failed(e.message ?: e::class.java.simpleName)
             }

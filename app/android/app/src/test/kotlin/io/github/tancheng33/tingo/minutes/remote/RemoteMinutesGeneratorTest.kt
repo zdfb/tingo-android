@@ -26,6 +26,9 @@ class RemoteMinutesGeneratorTest {
     ) : HttpJsonClient {
         var lastUrl: String? = null
 
+        override fun get(url: String, headers: Map<String, String>): String =
+            throw AssertionError("生成纪要只用 POST")
+
         override fun post(url: String, headers: Map<String, String>, body: String): String {
             lastUrl = url
             return reply()

@@ -291,7 +291,7 @@ const TRASH_DIR: &str = ".trash";
 /// 配置文件名字（`<config>/config.toml`），与桌面 `config::default_path` 一致。
 const CONFIG_FILE: &str = "config.toml";
 
-/// 热词上限：设置页填再多，提示词也放不下；与桌面同一口径。
+/// 热词上限：手机提示词比桌面短，填太多会把转写挤掉。
 const MAX_HOTWORDS: usize = 200;
 
 /// 批量操作的动作白名单，与桌面 `/api/meetings/batch` 一致。
@@ -651,11 +651,13 @@ impl TingoEngine {
     /// 当前配置的热词（专有名词、人名、项目代号）。
     pub fn hotwords(&self) -> Result<Vec<String>, EngineError> {
         let path = self.paths.config_dir.join(CONFIG_FILE);
-        // 每次都读盘：设置页刚写完，缓存一份只会读到旧值
-        guard("hotwords", move || Ok(tingo_engine::config::load(&path).hotwords))
+        // 每次都读盘：设置页刚写完，缓存一份只会读到旧值；手改过的配置也要过一遍归一化
+        guard("hotwords", move || Ok(normalize_hotwords(tingo_engine::config::load(&path).hotwords)))
     }
 
-    /// 保存热词：去空白、去重，最多 200 条（与桌面设置页口径一致）。
+    /// 保存热词：去空白、去重，最多 200 条。
+    ///
+    /// 桌面没有硬上限（设置页只做去空白）；手机上提示词更短，设个上限防止整段被热词占满。
     pub fn set_hotwords(&self, words: Vec<String>) -> Result<Vec<String>, EngineError> {
         let path = self.paths.config_dir.join(CONFIG_FILE);
         let words = normalize_hotwords(words);
@@ -667,11 +669,16 @@ impl TingoEngine {
         })
     }
 
-    /// 提示词里"专有名词"那一段（没有热词时为空串）。文案由引擎产出，两个平台共用。
-    pub fn minutes_glossary(&self, language: String) -> String {
+    /// 提示词里"专有名词"那一段（不带编号；没有热词时为空串）。文案由引擎产出，两个平台共用。
+    pub fn minutes_glossary(&self, language: String) -> Result<String, EngineError> {
         let path = self.paths.config_dir.join(CONFIG_FILE);
-        let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
-        tingo_engine::summarize::glossary_in(&tingo_engine::config::load(&path).hotwords, lang)
+        guard("minutes_glossary", move || {
+            let lang =
+                tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            // 读的时候也归一化：手改过的 config 可能塞进远超上限的词，不能让提示词被它撑爆
+            let words = normalize_hotwords(tingo_engine::config::load(&path).hotwords);
+            Ok(tingo_engine::summarize::glossary_sentence(&words, lang))
+        })
     }
 
     /// 纪要的历史版本，按保存时间从新到旧。
@@ -1928,13 +1935,15 @@ mod tests {
             .set_hotwords(vec!["星河".to_string(), "Kafka".to_string()])
             .unwrap();
 
-        let zh = engine.minutes_glossary("zh".to_string());
-        let en = engine.minutes_glossary("en".to_string());
+        let zh = engine.minutes_glossary("zh".to_string()).unwrap();
+        let en = engine.minutes_glossary("en".to_string()).unwrap();
 
         assert!(zh.contains("星河") && zh.contains("Kafka"), "实际：{zh}");
         assert!(en.contains("星河") && en.contains("Kafka"), "实际：{en}");
         // 中英两版是同一段说明的不同语言，不是"英文界面漏了这段"
         assert_ne!(zh, en);
+        // 编号由宿主排：这里只给句子，不带 "9."
+        assert!(!zh.contains("9."), "不该自带编号：{zh}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1944,7 +1953,25 @@ mod tests {
         let engine = TingoEngine::new(root.display().to_string());
 
         // 没填热词就不该往提示词里塞一段空说明
-        assert!(engine.minutes_glossary("zh".to_string()).is_empty());
+        assert!(engine.minutes_glossary("zh".to_string()).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn hand_edited_config_is_capped_when_read() {
+        let root = temp_root("hotwords-cap");
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.set_hotwords(vec!["星河".to_string()]).unwrap();
+
+        // 直接改配置文件塞进 300 个词：读的时候也要受上限约束，否则提示词会被热词占满
+        let path = root.join("config").join("config.toml");
+        let words: Vec<String> = (0..300).map(|i| format!("\"词{i}\"")).collect();
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("hotwords = [\"星河\"]", &format!("hotwords = [{}]", words.join(", ")));
+        std::fs::write(&path, text).unwrap();
+
+        assert_eq!(engine.hotwords().unwrap().len(), MAX_HOTWORDS);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

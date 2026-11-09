@@ -52,7 +52,6 @@ object MinutesPrompt {
    某个问题的原因时才写，否则整节省略）。
 5. 去掉寒暄和口头禅，语言简洁、书面化。
 {glossary}
-
 转写：
 {transcript}
 
@@ -79,10 +78,17 @@ object MinutesPrompt {
         } else {
             body.take(maxChars) + "\n（转写过长，后续内容已省略）\n"
         }
-        // 热词那一段由引擎产出（与桌面同一份文案），放进模板预留的位置
-        return TEMPLATE
-            .replace("{glossary}", glossary)
-            .replace("{transcript}", clipped)
+        // 热词那一段由引擎产出（与桌面同一份句子）。模板只有中文，所以这段恒用中文——
+        // 界面语言是英文时也不能把英文句子塞进中文提示词里。
+        // 没有热词时整行消失，不留一段空行。
+        val terms = glossary.trim()
+        val filled = if (terms.isEmpty()) {
+            TEMPLATE.replace("{glossary}\n", "")
+        } else {
+            // 引擎给的就是一句完整的话（含"同音写法一律改成这些词"），直接放进来
+            TEMPLATE.replace("{glossary}", terms)
+        }
+        return filled.replace("{transcript}", clipped)
     }
 
     /** 模板里转写块的标题，裁剪靠它定位。 */

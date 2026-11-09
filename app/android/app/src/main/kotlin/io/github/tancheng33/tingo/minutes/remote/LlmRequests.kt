@@ -16,15 +16,40 @@ object LlmRequests {
     /** 一次请求的完整描述：单测与真实请求共用同一份，避免"测的和跑的不是一回事"。 */
     data class Request(val url: String, val headers: Map<String, String>, val body: String)
 
+    /** 服务地址的根：用户可能填了带 `/v1` 的完整地址，两种写法都要能用。 */
+    fun base(config: LlmConfig): String = config.baseUrl.trimEnd('/').removeSuffix("/v1")
+
+    /** 鉴权头：两种协议放的位置不同。密钥为空时也给一个占位（本地服务常不校验）。 */
+    fun headers(config: LlmConfig): Map<String, String> = when (config.protocol) {
+        LlmProtocol.OPENAI -> mapOf("Authorization" to "Bearer ${config.apiKey.ifBlank { "none" }}")
+        LlmProtocol.ANTHROPIC -> mapOf(
+            "x-api-key" to config.apiKey,
+            "anthropic-version" to "2023-06-01",
+        )
+    }
+
+    /**
+     * 拉取模型列表的请求。
+     *
+     * 与桌面 `/api/llm/models` 同一套地址：OpenAI 兼容是 `GET {base}/v1/models`，
+     * Anthropic 要带 `limit`（默认一页只给 20 个）。
+     */
+    fun modelsRequest(config: LlmConfig): Request {
+        val base = base(config)
+        val url = when (config.protocol) {
+            LlmProtocol.OPENAI -> "$base/v1/models"
+            LlmProtocol.ANTHROPIC -> "$base/v1/models?limit=1000"
+        }
+        return Request(url = url, headers = headers(config), body = "")
+    }
+
     fun build(config: LlmConfig, prompt: String, maxTokens: Int, system: String = ""): Request {
-        val base = config.baseUrl.trimEnd('/').removeSuffix("/v1")
+        val base = base(config)
         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", prompt))
         return when (config.protocol) {
             LlmProtocol.OPENAI -> Request(
                 url = "$base/v1/chat/completions",
-                headers = mapOf(
-                    "Authorization" to "Bearer ${config.apiKey}",
-                ),
+                headers = headers(config),
                 body = JSONObject()
                     .put("model", config.model)
                     .put("max_tokens", maxTokens)
@@ -34,10 +59,7 @@ object LlmRequests {
 
             LlmProtocol.ANTHROPIC -> Request(
                 url = "$base/v1/messages",
-                headers = mapOf(
-                    "x-api-key" to config.apiKey,
-                    "anthropic-version" to "2023-06-01",
-                ),
+                headers = headers(config),
                 body = JSONObject()
                     .put("model", config.model)
                     .put("max_tokens", maxTokens)

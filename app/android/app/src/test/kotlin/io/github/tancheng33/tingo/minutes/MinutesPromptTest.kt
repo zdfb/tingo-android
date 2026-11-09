@@ -150,4 +150,30 @@ class MinutesPromptTest {
         {"problem": "为什么提交环节流失？", "branches": [{"title": "必填项变多", "detail": "新版要求先填邮箱", "refs": ["00:03"]}]}
         ```
     """.trimIndent()
+
+    @Test
+    fun hotwordsLandBeforeTheTranscriptAndKeepTheRequirementsNumbering() {
+        val prompt = MinutesPrompt.build(
+            transcript = transcript,
+            glossary = "本场会议涉及的专有名词（人名、项目、系统名）：星河计划、Kafka。",
+        )
+
+        assertTrue("热词要在提示词里：$prompt", prompt.contains("星河计划"))
+        // 位置：要求之后、转写之前
+        assertTrue(
+            "热词位置不对",
+            prompt.indexOf("星河计划") > prompt.indexOf("去掉寒暄"),
+        )
+        assertTrue("热词该在转写之前", prompt.indexOf("星河计划") < prompt.indexOf("转写：\n["))
+        // 要求列表只有 1–5，热词那段不该自带编号把序列跳到 9
+        assertTrue("不该出现跳号：$prompt", !prompt.contains("\n9. "))
+    }
+
+    @Test
+    fun emptyGlossaryLeavesNoBlankParagraph() {
+        val prompt = MinutesPrompt.build(transcript = transcript)
+
+        assertTrue("不该留下占位符", !prompt.contains("{glossary}"))
+        assertTrue("不该多出一段空行：${prompt.substringAfter("书面化。").take(20)}", !prompt.contains("书面化。\n\n\n"))
+    }
 }
