@@ -83,8 +83,11 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 
 只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`。
 
-**语音模型随 APK 内置**：Paraformer int8（227 MB）+ 标点（76 MB）+ CAM++（28 MB）+ VAD（0.6 MB）
-打进 `assets/models/`，APK 约 **361 MB**。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
+**语音模型随 APK 内置，且与桌面端同一份**：ModelScope 的 Paraformer-large **量化（int8）**
+模型（238 MB）+ CT-Transformer 标点 **int8**（76 MB）+ CAM++ 声纹（28 MB，fp32，桌面端同样是这一份）
++ Silero VAD（0.6 MB，fp32）。识别与标点都是 int8 量化版，声纹与 VAD 上游只提供 fp32，
+桌面端也用这两个，所以两边一致。
+打进 `assets/models/`，APK 约 **372 MB**。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
 （幂等、带进度），**转写全程不需要网络**。（内置 GGUF 与 llama.cpp 已随本变更一并移除，
 APK 因此从 746 MB 降到 361 MB。）
 
@@ -95,13 +98,19 @@ APK 因此从 746 MB 降到 361 MB。）
 ./scripts/fetch-models-offline.sh --from-mirror # 只走镜像
 ```
 
+ModelScope 的原始 `model_quant.onnx` 不能直接被 sherpa-onnx 加载（缺 LFR 窗长与归一化元数据），
+取模型时要补元数据、把随包的 `tokens.json` 展开成 `符号 编号` 的 `tokens.txt`——桌面端在首次启动时
+由 `engine::models::prepare_paraformer` 做，脚本里用等价的 python 实现（不必为了取模型编一遍 Rust）。
+
 网络下载路径仍然保留作兜底（开发构建没内置模型时可用），但正常安装包里不需要它。
 验证"转写真的离线可用"：把手机调成飞行模式，跑 `RecognitionInstrumentedTest` /
 `PipelineInstrumentedTest` —— 本轮实机（REDMI Turbo 4）在断网下这两个用例全绿。
 纪要需要网络，这是有意的取舍：`RemoteMinutesInstrumentedTest` 用本机回环的假服务端验证
 请求报文、鉴权头与响应解析，不依赖任何外部服务。
 
-**校验强度**：四个语音模型都带 sha256，下载后校验摘要。
+**校验强度**：六个模型文件都带 sha256，下载后校验摘要；`models.json` 里记的就是内置文件的指纹，
+换模型时体积或摘要对不上会直接拒绝解包，而不是把坏模型喂给推理引擎（`BundledModelInstrumentedTest`
+盯的就是"内置的这份能不能认出内容"）。
 
 **内存**：转写时 sherpa 与四个模型常驻，按权重体积估算峰值约 1 GB；纪要不再占用本机内存。
 十万级会议的转写已在 10 分钟双轨混音用例里验过堆增长 < 80 MB。
