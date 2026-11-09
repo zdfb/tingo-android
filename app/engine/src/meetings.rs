@@ -82,6 +82,18 @@ pub fn folder_title(title: &str) -> String {
     }
 }
 
+/// 毫秒时间戳 → 本地时间；<=0 表示"不知道，用现在"。
+///
+/// 导入录音时用文件修改时间决定会议时间，桌面与 Android 都要这一步。
+pub fn local_time_from_millis(ms: i64) -> chrono::NaiveDateTime {
+    if ms <= 0 {
+        return chrono::Local::now().naive_local();
+    }
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|d| d.with_timezone(&chrono::Local).naive_local())
+        .unwrap_or_else(|| chrono::Local::now().naive_local())
+}
+
 pub fn new_folder(root: &Path, title: &str, when: NaiveDateTime) -> PathBuf {
     let safe = folder_title(title);
     let base = format!("{}_{safe}", when.format("%Y-%m-%d_%H%M"));

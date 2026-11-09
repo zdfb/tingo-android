@@ -203,7 +203,10 @@ fun TingoRoot(
     ) { uri ->
         if (uri != null) {
             val copied = copyPickedAudio(recordContext, uri)
-            if (copied != null) {
+            if (copied == null) {
+                // 选到的不是支持的音视频，或读不出来：要说清楚，不能装没事发生
+                recordViewModel.importRejected()
+            } else {
                 recordViewModel.importAudio(copied.file, copied.title, copied.modifiedMs)
             }
         }
@@ -329,10 +332,18 @@ fun TingoRoot(
                     statusRows = homeStatusRows(container),
                     state = recordState,
                     importProgress = importState.progress,
-                    importFailed = importState.failed,
+                    importFailure = importState.failure,
                     onPickAudio = {
                         val error = runCatching {
-                            pickAudio.launch(arrayOf("audio/*", "video/mp4", "video/x-matroska", "video/webm"))
+                            pickAudio.launch(
+                                arrayOf(
+                                    "audio/*",
+                                    "video/mp4",
+                                    "video/quicktime",
+                                    "video/x-matroska",
+                                    "video/webm",
+                                ),
+                            )
                         }.exceptionOrNull()
                         if (error != null) pickAudio.launch(arrayOf("*/*"))
                     },
@@ -581,7 +592,7 @@ private fun RecordRoute(
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
     importProgress: Float?,
-    importFailed: Boolean,
+    importFailure: RecordViewModel.ImportFailure?,
     onPickAudio: () -> Unit,
     systemAudioStatus: RecordViewModel.SystemAudioStatus,
     systemAudioEnabled: Boolean,
@@ -610,7 +621,7 @@ private fun RecordRoute(
         onOpenMeeting = onOpenMeeting,
         onPickAudio = onPickAudio,
         importProgress = importProgress,
-        importFailed = importFailed,
+        importFailure = importFailure,
     )
 }
 
@@ -624,15 +635,42 @@ private class PickedAudio(val file: File, val title: String, val modifiedMs: Lon
  * 而"导入"本来就要连内容一起进库，所以先落成一份临时文件更直接。
  */
 private fun copyPickedAudio(context: android.content.Context, uri: android.net.Uri): PickedAudio? {
-    val name = displayNameOf(context, uri) ?: "导入录音.m4a"
+    val raw = displayNameOf(context, uri) ?: "导入录音.m4a"
+    // 文件名来自外部（网盘、下载目录），可能带 `../`：只取最后一段并去掉分隔符
+    val name = raw.substringAfterLast('/').substringAfterLast('\\').replace("\u0000", "").ifBlank { "导入录音.m4a" }
     if (!io.github.tancheng33.tingo.importing.AudioDecoder.supports(name)) return null
-    val target = File(File(context.cacheDir, "picked").apply { mkdirs() }, name)
-    val copied = runCatching {
+    val dir = File(context.cacheDir, "picked").apply { mkdirs() }
+    // 上一次留下的临时文件先清掉：不清理的话每导入一次就留一份整段录音
+    dir.listFiles()?.forEach { it.delete() }
+    val target = File(dir, name)
+    val ok = runCatching {
         context.contentResolver.openInputStream(uri)?.use { input ->
             target.outputStream().use { output -> input.copyTo(output) }
-        } ?: return null
-    }.getOrNull() ?: return null
-    return PickedAudio(target, io.github.tancheng33.tingo.importing.AudioDecoder.titleOf(name), copied)
+        } != null
+    }.getOrDefault(false)
+    if (!ok) return null
+    val modified = lastModifiedOf(context, uri)
+    return PickedAudio(target, io.github.tancheng33.tingo.importing.AudioDecoder.titleOf(name), modified)
+}
+
+/**
+ * 原文件的修改时间。
+ *
+ * 取不到就返回 0（引擎会用"现在"），**绝不能拿别的数字凑**：
+ * 之前误把 `copyTo` 的返回值（字节数）当成毫秒传下去，会议日期会变成 1970 年。
+ */
+private fun lastModifiedOf(context: android.content.Context, uri: android.net.Uri): Long {
+    val fromMediaStore = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(android.provider.MediaStore.MediaColumns.DATE_MODIFIED),
+            null,
+            null,
+            null,
+        )?.use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L } ?: 0L
+    }.getOrDefault(0L)
+    // DATE_MODIFIED 是秒
+    return if (fromMediaStore > 0) fromMediaStore * 1_000 else 0L
 }
 
 /** 选择器给的显示名；取不到就返回 null。 */

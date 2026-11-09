@@ -39,12 +39,13 @@ object AudioDecoder {
             try {
                 codec.configure(format, null, null, 0)
                 codec.start()
-                val samples = decodeAll(codec, extractor)
-                val mono = AudioResample.resample(
-                    samples = AudioResample.toMono(samples, channels),
-                    fromRate = sampleRate,
-                )
-                WavFile.write(target, AudioResample.toPcm16(mono))
+                val resampler = AudioResample.StreamingResampler(sampleRate)
+                WavFile.stream(target).use { writer ->
+                    decodeChunks(codec, extractor) { chunk ->
+                        val mono = AudioResample.toMono(chunk, channels)
+                        writer.write(AudioResample.toPcm16(resampler.push(mono)))
+                    }
+                }
                 return target
             } finally {
                 runCatching { codec.stop() }
@@ -55,58 +56,67 @@ object AudioDecoder {
         }
     }
 
-    /** 把所有解码片段拼成一个交错的 16 bit 样本数组（内存里只留样本）。 */
-    private fun decodeAll(codec: MediaCodec, extractor: MediaExtractor): ShortArray {
+    /**
+     * 逐块解出交错的 16 bit 样本。
+     *
+     * 用回调而不是返回一个大数组：一小时的录音解码后是上百兆，整段放内存会 OOM。
+     */
+    private fun decodeChunks(
+        codec: MediaCodec,
+        extractor: MediaExtractor,
+        onChunk: (ShortArray) -> Unit,
+    ) {
         val info = MediaCodec.BufferInfo()
-        val chunks = ArrayList<ShortArray>()
-        var total = 0
         var sawInputEnd = false
         var sawOutputEnd = false
+        // 编解码器彻底不动（既不吃输入也不吐输出）时不能死等
+        var idleRounds = 0
         while (!sawOutputEnd) {
+            var progressed = false
             if (!sawInputEnd) {
                 val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
                 if (inputIndex >= 0) {
-                    val buffer = codec.getInputBuffer(inputIndex) ?: continue
-                    val size = extractor.readSampleData(buffer, 0)
-                    if (size < 0) {
-                        codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        sawInputEnd = true
+                    val buffer = codec.getInputBuffer(inputIndex)
+                    if (buffer == null) {
+                        // 输入缓冲拿不到是罕见情况；把这个下标还回去再试
+                        codec.queueInputBuffer(inputIndex, 0, 0, 0, 0)
                     } else {
-                        codec.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
-                        extractor.advance()
-                    }
-                }
-            }
-            when (val outputIndex = codec.dequeueOutputBuffer(info, TIMEOUT_US)) {
-                MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Unit
-                else -> {
-                    if (outputIndex >= 0) {
-                        val buffer = codec.getOutputBuffer(outputIndex)
-                        if (buffer != null && info.size > 0) {
-                            buffer.position(info.offset)
-                            buffer.limit(info.offset + info.size)
-                            val shorts = ShortArray(info.size / 2)
-                            buffer.asShortBuffer().get(shorts)
-                            chunks += shorts
-                            total += shorts.size
+                        val size = extractor.readSampleData(buffer, 0)
+                        if (size < 0) {
+                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            sawInputEnd = true
+                        } else {
+                            codec.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
+                            extractor.advance()
                         }
-                        codec.releaseOutputBuffer(outputIndex, false)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) sawOutputEnd = true
                     }
+                    progressed = true
                 }
             }
+            val outputIndex = codec.dequeueOutputBuffer(info, TIMEOUT_US)
+            if (outputIndex >= 0) {
+                val buffer = codec.getOutputBuffer(outputIndex)
+                if (buffer != null && info.size > 0) {
+                    buffer.position(info.offset)
+                    buffer.limit(info.offset + info.size)
+                    val shorts = ShortArray(info.size / 2)
+                    buffer.asShortBuffer().get(shorts)
+                    onChunk(shorts)
+                }
+                codec.releaseOutputBuffer(outputIndex, false)
+                if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) sawOutputEnd = true
+                progressed = true
+            }
+            idleRounds = if (progressed) 0 else idleRounds + 1
+            // 大约 3 秒毫无进展就当解码器卡住了，抛出去让用户看到"导入不了"
+            if (idleRounds > MAX_IDLE_ROUNDS) throw IllegalStateException("解码器没有响应")
         }
-        val out = ShortArray(total)
-        var offset = 0
-        chunks.forEach { chunk ->
-            chunk.copyInto(out, offset)
-            offset += chunk.size
-        }
-        return out
     }
 
     private const val TIMEOUT_US = 10_000L
+
+    /** 连续这么久没有任何输入/输出进展（约 3 秒）就判定解码器卡住。 */
+    private const val MAX_IDLE_ROUNDS = 300
 
     /** 给调用方一个明确的"支持哪些格式"（与桌面 `AUDIO_EXTS` 一致）。 */
     val SUPPORTED: Set<String> = setOf(

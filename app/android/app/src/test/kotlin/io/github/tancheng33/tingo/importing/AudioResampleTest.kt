@@ -75,4 +75,35 @@ class AudioResampleTest {
         assertEquals(Short.MIN_VALUE, pcm[1])
         assertEquals((0.5f * 32767f).toInt().toShort().toInt(), pcm[2].toInt())
     }
+
+    @Test
+    fun streamingResamplerMatchesOneShotResampling() {
+        val from48k = FloatArray(4_800) { index ->
+            kotlin.math.sin(2.0 * Math.PI * 500.0 * index / 48_000.0).toFloat()
+        }
+
+        val oneShot = AudioResample.resample(from48k, fromRate = 48_000)
+        // 分块的每一块大小都不整除：正是"块边界要不要留样本"最容易错的地方
+        val stream = AudioResample.StreamingResampler(48_000)
+        val chunked = (0 until 4_800 step 700).flatMap { start ->
+            stream.push(from48k.copyOfRange(start, minOf(start + 700, 4_800))).toList()
+        }
+
+        assertEquals("分块结果长度应与整段一致", oneShot.size, chunked.size)
+        oneShot.indices.forEach { index ->
+            assertEquals("第 $index 个样本不一致", oneShot[index], chunked[index], 1e-4f)
+        }
+    }
+
+    @Test
+    fun streamingResamplerDoesNotClickAtChunkBoundaries() {
+        // 恒定值输入下，块边界不该产出跳变（不留样本的实现在边界会掉一帧）
+        val constant = FloatArray(3_000) { 0.25f }
+        val stream = AudioResample.StreamingResampler(48_000)
+        val out = (0 until 3_000 step 512).flatMap { start ->
+            stream.push(constant.copyOfRange(start, minOf(start + 512, 3_000))).toList()
+        }
+
+        assertTrue("边界出现了跳变：${out.minOrNull()}..${out.maxOrNull()}", out.all { kotlin.math.abs(it - 0.25f) < 1e-4f })
+    }
 }

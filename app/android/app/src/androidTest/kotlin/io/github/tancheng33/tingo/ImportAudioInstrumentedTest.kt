@@ -59,9 +59,12 @@ class ImportAudioInstrumentedTest {
         val wav = File(dir, "out.wav")
         AudioDecoder.toWav(source, wav)
 
-        val id = engine.importAudio(wav.absolutePath, "导入的会议", 0)
+        val imported = engine.importAudio(wav.absolutePath, "导入的会议", 0)
+        val id = imported.id
 
-        val meeting = File(File(dir, "meetings"), id)
+        // 目录由引擎返回，宿主不该自己拼路径
+        val meeting = File(imported.dir)
+        assertEquals("目录应与 id 对得上", id, meeting.name)
         assertTrue("会议目录没建出来：$meeting", meeting.isDirectory)
         // 播放与转写都按 录音.wav 找音频
         assertTrue("缺 录音.wav：${meeting.list()?.toList()}", File(meeting, "录音.wav").isFile)

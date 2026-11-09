@@ -129,7 +129,8 @@ class DetailPlaybackTest {
         override fun saveMinutes(id: String, text: String) = Unit
         override fun exportSrt(id: String, language: String) = ""
         override fun exportExcalidraw(id: String) = emptyList<String>()
-        override fun importAudio(wavPath: String, title: String, modifiedMs: Long) = "id"
+        override fun importAudio(wavPath: String, title: String, modifiedMs: Long) =
+            io.github.tancheng33.tingo.engine.ImportedMeeting("id", "/tmp/id")
         override fun hotwords() = emptyList<String>()
         override fun setHotwords(words: List<String>) = words
         override fun minutesGlossary(language: String) = ""

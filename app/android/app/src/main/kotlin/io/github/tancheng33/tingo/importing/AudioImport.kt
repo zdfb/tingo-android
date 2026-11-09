@@ -47,13 +47,13 @@ class AudioImport(
             onProgress(DECODE_SHARE)
             val name = title.ifBlank { AudioDecoder.titleOf(source.name) }
             // 先落成会议：引擎按同一套规则起名、建目录、写 `录音.wav`
-            val id = engine.importAudio(wav.absolutePath, name, modifiedMs)
-            val dir = File(File(engine.meetingsRoot(), "meetings"), id)
-            transcriber.transcribe(wav, dir) { fraction ->
+            val imported = engine.importAudio(wav.absolutePath, name, modifiedMs)
+            // 目录由引擎给出：会议库布局只该有一个地方知道
+            transcriber.transcribe(wav, File(imported.dir)) { fraction ->
                 onProgress(DECODE_SHARE + fraction * (1f - DECODE_SHARE))
             }
             onProgress(1f)
-            return id
+            return imported.id
         } finally {
             // 解码出来的 wav 只是中转：会议目录里已经有一份，留着白占空间
             wav.delete()

@@ -87,9 +87,13 @@ class RecordViewModel(
      */
     data class ImportState(
         val progress: Float? = null,
-        val failed: Boolean = false,
+        /** 失败原因：界面据此说"格式不支持"还是"解码失败"，不能一律"失败了" */
+        val failure: ImportFailure? = null,
         val meetingId: String? = null,
     )
+
+    /** 导入失败的两类原因（用户要做的事不同：换文件 vs 查文件/重试）。 */
+    enum class ImportFailure { UNSUPPORTED, UNREADABLE }
 
     private val _import = MutableStateFlow(ImportState())
     val import: StateFlow<ImportState> = _import.asStateFlow()
@@ -102,8 +106,9 @@ class RecordViewModel(
     fun importAudio(source: File, title: String, modifiedMs: Long) {
         val importer = importing ?: return
         if (_import.value.progress != null) return // 已经在导入：不叠第二个
+        // 标记要在启动协程之前就打上：连点两次时协程还没跑起来，检查会漏
+        _import.value = ImportState(progress = 0f)
         viewModelScope.launch(io) {
-            _import.value = ImportState(progress = 0f)
             try {
                 val id = importer.run(source, title, modifiedMs) { fraction ->
                     _import.value = ImportState(progress = fraction)
@@ -113,9 +118,15 @@ class RecordViewModel(
                 _import.value = ImportState()
                 throw e
             } catch (e: Exception) {
-                _import.value = ImportState(failed = true)
+                _import.value = ImportState(failure = ImportFailure.UNREADABLE)
             }
         }
+    }
+
+    /** 选到的文件不是支持的音视频：与"解码失败"分开报，用户该做的事不同。 */
+    fun importRejected() {
+        if (_import.value.progress != null) return
+        _import.value = ImportState(failure = ImportFailure.UNSUPPORTED)
     }
 
     /** 界面拿走"导入完成"的信号后清掉，避免重复跳转。 */

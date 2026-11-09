@@ -90,8 +90,8 @@ fun RecordScreen(
     onPickAudio: () -> Unit = {},
     /** 导入进度 0..1；null 表示没有在导入 */
     importProgress: Float? = null,
-    /** 这一次导入失败了（解码不了、写盘失败等） */
-    importFailed: Boolean = false,
+    /** 这一次导入失败的原因（格式不支持 / 读不出来），null 表示没失败 */
+    importFailure: RecordViewModel.ImportFailure? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -150,14 +150,11 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
-                    // 桌面端把音频拖进窗口就导入；手机上给一个明确的入口
-                    PillButton(
-                        label = stringResource(R.string.record_import),
-                        onClick = onPickAudio,
-                        kind = PillKind.Ghost,
-                        enabled = importProgress == null,
+                    ImportEntry(
+                        progress = importProgress,
+                        failure = importFailure,
+                        onPick = onPickAudio,
                     )
-                    ImportStatus(progress = importProgress, failed = importFailed)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
 
@@ -239,14 +236,11 @@ fun RecordScreen(
                         label = stringResource(R.string.record_start),
                         onClick = onStart,
                     )
-                    // 桌面端把音频拖进窗口就导入；手机上给一个明确的入口
-                    PillButton(
-                        label = stringResource(R.string.record_import),
-                        onClick = onPickAudio,
-                        kind = PillKind.Ghost,
-                        enabled = importProgress == null,
+                    ImportEntry(
+                        progress = importProgress,
+                        failure = importFailure,
+                        onPick = onPickAudio,
                     )
-                    ImportStatus(progress = importProgress, failed = importFailed)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
             }
@@ -309,33 +303,52 @@ private fun SystemAudioToggle(enabled: Boolean, supported: Boolean, onChange: (B
  * @param emphasis true 表示这次录音确实少了东西（红字）；false 表示只是提醒（次要色）
  */
 /**
- * 导入进度与结果。
+ * 导入入口 + 进度 + 结果。
  *
+ * 桌面端是把音频拖进窗口；手机上是一个按钮加系统选择器。
  * 一小时的录音解码加转写要几分钟，没有进度条用户会以为卡死了；
- * 失败也要明说（格式不支持、文件损坏），不能只是按钮弹回来。
+ * 失败也要分原因说清楚（格式不支持 vs 读不出来），而不是一句"失败了"。
  */
 @Composable
-private fun ImportStatus(progress: Float?, failed: Boolean) {
+private fun ImportEntry(
+    progress: Float?,
+    failure: RecordViewModel.ImportFailure?,
+    onPick: () -> Unit,
+) {
     val colors = TingoTheme.colors
-    when {
-        progress != null -> Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.widthIn(max = 240.dp),
-        ) {
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            Text(
-                text = stringResource(R.string.record_import_progress, (progress * 100).toInt()),
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        PillButton(
+            label = stringResource(R.string.record_import),
+            onClick = onPick,
+            kind = PillKind.Ghost,
+            enabled = progress == null,
+        )
+        when {
+            progress != null -> Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.widthIn(max = 240.dp),
+            ) {
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = stringResource(R.string.record_import_progress, (progress * 100).toInt()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.muted,
+                )
+            }
+
+            failure != null -> Text(
+                text = stringResource(
+                    when (failure) {
+                        RecordViewModel.ImportFailure.UNSUPPORTED -> R.string.record_import_unsupported
+                        RecordViewModel.ImportFailure.UNREADABLE -> R.string.record_import_failed
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
-                color = colors.muted,
+                color = colors.red,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
-
-        failed -> Text(
-            text = stringResource(R.string.record_import_failed),
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.red,
-        )
     }
 }
 

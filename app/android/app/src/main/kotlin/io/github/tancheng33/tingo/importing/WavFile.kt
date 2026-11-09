@@ -15,17 +15,35 @@ object WavFile {
     private const val BITS = 16
 
     fun write(target: File, samples: ShortArray, sampleRate: Int = AudioResample.TARGET_RATE) {
-        target.parentFile?.mkdirs()
-        val dataBytes = samples.size * 2
-        target.outputStream().buffered().use { out ->
-            out.write(header(dataBytes, sampleRate))
-            val buffer = ByteArray(dataBytes)
+        stream(target, sampleRate).use { writer -> writer.write(samples) }
+    }
+
+    /** 边解边写：一小时的录音整段留在内存里会 OOM，所以只按块写。 */
+    fun stream(target: File, sampleRate: Int = AudioResample.TARGET_RATE): Writer = Writer(target, sampleRate)
+
+    /** 先写占位头，写完再回填长度（wav 的长度字段在文件头里）。 */
+    class Writer internal constructor(target: File, private val sampleRate: Int) : AutoCloseable {
+        private val file = java.io.RandomAccessFile(target.apply { parentFile?.mkdirs() }, "rw")
+        private var dataBytes = 0L
+
+        init {
+            file.write(header(0, sampleRate))
+        }
+
+        fun write(samples: ShortArray) {
+            val buffer = ByteArray(samples.size * 2)
             samples.forEachIndexed { index, sample ->
                 val value = sample.toInt()
                 buffer[index * 2] = (value and 0xFF).toByte()
                 buffer[index * 2 + 1] = ((value shr 8) and 0xFF).toByte()
             }
-            out.write(buffer)
+            file.write(buffer)
+            dataBytes += buffer.size
+        }
+
+        override fun close() {
+            if (dataBytes <= Int.MAX_VALUE) file.seek(0) .also { file.write(header(dataBytes.toInt(), sampleRate)) }
+            file.close()
         }
     }
 

@@ -121,8 +121,8 @@ interface TingoEnginePort {
     /** 保存热词；返回归一化后的结果（去空白、去重、限数）。 */
     fun setHotwords(words: List<String>): List<String>
 
-    /** 导入一段已解码的 wav：建会议文件夹、写 `录音.wav`，返回会议 id。 */
-    fun importAudio(wavPath: String, title: String, modifiedMs: Long): String
+    /** 导入一段已解码的 wav：建会议文件夹、写 `录音.wav`，返回会议 id 与目录。 */
+    fun importAudio(wavPath: String, title: String, modifiedMs: Long): ImportedMeeting
 
     /** 提示词里"专有名词"那段句子（不带编号）；没有热词时为空串。 */
     fun minutesGlossary(language: String): String
@@ -214,7 +214,7 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun setHotwords(words: List<String>): List<String> = mapEngineCall { engine.setHotwords(words) }
 
-    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): String =
+    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): ImportedMeeting =
         mapEngineCall { engine.importAudio(wavPath, title, modifiedMs) }
 
     override fun minutesGlossary(language: String): String =

@@ -2,6 +2,7 @@ package io.github.tancheng33.tingo.importing
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** 写出来的 wav 必须能被自家读取器与播放器认（RIFF 头字段全对、字节序对）。 */
@@ -47,4 +48,22 @@ class WavFileTest {
 
     private fun le32(bytes: ByteArray, offset: Int): Int =
         le16(bytes, offset) or (le16(bytes, offset + 2) shl 16)
+
+    @Test
+    fun streamingWriterBackfillsTheLengthFields() {
+        val target = File.createTempFile("streamed", ".wav").apply { deleteOnExit() }
+
+        WavFile.stream(target).use { writer ->
+            writer.write(ShortArray(500) { 1 })
+            writer.write(ShortArray(1_100) { 2 })
+        }
+
+        val bytes = target.readBytes()
+        // 总长度与 data 长度都要回填对，否则播放器读到的是 0 长度（整段静音）
+        assertEquals(44 + 1_600 * 2, bytes.size)
+        assertEquals(36 + 1_600 * 2, le32(bytes, 4))
+        assertEquals(1_600 * 2, le32(bytes, 40))
+        val format = io.github.tancheng33.tingo.transcription.WavReader.format(target)
+        assertTrue("时长要算得出来：${format.durationMs}", format.durationMs > 90)
+    }
 }

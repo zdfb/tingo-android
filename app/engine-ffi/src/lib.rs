@@ -6,7 +6,6 @@
 //! 边界刻意保持窄：ASR 在 Android 上由 Kotlin 侧承担，因此这里不引入 sherpa 相关模块。
 
 use std::panic::{self, AssertUnwindSafe};
-use chrono::TimeZone;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -230,16 +229,6 @@ pub struct TrashItem {
 
 
 
-/// 毫秒时间戳 → 本地时间；0 表示"不知道，用现在"。
-fn millis_to_naive(ms: i64) -> chrono::NaiveDateTime {
-    if ms <= 0 {
-        return chrono::Local::now().naive_local();
-    }
-    chrono::DateTime::from_timestamp_millis(ms)
-        .map(|d| d.with_timezone(&chrono::Local).naive_local())
-        .unwrap_or_else(|| chrono::Local::now().naive_local())
-}
-
 /// 热词归一化：去空白、去重、限数。空表是合法的（用户清空）。
 fn normalize_hotwords(words: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -299,6 +288,16 @@ fn speaker_infos(tr: &engine_transcript::Transcript) -> Vec<SpeakerInfo> {
 /// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
+
+/// 导入结果：会议 id 与它的目录。
+///
+/// 连目录一起返回，宿主就不必知道"会议库布局是 <root>/meetings/<id>"——
+/// 这条约定只该有一个地方知道。
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ImportedMeeting {
+    pub id: String,
+    pub dir: String,
+}
 
 /// 配置文件名字（`<config>/config.toml`），与桌面 `config::default_path` 一致。
 const CONFIG_FILE: &str = "config.toml";
@@ -703,7 +702,7 @@ impl TingoEngine {
         wav_path: String,
         title: String,
         modified_ms: i64,
-    ) -> Result<String, EngineError> {
+    ) -> Result<ImportedMeeting, EngineError> {
         let source = PathBuf::from(&wav_path);
         guard("import_audio", move || {
             let bytes = std::fs::read(&source).map_err(|e| io_error(e, "import_audio"))?;
@@ -712,13 +711,13 @@ impl TingoEngine {
                     detail: "录音是空的".to_string(),
                 });
             }
-            let when = millis_to_naive(modified_ms);
+            let when = tingo_engine::meetings::local_time_from_millis(modified_ms);
             let stem = source
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("会议")
                 .to_string();
-            let wanted = if title.trim().is_empty() { stem } else { title.clone() };
+            let wanted = if title.trim().is_empty() { stem } else { title };
             let dir = tingo_engine::meetings::new_folder(&self.paths.meetings_root, &wanted, when);
             std::fs::create_dir_all(&dir).map_err(|e| io_error(e, "import_audio"))?;
             let id = dir
@@ -729,7 +728,10 @@ impl TingoEngine {
                 })?;
             // 文件名必须是 `录音.wav`：播放与转写都按这个名字找（与录制结束时合成的一致）
             std::fs::write(dir.join("录音.wav"), bytes).map_err(|e| io_error(e, "import_audio"))?;
-            Ok(id)
+            Ok(ImportedMeeting {
+                id,
+                dir: dir.to_string_lossy().into_owned(),
+            })
         })
     }
 
@@ -2037,9 +2039,10 @@ mod tests {
         let fake = vec![0u8; 4_000];
         std::fs::write(&source, &fake).unwrap();
 
-        let id = engine
+        let imported = engine
             .import_audio(source.to_string_lossy().into_owned(), "产品周会".to_string(), 0)
             .unwrap();
+        let id = imported.id;
 
         assert!(id.contains("产品周会"), "会议名应取用户给的标题：{id}");
         // 播放与转写都按 `录音.wav` 找音频，导入必须落成同一个名字
@@ -2055,18 +2058,21 @@ mod tests {
         let engine = TingoEngine::new(root.display().to_string());
         let source = root.join("旧录音.wav").to_path_buf();
         std::fs::write(&source, vec![1u8; 1_000]).unwrap();
-        // 2026-11-05 14:30 本地时间
-        let ms = chrono::Local
-            .with_ymd_and_hms(2026, 11, 5, 14, 30, 0)
+        // 2026-11-05 14:30 本地时间（用引擎自己的换算反推出毫秒值，避免测试依赖时区实现）
+        let when = chrono::NaiveDate::from_ymd_opt(2026, 11, 5)
             .unwrap()
-            .timestamp_millis();
+            .and_hms_opt(14, 30, 0)
+            .unwrap();
+        let ms = when.and_local_timezone(chrono::Local).unwrap().timestamp_millis();
 
-        let id = engine
+        let imported = engine
             .import_audio(source.to_string_lossy().into_owned(), String::new(), ms)
             .unwrap();
 
         // 导入的文件时间就是这场会议的时间：不能拿"今天"糊弄过去
-        assert!(id.starts_with("2026-11-05_1430_"), "实际：{id}");
+        assert!(imported.id.starts_with("2026-11-05_1430_"), "实际：{}", imported.id);
+        // 目录一起回来：宿主不该自己拼 <root>/meetings/<id>
+        assert!(imported.dir.ends_with(&imported.id), "目录应与 id 对得上：{}", imported.dir);
         let _ = std::fs::remove_dir_all(&root);
     }
 

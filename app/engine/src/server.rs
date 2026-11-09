@@ -2027,13 +2027,7 @@ async fn import_file(State(s): State<Shared>, mut form: Multipart) -> ApiResult<
             &format!("Unsupported file type: .{ext}"),
         )));
     }
-    let when = if modified > 0.0 {
-        chrono::DateTime::from_timestamp_millis(modified as i64)
-            .map(|d| d.with_timezone(&chrono::Local).naive_local())
-            .unwrap_or_else(|| chrono::Local::now().naive_local())
-    } else {
-        chrono::Local::now().naive_local()
-    };
+    let when = meetings::local_time_from_millis(modified as i64);
     let stem = Path::new(&filename)
         .file_stem()
         .and_then(|s| s.to_str())

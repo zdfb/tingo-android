@@ -11,7 +11,7 @@ object AudioResample {
     /** 本机 ASR 要求的目标采样率。 */
     const val TARGET_RATE = 16_000
 
-    /** 多声道取均值（左右声道的内容都要留下，取左或取右都会丢东西）。 */
+    /** 多声道取均值（左右两声道的内容都要留下，取左或取右都会丢东西）。 */
     fun toMono(interleaved: ShortArray, channels: Int): FloatArray {
         require(channels >= 1) { "声道数不合法：$channels" }
         val frames = interleaved.size / channels
@@ -26,26 +26,55 @@ object AudioResample {
         return mono
     }
 
-    /**
-     * 线性插值重采样。
-     *
-     * 素材大多是 44.1k / 48k，降到 16k 用最近邻会有明显混叠（哨音）；
-     * 线性插值在这个场景够用，且不引入新依赖。
-     */
+    /** 一次性重采样（测试与短片段用；长录音走 [StreamingResampler]）。 */
     fun resample(samples: FloatArray, fromRate: Int, toRate: Int = TARGET_RATE): FloatArray {
         require(fromRate > 0) { "采样率不合法：$fromRate" }
         if (fromRate == toRate || samples.isEmpty()) return samples
-        val ratio = fromRate.toDouble() / toRate
-        val outLength = (samples.size / ratio).toInt()
-        val out = FloatArray(outLength)
-        for (index in 0 until outLength) {
-            val position = index * ratio
-            val left = position.toInt().coerceAtMost(samples.size - 1)
-            val right = (left + 1).coerceAtMost(samples.size - 1)
-            val weight = (position - left).toFloat()
-            out[index] = samples[left] * (1f - weight) + samples[right] * weight
+        val stream = StreamingResampler(fromRate, toRate)
+        return stream.push(samples)
+    }
+
+    /**
+     * 分块重采样。
+     *
+     * 一小时的 48 kHz 录音整段进内存要一个多 G，所以解码是一块一块来的；
+     * 块与块之间要留一个样本做插值，否则每块首尾会有一声轻响。
+     *
+     * 说明：线性插值不做前置低通，8 kHz 以上的分量会有混叠。这个场景（语音转写）
+     * 里可以接受；真介意就得换成带滤波的重采样器。
+     */
+    class StreamingResampler(private val fromRate: Int, private val toRate: Int = TARGET_RATE) {
+        private val ratio = fromRate.toDouble() / toRate
+        /** 上一块最后一个样本：下一块插值时要用它当"左边那个点" */
+        private var carry: Float? = null
+        /** 下一个输出样本在「carry + 本块」里的位置 */
+        private var position = 0.0
+
+        init {
+            require(fromRate > 0) { "采样率不合法：$fromRate" }
         }
-        return out
+
+        /** 喂一块样本，返回这一块能确定的输出。 */
+        fun push(samples: FloatArray): FloatArray {
+            if (fromRate == toRate) return samples
+            // 前半段要靠上一块的最后一个样本才能插值
+            val input = carry?.let { previous -> FloatArray(samples.size + 1).also { it[0] = previous; samples.copyInto(it, 1) } }
+                ?: samples
+            val out = ArrayList<Float>(input.size * toRate / fromRate + 1)
+            while (position <= input.size - 2) {
+                val index = position.toInt()
+                val weight = (position - index).toFloat()
+                out += input[index] * (1f - weight) + input[index + 1] * weight
+                position += ratio
+            }
+            carry = input.last()
+            // 位置换算到「只有 carry 一个点」的坐标系里，下一块接着算
+            position -= input.size - 1
+            return out.toFloatArray()
+        }
+
+        /** 收尾：末尾不足一个插值区间，少一个样本听不出来，直接结束。 */
+        fun flush(): FloatArray = FloatArray(0)
     }
 
     /** 转成 16 bit PCM（wav 的样本格式）。 */

@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.testing
 
+import io.github.tancheng33.tingo.engine.ImportedMeeting
 import io.github.tancheng33.tingo.engine.Capabilities
 import io.github.tancheng33.tingo.engine.Fishbone
 import io.github.tancheng33.tingo.engine.MeetingDetail
@@ -175,9 +176,10 @@ class FakeEnginePort(
         return "/tmp/$id.srt"
     }
 
-    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): String {
+    override fun importAudio(wavPath: String, title: String, modifiedMs: Long): ImportedMeeting {
         importedAudio += Triple(wavPath, title, modifiedMs)
-        return "2026-11-07_1000_$title"
+        val id = "2026-11-07_1000_$title"
+        return ImportedMeeting(id = id, dir = "/fake/tingo/meetings/$id")
     }
 
     /** 导入过的录音（用例据此断言解码产物真的交到了引擎） */
