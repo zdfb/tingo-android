@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
-import io.github.tancheng33.tingo.ui.theme.TingoColors
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -68,15 +67,9 @@ fun RecordScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var permissionDenied by remember { mutableStateOf(false) }
-
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        permissionDenied = !granted
-        if (granted) onStart()
-    }
-
+    // 麦克风权限的结果由外壳层决定（它负责申请与启动），这里只负责把"没授权"如实说出来
+    val permissionDenied = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+        PackageManager.PERMISSION_GRANTED
     // 通知权限只影响"看得见录音状态"，没有它录音照样能进行
     // 权限可能在系统设置里被重新打开：每次回到前台都重新判定一次，别把旧结论一直挂着
     var notificationsDenied by remember { mutableStateOf(false) }
@@ -92,28 +85,6 @@ fun RecordScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val notificationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        // 没有通知权限录音照样能进行，但状态栏就看不见了——必须说清楚
-        notificationsDenied = !granted
-    }
-
-    fun startWithPermission() {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            launcher.launch(Manifest.permission.RECORD_AUDIO)
-            return
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            val notifications = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
-            if (!notifications) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        onStart()
-    }
-
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -149,7 +120,7 @@ fun RecordScreen(
                     )
                     PrimaryPill(
                         label = stringResource(R.string.record_start),
-                        onClick = ::startWithPermission,
+                        onClick = onStart,
                     )
                 }
 
@@ -229,7 +200,7 @@ fun RecordScreen(
                     )
                     PrimaryPill(
                         label = stringResource(R.string.record_start),
-                        onClick = ::startWithPermission,
+                        onClick = onStart,
                     )
                 }
             }
@@ -320,7 +291,7 @@ private fun PrimaryPill(label: String, onClick: () -> Unit) {
         Text(
             text = label,
             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-            color = if (colors.black == TingoColors.black) androidx.compose.ui.graphics.Color.White else colors.bg,
+            color = colors.onBlack,
         )
     }
 }

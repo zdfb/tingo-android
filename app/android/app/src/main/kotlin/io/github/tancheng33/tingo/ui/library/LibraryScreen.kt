@@ -56,6 +56,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 /**
  * 会议库列表。
@@ -160,6 +163,7 @@ private fun LibraryHeader(
     countLabel: String,
 ) {
     val colors = TingoTheme.colors
+    val searchLabel = stringResource(R.string.library_search_hint)
     Column(
         modifier = Modifier.padding(
             start = TingoDimens.gutter,
@@ -172,7 +176,7 @@ private fun LibraryHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(R.string.app_name),
-                style = TextStyle(fontSize = 17.dp.value.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp),
+                style = TextStyle(fontSize = TingoType.brand, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp),
                 color = colors.text,
                 modifier = Modifier.weight(1f),
             )
@@ -196,7 +200,7 @@ private fun LibraryHeader(
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
                     Text(
-                        text = stringResource(R.string.library_search_hint),
+                        text = searchLabel,
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.faint,
                     )
@@ -206,9 +210,12 @@ private fun LibraryHeader(
                     onValueChange = onQueryChange,
                     singleLine = true,
                     textStyle = TextStyle(fontSize = TingoType.body, color = colors.text),
+                    cursorBrush = SolidColor(colors.blue),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = {}),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = searchLabel },
                 )
             }
         }

@@ -25,11 +25,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -40,6 +39,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.LaunchedEffect
@@ -260,7 +266,7 @@ fun TingoRoot(
                 },
             )
         },
-    ) { _ ->
+    ) { innerPadding ->
         val onOpenMeeting: (String) -> Unit = { id ->
             if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
         }
@@ -268,7 +274,8 @@ fun TingoRoot(
         NavHost(
             navController = navController,
             startDestination = TopDestination.MEETINGS.route,
-            modifier = Modifier.fillMaxSize(),
+            // 必须吃掉 Scaffold 给的底部导航高度：不要它会画到底部导航下面（实机上一眼可见）
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
         ) {
             composable(TopDestination.RECORD.route) {
                 RecordRoute(
@@ -626,6 +633,7 @@ private fun TingoBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.bg)
+                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -645,6 +653,10 @@ private fun TingoBottomBar(
                             },
                         )
                         .clickable { onSelect(destination) }
+                        .semantics {
+                            role = androidx.compose.ui.semantics.Role.Tab
+                            this.selected = selected
+                        }
                         .padding(vertical = 8.dp),
                 ) {
                     Icon(

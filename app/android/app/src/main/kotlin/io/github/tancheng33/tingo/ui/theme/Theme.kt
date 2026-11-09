@@ -31,6 +31,7 @@ data class TingoPalette(
     val muted: androidx.compose.ui.graphics.Color,
     val faint: androidx.compose.ui.graphics.Color,
     val black: androidx.compose.ui.graphics.Color,
+    val onBlack: androidx.compose.ui.graphics.Color,
     val blue: androidx.compose.ui.graphics.Color,
     val blueSoft: androidx.compose.ui.graphics.Color,
     val cyan: androidx.compose.ui.graphics.Color,
@@ -43,7 +44,7 @@ private val LightPalette = TingoPalette(
     bg = TingoColors.bg, card = TingoColors.card, line = TingoColors.line,
     lineSoft = TingoColors.lineSoft, seg = TingoColors.seg, hover = TingoColors.hover,
     text = TingoColors.text, text2 = TingoColors.text2, muted = TingoColors.muted,
-    faint = TingoColors.faint, black = TingoColors.black, blue = TingoColors.blue,
+    faint = TingoColors.faint, black = TingoColors.black, onBlack = TingoColors.onBlack, blue = TingoColors.blue,
     blueSoft = TingoColors.blueSoft, cyan = TingoColors.cyan, red = TingoColors.red,
     green = TingoColors.green, amber = TingoColors.amber,
 )
@@ -52,7 +53,7 @@ private val DarkPalette = TingoPalette(
     bg = TingoColorsDark.bg, card = TingoColorsDark.card, line = TingoColorsDark.line,
     lineSoft = TingoColorsDark.lineSoft, seg = TingoColorsDark.seg, hover = TingoColorsDark.hover,
     text = TingoColorsDark.text, text2 = TingoColorsDark.text2, muted = TingoColorsDark.muted,
-    faint = TingoColorsDark.faint, black = TingoColorsDark.black, blue = TingoColorsDark.blue,
+    faint = TingoColorsDark.faint, black = TingoColorsDark.black, onBlack = TingoColorsDark.onBlack, blue = TingoColorsDark.blue,
     blueSoft = TingoColorsDark.blueSoft, cyan = TingoColorsDark.cyan, red = TingoColorsDark.red,
     green = TingoColorsDark.green, amber = TingoColorsDark.amber,
 )
@@ -81,7 +82,7 @@ private val TingoTypography = Typography(
 
 private val LightScheme = lightColorScheme(
     primary = TingoColors.blue,
-    onPrimary = androidx.compose.ui.graphics.Color.White,
+    onPrimary = TingoColors.onBlack,
     background = TingoColors.bg,
     onBackground = TingoColors.text,
     surface = TingoColors.card,
@@ -94,7 +95,7 @@ private val LightScheme = lightColorScheme(
 
 private val DarkScheme = darkColorScheme(
     primary = TingoColorsDark.blue,
-    onPrimary = androidx.compose.ui.graphics.Color(0xFF0A1F6B),
+    onPrimary = TingoColorsDark.onBlack,
     background = TingoColorsDark.bg,
     onBackground = TingoColorsDark.text,
     surface = TingoColorsDark.card,

@@ -24,6 +24,8 @@ object TingoColors {
     val muted = Color(0xFF7D8187)
     val faint = Color(0xFFA3A7AD)
     val black = Color(0xFF000000)
+    /** 黑底上写字用的颜色（深色模式下黑底其实是近白，所以不能写死白） */
+    val onBlack = Color(0xFFFFFFFF)
 
     val blue = Color(0xFF1F4BFF)
     val blueSoft = Color(0xFFE9EFFF)
@@ -46,6 +48,7 @@ object TingoColorsDark {
     val muted = Color(0xFF9AA3BF)
     val faint = Color(0xFF6C7597)
     val black = Color(0xFFEEF1FB)
+    val onBlack = Color(0xFF0B0F1E)
 
     val blue = Color(0xFF9DB2FF)
     val blueSoft = Color(0xFF1E2A5C)
@@ -65,6 +68,11 @@ object TingoDimens {
     val gap = 12.dp
     val gapTight = 8.dp
 
+    /** 浮层（下拉、对话框）的投影高度：桌面版 --shadow-pop 的对应物 */
+    val elevationPop = 12.dp
+    /** 卡片贴地时的那一点影子：桌面版 --shadow-pill */
+    val elevationPill = 1.dp
+
     val cardShape = RoundedCornerShape(radiusCard)
     val controlShape = RoundedCornerShape(radiusControl)
     val pillShape = RoundedCornerShape(radiusPill)
@@ -77,6 +85,8 @@ object TingoType {
     val label = 12.sp
     val caption = 11.sp
 
+    /** 品牌名：桌面版 .brand-name 是 17px/600，字距略放大 */
+    val brand = 17.sp
     val display = 30.sp
     val title = 20.sp
     val section = 15.sp

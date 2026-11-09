@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -30,8 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.Fishbone
@@ -407,6 +410,7 @@ private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> 
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .background(if (active) colors.card else colors.seg, TingoDimens.controlShape)
                     .then(
                         if (active) {
@@ -415,7 +419,11 @@ private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> 
                             Modifier
                         },
                     )
-                    .clickable { onSelect(index) }
+                    .clickable(enabled = tabs.size > 1) { onSelect(index) }
+                    .semantics {
+                        role = Role.Tab
+                        this.selected = active
+                    }
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
