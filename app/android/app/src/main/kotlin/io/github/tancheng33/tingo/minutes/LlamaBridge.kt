@@ -31,7 +31,46 @@ object LlamaBridge {
         if (handle != 0L && isAvailable) nativeFree(handle)
     }
 
+    /**
+     * 基准测试专用：分开报预填充与解码的 token 数与耗时。
+     *
+     * 不拿"总耗时 ÷ 字符数"估算：那是把预填充也算进生成速度里，出来的数会骗人。
+     */
+    fun bench(handle: Long, prompt: String, maxTokens: Int = 256): Bench? {
+        if (handle == 0L || !isAvailable) return null
+        val raw = nativeBench(handle, prompt, maxTokens)
+        val parts = raw.split(',')
+        if (parts.size != 4) return null
+        return Bench(
+            promptTokens = parts[0].toIntOrNull() ?: return null,
+            prefillMs = parts[1].toLongOrNull() ?: return null,
+            decodeTokens = parts[2].toIntOrNull() ?: return null,
+            decodeMs = parts[3].toLongOrNull() ?: return null,
+        )
+    }
+
+    /** 一次基准测量的原始数据。 */
+    data class Bench(
+        val promptTokens: Int,
+        val prefillMs: Long,
+        val decodeTokens: Int,
+        val decodeMs: Long,
+    ) {
+        /** 预填充速度（token/s）；耗时 0 时按"极快"处理，避免除零。 */
+        val prefillTokensPerSecond: Double
+            get() = if (prefillMs <= 0) Double.POSITIVE_INFINITY else promptTokens * 1000.0 / prefillMs
+
+        /** 生成速度（token/s），这是用户体感最直接的那个数。 */
+        val decodeTokensPerSecond: Double
+            get() = if (decodeMs <= 0) Double.POSITIVE_INFINITY else decodeTokens * 1000.0 / decodeMs
+
+        /** 首字延迟：等预填充完成，用户才看到第一个字。 */
+        val timeToFirstTokenMs: Long get() = prefillMs
+    }
+
     private external fun nativeLoad(modelPath: String, nThreads: Int, nCtx: Int): Long
+
+    private external fun nativeBench(handle: Long, prompt: String, maxTokens: Int): String
 
     private external fun nativeGenerate(handle: Long, prompt: String, maxTokens: Int): String
 

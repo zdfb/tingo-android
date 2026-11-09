@@ -5,6 +5,8 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -22,6 +24,8 @@ struct Session {
     const llama_vocab *vocab = nullptr;
     llama_sampler *sampler = nullptr;
     int n_ctx = 4096;
+    /** 一次 llama_decode 的上限；预填充要按它切块，否则超长 prompt 会 abort */
+    int n_batch = 512;
 };
 
 void free_session(Session *s) {
@@ -41,6 +45,27 @@ std::string jstring_to_utf8(JNIEnv *env, jstring value) {
 }
 
 }  // namespace
+
+
+/**
+ * 分块预填充。
+ *
+ * llama_decode 一次最多吃 n_batch 个 token，超了不是"返回错误"而是 GGML_ASSERT 直接 abort——
+ * 实测把一份约 750 token 的转写稿喂进去，整个进程 SIGABRT（用户看到的是应用闪退）。
+ * 真实会议转写稿动辄几千 token，所以必须按 n_batch 切块推进。
+ */
+static bool prefill_chunked(llama_context *ctx, llama_token *tokens, int n_tokens, int n_batch) {
+    const int step = n_batch > 0 ? n_batch : 512;
+    for (int offset = 0; offset < n_tokens; offset += step) {
+        const int count = std::min(step, n_tokens - offset);
+        llama_batch batch = llama_batch_get_one(tokens + offset, count);
+        if (llama_decode(ctx, batch) != 0) {
+            LOGE("预填充失败（offset=%d, count=%d）", offset, count);
+            return false;
+        }
+    }
+    return true;
+}
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeLoad(
@@ -71,6 +96,7 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeLoad(
     session->ctx = ctx;
     session->vocab = llama_model_get_vocab(model);
     session->n_ctx = cparams.n_ctx;
+    session->n_batch = cparams.n_batch;
 
     // 纪要是结构化输出，贪心解码最稳：同样的转写得到同样的纪要
     session->sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -109,8 +135,7 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
     }
 
     std::string output;
-    llama_batch batch = llama_batch_get_one(tokens.data(), n_prompt);
-    if (llama_decode(session->ctx, batch) != 0) {
+    if (!prefill_chunked(session->ctx, tokens.data(), n_prompt, session->n_batch)) {
         LOGE("prompt 解码失败");
         return env->NewStringUTF("");
     }
@@ -133,6 +158,59 @@ Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeGenerate(
 
     LOGI("生成完成: %d 字符", static_cast<int>(output.size()));
     return env->NewStringUTF(output.c_str());
+}
+
+
+/**
+ * 纯测速：把 prompt 预填充与逐 token 解码分别计时，返回 "prefill_tokens,prefill_ms,decode_tokens,decode_ms"。
+ *
+ * 界面上的生成走 nativeGenerate；这个入口只给基准测试用，避免"用整体耗时反推 tok/s"
+ * 这种把预填充和生成长度混在一起的算法。
+ */
+extern "C" JNIEXPORT jstring JNICALL
+Java_io_github_tancheng33_tingo_minutes_LlamaBridge_nativeBench(
+        JNIEnv *env, jclass, jlong handle, jstring prompt, jint max_tokens) {
+    auto *session = reinterpret_cast<Session *>(handle);
+    if (session == nullptr) return env->NewStringUTF("0,0,0,0");
+
+    const std::string text = jstring_to_utf8(env, prompt);
+    llama_memory_t memory = llama_get_memory(session->ctx);
+    if (memory) llama_memory_clear(memory, true);
+    llama_sampler_reset(session->sampler);
+
+    int n_prompt = -llama_tokenize(
+        session->vocab, text.c_str(), static_cast<int32_t>(text.size()),
+        nullptr, 0, true, true);
+    if (n_prompt <= 0) return env->NewStringUTF("0,0,0,0");
+    std::vector<llama_token> tokens(n_prompt);
+    llama_tokenize(session->vocab, text.c_str(), static_cast<int32_t>(text.size()),
+                   tokens.data(), n_prompt, true, true);
+
+    const auto t0 = std::chrono::steady_clock::now();
+    if (!prefill_chunked(session->ctx, tokens.data(), n_prompt, session->n_batch)) {
+        return env->NewStringUTF("0,0,0,0");
+    }
+    const auto t1 = std::chrono::steady_clock::now();
+
+    const int limit = max_tokens > 0 ? max_tokens : 256;
+    int produced = 0;
+    for (int i = 0; i < limit; ++i) {
+        llama_token token = llama_sampler_sample(session->sampler, session->ctx, -1);
+        if (llama_vocab_is_eog(session->vocab, token)) break;
+        produced++;
+        llama_batch next = llama_batch_get_one(&token, 1);
+        if (llama_decode(session->ctx, next) != 0) break;
+    }
+    const auto t2 = std::chrono::steady_clock::now();
+
+    const auto prefill_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    const auto decode_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    char out[128];
+    snprintf(out, sizeof(out), "%d,%lld,%d,%lld", n_prompt,
+             static_cast<long long>(prefill_ms), produced, static_cast<long long>(decode_ms));
+    LOGI("基准: prompt=%d 预填充=%lldms 生成=%d token 解码=%lldms", n_prompt,
+         static_cast<long long>(prefill_ms), produced, static_cast<long long>(decode_ms));
+    return env->NewStringUTF(out);
 }
 
 extern "C" JNIEXPORT void JNICALL

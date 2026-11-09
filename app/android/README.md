@@ -59,6 +59,16 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
 
+**端侧模型吞吐（实测，REDMI Turbo 4 / Dimensity，Qwen3-0.6B Q4_K_M，597 token 提示词，生成 128 token，三轮取中位数）**
+
+| 线程数 | 预填充 | 生成（解码） | 说明 |
+|---|---|---|---|
+| 4 | 82.7 tok/s | **23.6 tok/s** | 默认档位 |
+| 8 | 75.7 tok/s | 25.2 tok/s | 生成略快、预填充更慢，差距在噪声量级 |
+
+体感换算：一份约 400 字的纪要约 600 token，4 线程下大约 **25 秒**出完，首字延迟约 **7 秒**
+（597 token 的提示词预填充）。预热后单次 128 token 的波动在 ±10% 以内。
+
 当前状态（2026-11-09 实机验收）：**JVM 单测 213 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
 arm64）在**飞行模式下**跑通 17 个设备级用例（引擎桥接 10、备份恢复与 sherpa 运行时 4、
 中文识别 / 双人流水线 / llama 生成 3），证明内置模型确实离线可用。
