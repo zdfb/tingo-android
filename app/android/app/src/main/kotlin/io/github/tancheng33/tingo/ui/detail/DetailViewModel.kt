@@ -63,13 +63,6 @@ data class DetailUiState(
     val minutesFailure: FailureKind? = null,
     val failure: FailureKind? = null,
     val playback: PlaybackState = PlaybackState(),
-    /**
-     * 录音文件是否还在。
-     *
-     * 「只删录音」之后必须变成 false：不然播放条还在，点下去什么也不响，
-     * 用户会以为是播放器坏了。
-     */
-    val hasAudio: Boolean = false,
 )
 
 class DetailViewModel(
@@ -203,10 +196,6 @@ class DetailViewModel(
             null
         }
     }
-
-    /** 录音文件真的在（空文件不算：头都没写成的录音播不了）。 */
-    private fun hasAudio(): Boolean =
-        audioFile?.let { it.isFile && it.length() > WavHeader.MIN_BYTES } == true
 
     /**
      * 只删这场会议的录音：移到回收站，转写与纪要留着。与桌面的「只删录音」同一个动作。
@@ -367,7 +356,7 @@ class DetailViewModel(
                 val speakers = runCatching { engine.speakers(meetingId, lang) }.getOrDefault(emptyList())
                 val minutesText = detail.minutesText
                 if (minutesText.isNullOrBlank()) {
-                    DetailUiState(loading = false, detail = detail, speakers = speakers, hasAudio = hasAudio())
+                    DetailUiState(loading = false, detail = detail, speakers = speakers)
                 } else {
                     try {
                         DetailUiState(
@@ -375,7 +364,6 @@ class DetailViewModel(
                             detail = detail,
                             speakers = speakers,
                             minutes = engine.parseMinutes(minutesText),
-                            hasAudio = hasAudio(),
                         )
                     } catch (e: TingoFailure) {
                         // 纪要坏了只降级这一栏，转写照常展示
@@ -384,7 +372,6 @@ class DetailViewModel(
                             detail = detail,
                             speakers = speakers,
                             minutesFailure = e.kind,
-                            hasAudio = hasAudio(),
                         )
                     }
                 }

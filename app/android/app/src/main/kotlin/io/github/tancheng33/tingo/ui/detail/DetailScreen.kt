@@ -259,7 +259,8 @@ fun DetailScreen(
                                 )
                             }
                             // 有录音才给「只删录音」：没有录音的会议点了只会报错
-                            if (state.hasAudio) {
+                            // 录音还在不在由引擎在详情里给出（与会议库同一判断），界面不再自己算
+                            if (detail?.summary?.hasAudio == true) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(

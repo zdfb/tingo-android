@@ -65,9 +65,15 @@ class DetailDeleteRecordingTest {
 
     private fun viewModel(dir: File, engine: FakeEnginePort): DetailViewModel {
         val audio = File(dir, "录音.wav")
-        val withDetail = object : FakeEnginePort(onRead = { detail }) {
-            override fun deleteAudio(id_: String, busyIds: List<String>): ULong =
-                engine.deleteAudio(id_, busyIds)
+        val withDetail = object : FakeEnginePort(
+            onRead = { detail.copy(summary = detail.summary.copy(hasAudio = audio.isFile)) },
+        ) {
+            // 真引擎会把录音移走：这里同样把文件删掉，否则"删完还有录音"是假象
+            override fun deleteAudio(id_: String, busyIds: List<String>): ULong {
+                val freed = engine.deleteAudio(id_, busyIds)
+                audio.delete()
+                return freed
+            }
         }
         return DetailViewModel(
             engine = withDetail,
@@ -83,7 +89,7 @@ class DetailDeleteRecordingTest {
         val engine = FakeEnginePort()
         val vm = viewModel(meetingDir(withAudio = true), engine)
         advanceUntilIdle()
-        assertTrue("有录音时播放条要在", vm.state.value.hasAudio)
+        assertTrue("有录音时播放条要在", vm.state.value.detail?.summary?.hasAudio == true)
 
         var freed = 0uL
         vm.deleteRecording(busyIds = listOf("别的会议"), onFreed = { freed = it })
@@ -92,7 +98,7 @@ class DetailDeleteRecordingTest {
         assertEquals(listOf("2026-11-01_0900_周会"), engine.deletedAudio)
         assertEquals("忙碌列表要原样交给引擎", listOf("别的会议"), engine.lastDeleteAudioBusyIds)
         assertEquals("腾出的字节数要交给界面做提示", 2_048uL, freed)
-        assertFalse("删完录音播放条必须消失", vm.state.value.hasAudio)
+        assertFalse("删完录音播放条必须消失", vm.state.value.detail?.summary?.hasAudio == true)
     }
 
     @Test
@@ -119,6 +125,6 @@ class DetailDeleteRecordingTest {
         assertEquals("引擎给的说明要原样透给用户", "这场会议还在处理中", explained)
         // 删录音失败不能把整页换成错误页：转写和纪要都还好好的
         assertNull(vm.state.value.failure)
-        assertTrue("失败之后录音还在，播放条不该消失", vm.state.value.hasAudio)
+        assertTrue("失败之后录音还在，播放条不该消失", vm.state.value.detail?.summary?.hasAudio == true)
     }
 }

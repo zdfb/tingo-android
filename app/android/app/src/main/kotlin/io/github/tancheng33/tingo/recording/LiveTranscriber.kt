@@ -91,9 +91,11 @@ class LiveTranscriber(
             pending = FloatArray(0)
             rest
         }
-        // 尾巴不足一个窗口也要喂完：补零到一个整窗再给 VAD，否则最后一两句话会静默丢掉
+        // 尾巴不足一个窗口也要喂完：只在末尾补零到整窗再给 VAD，否则最后一两句话会静默丢掉。
+        // 注意补的是"除以窗口的余数"，不是"一个窗口减总长度"——尾部常常比一个窗口长得多。
         if (tail.isNotEmpty()) {
-            val padded = tail + FloatArray(window - tail.size)
+            val remainder = tail.size % window
+            val padded = if (remainder == 0) tail else tail + FloatArray(window - remainder)
             feedVad(padded)
         }
         runCatching { asr.flush() }
