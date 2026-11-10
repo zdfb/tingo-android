@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Tingo" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- 图标背景：与品牌图的浅蓝白一致，自适应图标裁切时不会露出黑边 -->
+    <color name="launcher_background">#F4F7FF</color>
 </resources>

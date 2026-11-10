@@ -14,6 +14,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -240,6 +243,16 @@ private fun LibraryHeader(
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 品牌块：图标 + 名字（桌面侧栏同一块）。图标是自适应图标的前景层，
+            // 所以不需要再单独存一份；裁成圆角就是为了不露出那层白底
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(TingoDimens.brandMark)
+                    .clip(TingoDimens.cardShape),
+            )
+            Spacer(Modifier.size(TingoDimens.gapTight))
             Text(
                 text = stringResource(R.string.app_name),
                 style = TextStyle(fontSize = TingoType.brand, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp),

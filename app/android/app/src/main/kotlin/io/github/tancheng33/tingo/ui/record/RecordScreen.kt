@@ -46,6 +46,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import io.github.tancheng33.tingo.ui.tasks.RunningTask
+import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.recording.SystemAudioSupport
 import io.github.tancheng33.tingo.ui.clockOf
@@ -90,6 +92,9 @@ fun RecordScreen(
     onPickAudio: () -> Unit = {},
     /** 上一场是"没人说话"自动结束的（分钟数）；null 表示不是自动结束 */
     autoStoppedAfter: Int? = null,
+    /** 正在后台跑的长任务（转写、纪要、导入）：桌面对应侧栏那块"进行中任务" */
+    runningTasks: List<RunningTask> = emptyList(),
+    onOpenTask: (String) -> Unit = {},
     /** 导入进度 0..1；null 表示没有在导入 */
     importProgress: Float? = null,
     /** 这一次导入失败的原因（格式不支持 / 读不出来），null 表示没失败 */
@@ -165,6 +170,7 @@ fun RecordScreen(
                         failure = importFailure,
                         onPick = onPickAudio,
                     )
+                    RunningTasks(tasks = runningTasks, onOpen = onOpenTask)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
 
@@ -259,6 +265,7 @@ fun RecordScreen(
                         failure = importFailure,
                         onPick = onPickAudio,
                     )
+                    RunningTasks(tasks = runningTasks, onOpen = onOpenTask)
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
             }
@@ -506,4 +513,61 @@ private fun RecentAndStatus(
             }
         }
     }
+}
+
+/**
+ * "进行中"：谁在跑、跑到哪。
+ *
+ * 桌面把这块放在侧栏，手机上一离开详情页就看不见了——而转写要跑几分钟，
+ * 正是最需要"它在动"的时刻。没有进度数字的（纪要）就只显示在写，不编一个百分比。
+ */
+@Composable
+private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
+    if (tasks.isEmpty()) return
+    val colors = TingoTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.record_running_tasks, tasks.size),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        tasks.forEach { task ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.card, TingoDimens.cardShape)
+                    .clickable { onOpen(task.meetingId) }
+                    .padding(TingoDimens.gapTight),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = task.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.text,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(task.kind.labelRes()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.muted,
+                    )
+                }
+                val fraction = task.fraction
+                if (fraction == null) {
+                    // 没有百分比就不画进度条：一条停在 0 的条比没有更让人以为卡住了
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+    }
+}
+
+/** 任务种类对应的界面文案。 */
+private fun TaskKind.labelRes(): Int = when (this) {
+    TaskKind.TRANSCRIBE -> R.string.task_transcribe
+    TaskKind.MINUTES -> R.string.task_minutes
+    TaskKind.IMPORT -> R.string.task_import
 }

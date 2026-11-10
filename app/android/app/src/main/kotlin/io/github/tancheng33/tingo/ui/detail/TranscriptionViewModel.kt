@@ -7,6 +7,9 @@ import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
 import io.github.tancheng33.tingo.recording.RecordingTracks
 import io.github.tancheng33.tingo.transcription.Transcript
+import io.github.tancheng33.tingo.ui.tasks.RunningTask
+import io.github.tancheng33.tingo.ui.tasks.TaskCenter
+import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.transcription.Transcriber
 import io.github.tancheng33.tingo.transcription.WavReader
 import java.io.File
@@ -49,6 +52,8 @@ class TranscriptionViewModel(
     private val meetingDir: File,
     /** 从 APK 内置模型包解包（删过模型的用户不必联网） */
     private val ensureBundled: () -> Boolean = { false },
+    /** 进行中任务登记表；null 表示没人看（测试里多数用例不关心） */
+    private val tasks: TaskCenter? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -128,9 +133,12 @@ class TranscriptionViewModel(
                         downloaded += file.bytes
                     }
                 }
+                val key = RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name)
+                tasks?.start(key, meetingDir.name, meetingTitle(), TaskKind.TRANSCRIBE, 0f)
                 _state.value = TranscriptionUiState.Running(0f)
                 val transcript = try {
                     transcriber.transcribe(wav, meetingDir) { fraction ->
+                        tasks?.progress(key, fraction)
                         _state.value = TranscriptionUiState.Running(fraction)
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -145,14 +153,18 @@ class TranscriptionViewModel(
                         if (redownload.isFailure) throw e
                     }
                     transcriber.transcribe(wav, meetingDir) { fraction ->
+                        tasks?.progress(key, fraction)
                         _state.value = TranscriptionUiState.Running(fraction)
                     }
                 }
+                tasks?.finish(key)
                 _state.value = TranscriptionUiState.Done(transcript)
             } catch (e: kotlinx.coroutines.CancellationException) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name))
                 _state.value = TranscriptionUiState.Idle
                 throw e
             } catch (e: Exception) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name))
                 _state.value = TranscriptionUiState.Failed(
                     R.string.err_transcribe_failed,
                     e.message.orEmpty(),
@@ -164,5 +176,15 @@ class TranscriptionViewModel(
     fun cancel() {
         job?.cancel()
         job = null
+        // 取消也是一次结束：不撤掉，首页会挂着一件永远不会再动的活
+        tasks?.finish(RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name))
     }
+
+    /**
+     * 会议标题：取目录名去掉时间前缀。
+     *
+     * 目录名形如 `2026-10-27_0930_项目A`，首页那块"进行中"要显示的是用户认得的名字，
+     * 不是一串带时间戳的目录名。
+     */
+    private fun meetingTitle(): String = meetingDir.name.substringAfterLast('_', meetingDir.name)
 }

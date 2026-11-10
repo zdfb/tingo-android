@@ -82,6 +82,7 @@ import io.github.tancheng33.tingo.export.DocxWriter
 import io.github.tancheng33.tingo.export.PdfWriter
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel
+import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.onboard.OnboardingScreen
 import io.github.tancheng33.tingo.importing.DemoMeeting
 import io.github.tancheng33.tingo.importing.AudioImport
@@ -201,6 +202,7 @@ fun TingoRoot(
     val recordState by recordViewModel.state.collectAsStateWithLifecycle()
     val importState by recordViewModel.import.collectAsStateWithLifecycle()
     val autoStoppedAfter by recordViewModel.autoStoppedAfter.collectAsStateWithLifecycle()
+    val runningTasks by container.tasks.tasks.collectAsStateWithLifecycle()
     val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
@@ -398,6 +400,10 @@ fun TingoRoot(
                     statusRows = homeStatusRows(container),
                     state = recordState,
                     autoStoppedAfter = autoStoppedAfter,
+                    runningTasks = runningTasks,
+                    onOpenTask = { id ->
+                        if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
+                    },
                     importProgress = importState.progress,
                     importFailure = importState.failure,
                     onPickAudio = {
@@ -452,7 +458,11 @@ fun TingoRoot(
                             unreadablePath = container.meetingDir(card.id).absolutePath
                         },
                         onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
-                        onDelete = { card -> libraryViewModel.delete(card.id) },
+                        onDelete = { card ->
+                            libraryViewModel.delete(card.id)
+                            // 会议没了，它挂着的"进行中"也得撤：点进去是一场不存在的会议
+                            container.tasks.forget(card.id)
+                        },
                         onOpenAtHit = { id, ms ->
                             onOpenMeeting(id)
                             // 跳到命中位置由详情页的播放器接手：先记录待跳转毫秒
@@ -463,7 +473,11 @@ fun TingoRoot(
                             onSelectAll = libraryViewModel::selectAll,
                             onClearSelection = libraryViewModel::clearSelection,
                             onBatch = { action, tag -> libraryViewModel.runBatch(action, tag) },
-                            onDeleteToTrash = libraryViewModel::deleteToTrash,
+                            onDeleteToTrash = { id ->
+                                libraryViewModel.deleteToTrash(id)
+                                // 进回收站就点不开了：同样不该留在"进行中"里
+                                container.tasks.forget(id)
+                            },
                             onShowTrash = libraryViewModel::showTrash,
                             onShowMeetings = libraryViewModel::showMeetings,
                             onRestore = libraryViewModel::restoreFromTrash,
@@ -667,6 +681,8 @@ private fun RecordRoute(
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
     autoStoppedAfter: Int?,
+    runningTasks: List<RunningTask>,
+    onOpenTask: (String) -> Unit,
     importProgress: Float?,
     importFailure: RecordViewModel.ImportFailure?,
     onPickAudio: () -> Unit,
@@ -697,6 +713,8 @@ private fun RecordRoute(
         onOpenMeeting = onOpenMeeting,
         onPickAudio = onPickAudio,
         autoStoppedAfter = autoStoppedAfter,
+        runningTasks = runningTasks,
+        onOpenTask = onOpenTask,
         importProgress = importProgress,
         importFailure = importFailure,
     )
@@ -838,6 +856,7 @@ private fun DetailRoute(
         factory = viewModelFactory {
             initializer {
                 TranscriptionViewModel(
+                    tasks = container.tasks,
                     ensureBundled = container::installBundledModels,
                     transcriber = TranscriptionPipeline(container.models, container.catalog),
                     store = container.models,
@@ -856,6 +875,7 @@ private fun DetailRoute(
             initializer {
                 val meetingDir = container.meetingDir(meetingId)
                 MinutesViewModel(
+                    tasks = container.tasks,
                     serviceFactory = {
                         MinutesService(
                             generator = RemoteMinutesGenerator(

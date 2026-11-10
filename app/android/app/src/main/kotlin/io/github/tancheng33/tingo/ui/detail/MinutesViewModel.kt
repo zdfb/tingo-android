@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.minutes.MinutesService
+import io.github.tancheng33.tingo.ui.tasks.RunningTask
+import io.github.tancheng33.tingo.ui.tasks.TaskCenter
+import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.minutes.remote.LlmRejected
 import io.github.tancheng33.tingo.minutes.remote.LlmUnavailable
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
@@ -52,6 +55,8 @@ class MinutesViewModel(
     /** 模型服务是否已配置齐（地址、密钥、模型名） */
     private val isConfigured: () -> Boolean,
     private val meetingDir: File,
+    /** 进行中任务登记表；null 表示没人看（测试里多数用例不关心） */
+    private val tasks: TaskCenter? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -83,6 +88,9 @@ class MinutesViewModel(
         }
         job = viewModelScope.launch(io) {
             try {
+                // 纪要只有"在写"，没有可量化进度：首页显示成一条没有百分比的活
+                val key = RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name)
+                tasks?.start(key, meetingDir.name, meetingTitle(), TaskKind.MINUTES)
                 _state.value = MinutesUiState.Generating
                 val service = serviceFactory()
                 val file = service.generate(
@@ -90,21 +98,27 @@ class MinutesViewModel(
                     meetingDir,
                     saveFinal = saveMinutes ?: { text -> service.write(meetingDir, text); Unit },
                 )
+                tasks?.finish(key)
                 _state.value = MinutesUiState.Done(file)
             } catch (e: kotlinx.coroutines.CancellationException) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
                 _state.value = MinutesUiState.Idle
                 throw e
             } catch (e: MinutesService.MinutesRejected) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
                 _state.value = MinutesUiState.Failed(
                     R.string.err_minutes_rejected,
                     e.problems.firstOrNull() ?: "structure",
                     draft = e.draft,
                 )
             } catch (e: LlmUnavailable) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
                 _state.value = MinutesUiState.Failed(R.string.err_llm_unreachable, e.message.orEmpty())
             } catch (e: LlmRejected) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
                 _state.value = MinutesUiState.Failed(R.string.err_llm_rejected, e.message.orEmpty())
             } catch (e: Exception) {
+                tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
                 _state.value = MinutesUiState.Failed(R.string.err_minutes_failed, e.message.orEmpty())
             }
         }
@@ -114,6 +128,11 @@ class MinutesViewModel(
     fun cancel() {
         job?.cancel()
         job = null
+        // 取消也是一次结束：不撤掉，首页会挂着一件永远不会再动的活
+        tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
         _state.value = MinutesUiState.Idle
     }
+
+    /** 会议标题：取目录名去掉时间前缀（与首页"进行中"显示的一致）。 */
+    private fun meetingTitle(): String = meetingDir.name.substringAfterLast('_', meetingDir.name)
 }

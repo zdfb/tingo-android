@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo
 
+import io.github.tancheng33.tingo.ui.tasks.TaskCenter
+
 import android.content.Context
 import io.github.tancheng33.tingo.engine.AbiCheck
 import io.github.tancheng33.tingo.engine.Capabilities
@@ -37,6 +39,14 @@ class AppContainer(context: Context) {
         appContext.getExternalFilesDir(null) ?: appContext.filesDir,
         "tingo",
     )
+
+    /**
+     * 进行中任务登记表。
+     *
+     * 首页那块"进行中"与各页的 ViewModel 共用同一份：没有它，用户点开转写再切回来
+     * 就看不到任何进展——而转写正是要跑几分钟、最需要"它在动"的那类活。
+     */
+    val tasks: TaskCenter = TaskCenter()
 
     /**
      * ABI 不受支持时引擎不可用；此时界面仍然可以打开，只是没有数据。

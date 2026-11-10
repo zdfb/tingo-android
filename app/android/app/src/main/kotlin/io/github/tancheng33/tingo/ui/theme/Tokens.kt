@@ -61,6 +61,9 @@ object TingoColorsDark {
 /** 尺寸与间距：桌面版是 240px 侧栏 + 16px 圆角卡片，手机端按同一节奏缩放。 */
 object TingoDimens {
     val radiusCard = 16.dp
+
+    /** 品牌区图标边长：与标题一行的视觉重量匹配 */
+    val brandMark = 28.dp
     val radiusControl = 10.dp
     val radiusPill = 999.dp
     val hairline = 1.dp

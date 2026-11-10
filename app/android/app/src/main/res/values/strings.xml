@@ -233,4 +233,8 @@
     <string name="settings_auto_stop_minutes">%1$d 分钟</string>
     <string name="settings_llm_preset_custom">自定义</string>
     <string name="settings_llm_preset_hint">点一下填好地址、协议与模型名；地址仍可改。手机上没有桌面那几样本机中转（Magpie / CC Switch / Ollama）——它们指向电脑本机。</string>
+    <string name="record_running_tasks">进行中（%1$d）</string>
+    <string name="task_transcribe">转写中</string>
+    <string name="task_minutes">写纪要中</string>
+    <string name="task_import">导入中</string>
 </resources>
