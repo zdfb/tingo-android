@@ -81,6 +81,8 @@ import io.github.tancheng33.tingo.BuildConfig
 import io.github.tancheng33.tingo.export.DocxWriter
 import io.github.tancheng33.tingo.export.PdfWriter
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.ui.components.TingoTextDialog
+import io.github.tancheng33.tingo.ui.components.ToastHost
 import io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel
 import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.onboard.OnboardingScreen
@@ -99,6 +101,7 @@ import io.github.tancheng33.tingo.ui.detail.DetailScreen
 import io.github.tancheng33.tingo.ui.detail.MinutesViewModel
 import io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel
 import io.github.tancheng33.tingo.ui.detail.DetailViewModel
+import io.github.tancheng33.tingo.ui.detail.failureText
 import io.github.tancheng33.tingo.ui.library.LibraryManageActions
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
@@ -150,6 +153,12 @@ fun TingoRoot(
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()
     val libraryError by libraryViewModel.lastError.collectAsStateWithLifecycle()
+    // 会议库的写操作失败统一走底部提示：内容区顶部那条在长列表里根本看不到。
+    // 文案在组合期算好（stringResource 不能在 effect 里调）
+    val libraryErrorText = libraryError?.let { stringResource(R.string.library_action_failed, failureText(it)) }
+    androidx.compose.runtime.LaunchedEffect(libraryErrorText) {
+        libraryErrorText?.let { container.toasts.show(it) }
+    }
     val trashItems by libraryViewModel.trash.collectAsStateWithLifecycle()
     val batchFailures by libraryViewModel.lastBatchFailures.collectAsStateWithLifecycle()
     // 回收站视图与"列表/详情"共用同一页：用状态切换而不是再加一条导航路由
@@ -164,15 +173,10 @@ fun TingoRoot(
     var unreadablePath by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (unreadablePath != null) {
-        AlertDialog(
-            onDismissRequest = { unreadablePath = null },
-            title = { Text(stringResource(R.string.library_unreadable)) },
-            text = { Text(unreadablePath.orEmpty()) },
-            confirmButton = {
-                TextButton(onClick = { unreadablePath = null }) {
-                    Text(stringResource(R.string.action_close))
-                }
-            },
+        TingoTextDialog(
+            title = stringResource(R.string.library_unreadable),
+            text = unreadablePath.orEmpty(),
+            onDismiss = { unreadablePath = null },
         )
     }
 
@@ -384,6 +388,7 @@ fun TingoRoot(
         }
     }
 
+        ToastHost(center = container.toasts)
         NavHost(
             navController = navController,
             startDestination = TopDestination.MEETINGS.route,
@@ -479,7 +484,6 @@ fun TingoRoot(
                         trash = trashItems,
                         trashVisible = trashVisible,
                         batchFailures = batchFailures,
-                        actionError = libraryError,
                     )
                 }
                 if (wide) {

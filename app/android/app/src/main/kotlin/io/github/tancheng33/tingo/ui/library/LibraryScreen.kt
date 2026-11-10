@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.ui.components.TextInputDialog
+import io.github.tancheng33.tingo.ui.components.TingoConfirmDialog
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.ui.detail.failureText
@@ -117,18 +118,9 @@ fun LibraryScreen(
     trash: List<TrashItem> = emptyList(),
     trashVisible: Boolean = false,
     batchFailures: Int = 0,
-    actionError: FailureKind? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = TingoTheme.colors
-    if (actionError != null) {
-        Text(
-            text = stringResource(R.string.library_action_failed, failureText(actionError)),
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.red,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter, vertical = 8.dp),
-        )
-    }
     if (trashVisible) {
         TrashView(
             items = trash,
@@ -353,24 +345,16 @@ private fun MeetingCardRow(
     var confirmDelete by remember { mutableStateOf(false) }
 
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            containerColor = colors.card,
-            title = { Text(stringResource(R.string.library_delete_title), color = colors.text) },
-            text = { Text(stringResource(R.string.library_delete_body), color = colors.muted) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmDelete = false
-                        onDelete()
-                    },
-                ) { Text(stringResource(R.string.library_delete_confirm), color = colors.red) }
+        TingoConfirmDialog(
+            title = stringResource(R.string.library_delete_title),
+            body = stringResource(R.string.library_delete_body),
+            confirmLabel = stringResource(R.string.library_delete_confirm),
+            destructive = true,
+            onConfirm = {
+                confirmDelete = false
+                onDelete()
             },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) {
-                    Text(stringResource(R.string.action_cancel), color = colors.muted)
-                }
-            },
+            onDismiss = { confirmDelete = false },
         )
     }
 

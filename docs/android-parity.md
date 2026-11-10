@@ -67,8 +67,8 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | `recent` 最近会议 | 会议库整列即列表 | 已完成：首页"最近 3 场"卡片 |
 | `env` 环境块（占用/时长/版本） | 设置页有存储一节 | 已完成：首页底部状态行（模型就绪 / 纪要服务 / 版本） |
 | 拖拽导入覆盖层 | 无（手机没有拖拽） | 换成"导入音频"入口（第五批） |
-| `modal` 通用弹层 | 输入框已统一（`components/TextInputDialog`），其余仍是各页 AlertDialog | 待做：抽成统一 TingoModal |
-| toast | 各页错误条 | 抽成统一 toast |
+| `modal` 通用弹层 | 统一为 `components/TingoDialog` / `TingoConfirmDialog` / `TingoTextDialog` + 输入框 | 已对齐 |
+| toast | 底部一条全局提示（`ToastCenter` + `ToastHost`，3 秒自动消失） | 已对齐（会议库写操作失败已接入） |
 
 顺序：先把首页（新会议）与会议库的视觉对齐，再统一弹层与提示，最后做导入与引导。
 

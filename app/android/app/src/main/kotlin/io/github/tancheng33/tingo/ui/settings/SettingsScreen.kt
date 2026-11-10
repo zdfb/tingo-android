@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.ui.components.TingoConfirmDialog
 import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.settings.LlmConfig
 import io.github.tancheng33.tingo.settings.LlmProtocol
@@ -238,21 +239,16 @@ private fun ModelRow(label: String, group: ModelGroup, onDelete: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
 
     if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text(stringResource(R.string.settings_models_delete_title)) },
-            text = { Text(stringResource(R.string.settings_models_delete_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirming = false
-                        onDelete()
-                    },
-                ) { Text(stringResource(R.string.settings_models_delete)) }
+        TingoConfirmDialog(
+            title = stringResource(R.string.settings_models_delete_title),
+            body = stringResource(R.string.settings_models_delete_body),
+            confirmLabel = stringResource(R.string.settings_models_delete),
+            destructive = true,
+            onConfirm = {
+                confirming = false
+                onDelete()
             },
-            dismissButton = {
-                TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.action_cancel)) }
-            },
+            onDismiss = { confirming = false },
         )
     }
 

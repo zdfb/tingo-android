@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo
 
+import io.github.tancheng33.tingo.ui.components.ToastCenter
 import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 
 import android.content.Context
@@ -47,6 +48,9 @@ class AppContainer(context: Context) {
      * 就看不到任何进展——而转写正是要跑几分钟、最需要"它在动"的那类活。
      */
     val tasks: TaskCenter = TaskCenter()
+
+    /** 全局提示（桌面的 toast）：外壳画一次，各页只负责 `show()` */
+    val toasts: ToastCenter = ToastCenter()
 
     /**
      * ABI 不受支持时引擎不可用；此时界面仍然可以打开，只是没有数据。

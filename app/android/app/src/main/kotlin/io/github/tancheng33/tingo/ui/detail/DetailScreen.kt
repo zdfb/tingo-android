@@ -61,6 +61,7 @@ import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.ui.components.TextInputDialog
+import io.github.tancheng33.tingo.ui.components.TingoTextDialog
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.Fishbone
 import io.github.tancheng33.tingo.engine.MinutesDoc
@@ -606,7 +607,6 @@ internal fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.INTERNAL -> stringResource(R.string.error_internal)
 }
 
-/** 一个带初始值的输入对话框：改名与标签共用。 */
 /**
  * 说话人一排：每人一个可点的 chip（点开改名），右边是"让 AI 猜名字"。
  *
@@ -719,35 +719,16 @@ private fun SpeakerBar(
  */
 @Composable
 private fun MinutesEditor(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    val colors = TingoTheme.colors
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        title = { Text(stringResource(R.string.detail_edit_minutes), color = colors.text) },
-        text = {
-            androidx.compose.foundation.text.BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 160.dp, max = 360.dp)
-                    .background(colors.seg, TingoDimens.controlShape)
-                    .padding(12.dp)
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                    .semantics { contentDescription = "minutes-editor" },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(text) }) {
-                Text(stringResource(R.string.action_save), color = colors.blue)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
-        },
+    TingoTextDialog(
+        title = stringResource(R.string.detail_edit_minutes),
+        text = text,
+        editable = true,
+        onTextChange = { text = it },
+        contentDescription = "minutes-editor",
+        confirmLabel = stringResource(R.string.action_save),
+        onConfirm = { onSave(text) },
+        onDismiss = onDismiss,
     )
 }
 
