@@ -173,7 +173,7 @@ class RecordViewModelTest {
         advanceUntilIdle()
 
         val dir = root.listFiles()!!.single()
-        val mixed = File(dir, RecordViewModel.RECORDING_FILE)
+        val mixed = File(dir, io.github.tancheng33.tingo.recording.TrackMerger.MIXED)
 
         assertTrue("停止后应合成 录音.wav", mixed.isFile)
         assertTrue("合成结果不能是空文件", mixed.length() > 44)

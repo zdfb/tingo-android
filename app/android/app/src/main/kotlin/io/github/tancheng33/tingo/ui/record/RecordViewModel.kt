@@ -435,7 +435,6 @@ class RecordViewModel(
     }
 
     companion object {
-        const val RECORDING_FILE = TrackMerger.MIXED
         const val MIC_TRACK = TrackMerger.MIC_TRACK
         const val SYSTEM_TRACK = TrackMerger.SYSTEM_TRACK
         const val TICK_MS = 200L

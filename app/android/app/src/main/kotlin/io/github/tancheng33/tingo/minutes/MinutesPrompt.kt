@@ -91,9 +91,6 @@ object MinutesPrompt {
         return filled.replace("{transcript}", clipped)
     }
 
-    /** 模板里转写块的标题，裁剪靠它定位。 */
-    private const val TRANSCRIPT_HEADER = "转写：\n"
-
     /** 校验模型输出：该有的章节要在，鱼骨图 JSON 要能解析。 */
     fun validate(markdown: String): List<String> {
         val problems = mutableListOf<String>()

@@ -5,29 +5,15 @@ import java.io.File
 import kotlin.math.roundToInt
 
 /**
- * 原始音轨的处理：重采样、混音、写 wav。
+ * 音轨样本与 wav 之间的唯一样式约定。
  *
- * 为什么需要：`AudioPlaybackCapture` 拿到的是设备混音出来的 48 kHz 立体声，
- * 而我们的识别链是 16 kHz 单声道；电麦克风那一路本来就是 16 kHz 单声道。
- * 两路要合成一条 `录音.wav` 才能给引擎当"这场会议的录音"。
- *
- * 这些函数只碰数字，所以能在 JVM 单测里逐样本核对——真机上的采集没法自动化，
- * 至少"混出来的波形对不对"要能被测住。
+ * 这里只留**真的在用**的那一半：`samplesToBytes`（[StreamingMixer] 写盘要用）。
+ * 降声道与重采样在 `AudioResample`（导入解码那一路），整段混音在 [StreamingMixer]
+ * ——早先这里还有一套"整段读入再算"的等价实现，长录音会 OOM，已经删掉了。
  */
 object AudioMix {
 
     const val TARGET_RATE = 16_000
-
-    /** 16 bit 小端字节 → 归一化浮点。 */
-    fun bytesToSamples(bytes: ByteArray, count: Int = bytes.size / 2): FloatArray {
-        val samples = FloatArray(count)
-        for (i in 0 until count) {
-            val lo = bytes[i * 2].toInt() and 0xFF
-            val hi = bytes[i * 2 + 1].toInt()
-            samples[i] = ((hi shl 8) or lo).toShort() / 32_768f
-        }
-        return samples
-    }
 
     /** 归一化浮点 → 16 bit 小端字节。 */
     fun samplesToBytes(samples: FloatArray): ByteArray {
@@ -38,49 +24,6 @@ object AudioMix {
             bytes[i * 2 + 1] = ((value shr 8) and 0xFF).toByte()
         }
         return bytes
-    }
-
-    /**
-     * 立体声（交织）降到单声道：两侧取平均。
-     *
-     * 直接丢右声道会让只出现在右声道的发言人消失，所以必须混。
-     */
-    fun stereoToMono(samples: FloatArray): FloatArray =
-        FloatArray(samples.size / 2) { i -> (samples[i * 2] + samples[i * 2 + 1]) / 2f }
-
-    /**
-     * 线性插值重采样到 [TARGET_RATE]。
-     *
-     * 会议录音的目标是听得清、识别得准，不需要高保真：降采样时线性插值足够，
-     * 重要的是不要引入 DC 偏移或音量骤降。
-     */
-    fun resample(samples: FloatArray, fromRate: Int, toRate: Int = TARGET_RATE): FloatArray {
-        if (fromRate == toRate || samples.isEmpty()) return samples
-        val ratio = fromRate.toDouble() / toRate
-        val outLength = (samples.size / ratio).toInt()
-        return FloatArray(outLength) { i ->
-            val position = i * ratio
-            val lower = position.toInt()
-            val upper = (lower + 1).coerceAtMost(samples.size - 1)
-            val weight = (position - lower).toFloat()
-            samples[lower] * (1 - weight) + samples[upper] * weight
-        }
-    }
-
-    /**
-     * 把若干音轨按样本相加，超出范围就削顶。
-     *
-     * 相加而不是取平均：桌面版也是叠加，取平均会把只有一方说话时的音量压掉一半。
-     */
-    fun mix(tracks: List<FloatArray>): FloatArray {
-        if (tracks.isEmpty()) return FloatArray(0)
-        val length = tracks.maxOf { it.size }
-        val mixed = FloatArray(length)
-        tracks.forEach { track ->
-            for (i in track.indices) mixed[i] += track[i]
-        }
-        for (i in mixed.indices) mixed[i] = mixed[i].coerceIn(-1f, 1f)
-        return mixed
     }
 }
 

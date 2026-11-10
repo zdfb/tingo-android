@@ -117,7 +117,7 @@ class WavRepairFormatTest {
 
         val durationMs = WavWriter.repair(file)
 
-        val pcm = io.github.tancheng33.tingo.transcription.WavReader.readAnyChannels(file)
+        val pcm = io.github.tancheng33.tingo.transcription.WavReader.read(file, allowStereo = true)
         assertEquals(48_000, pcm.sampleRate)
         // 1 秒的立体声数据：每声道 48000 帧
         assertEquals(48_000, pcm.samples.size)

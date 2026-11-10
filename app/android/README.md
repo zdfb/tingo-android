@@ -69,15 +69,19 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 提到 33 tok/s，但改不了"长上下文预填充动辄几十秒"这个量级。既然用户要的是点了就有结果，
 这一步改走远端 API；语音模型仍在本机，转写依旧离线可用。
 
-当前状态（2026-11-10 实机验收）：**JVM 单测 326 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
-arm64）跑通 **37 个设备级用例**（引擎桥接、备份恢复、sherpa 运行时、中文识别、双人流水线、
-远端纪要端到端、设置页、会议库管理、音频导入、示例会议、长混音），其中转写相关用例在
-**飞行模式下**同样通过，证明语音链路离线可用。
+当前状态（2026-11-10 实机验收）：**JVM 单测 366 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
+arm64）跑通 **35 个设备级用例**（引擎桥接、备份恢复、设置页、会议库管理、音频导入、示例会议、
+跨会议术语表、试录音频探针、品牌资源）。
 
-设备侧一共 52 个 `@Test`：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
-instrumentation 发起的 Activity 启动）；非 UI 41 个里有 3 个在本机跑不了——
+语音链路的离线可用性由 `RecognitionInstrumentedTest` / `PipelineInstrumentedTest` 证明；
+它们要下载约 750 MB 模型，**本轮没有跑**，所以这里不把"飞行模式可识别"写成结论。
+
+设备侧一共 57 个 `@Test`：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
+instrumentation 发起的 Activity 启动）；非 UI 46 个里有 3 个在本机跑不了——
 `LanguageSwitchTest`、`MainActivityEndToEndTest`（同一个 Activity 启动限制，会挂住）
-与 `ModelDownloadInstrumentedTest`（要联网下 700 MB 模型）。实跑的 37 个就是剩下的那批。
+与 `ModelDownloadInstrumentedTest`（要联网下 700 MB 模型）；另有 4 个类依赖下载模型或重活
+（`PipelineInstrumentedTest`、`RecognitionInstrumentedTest`、`BundledModelInstrumentedTest`、
+`LongMixInstrumentedTest`）。其余 35 个是这一轮实跑全绿的（`OK (35 tests)`）。
 Compose UI 测试（11 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
 系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
 完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除三个

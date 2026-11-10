@@ -81,14 +81,6 @@ object WavReader {
         }
     }
 
-    /**
-     * 宽容读取：立体声会降到单声道。
-     *
-     * 系统内录拿到的是 48 kHz 立体声，而我们自己录的是 16 kHz 单声道；
-     * 后者用严格的 [read]，前者用这个。
-     */
-    fun readAnyChannels(file: File): Pcm = read(file, allowStereo = true)
-
     fun read(file: File, allowStereo: Boolean = false): Pcm {
         RandomAccessFile(file, "r").use { raf ->
             val header = readHeader(raf, file.name, allowStereo)
