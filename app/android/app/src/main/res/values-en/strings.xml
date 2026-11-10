@@ -262,11 +262,12 @@
     <string name="settings_cleanup_audio_days">Older than %1$d days</string>
     <string name="settings_cleanup_audio_archived_only">Archived only</string>
     <string name="settings_cleanup_audio_title">Delete old audio?</string>
-    <string name="settings_cleanup_audio_body">Recordings of meetings older than %1$d days will be deleted. Transcripts and minutes stay, but those meetings **can no longer be played back**, and this cannot be undone.</string>
-    <string name="settings_cleanup_audio_body_all">Recordings of **every** meeting will be deleted. Transcripts and minutes stay, but they **can no longer be played back**, and this cannot be undone.</string>
+    <string name="settings_cleanup_audio_body">Recordings of meetings older than %1$d days will be deleted. Transcripts and minutes stay, but those meetings can no longer be played back, and this cannot be undone.</string>
+    <string name="settings_cleanup_audio_body_all">Recordings of every meeting will be deleted. Transcripts and minutes stay, but they can no longer be played back, and this cannot be undone.</string>
     <string name="settings_cleanup_audio_body_archived">Only archived meetings are touched.</string>
     <string name="settings_cleanup_audio_confirm">Delete audio</string>
     <string name="settings_cleanup_audio_done">Cleaned %1$d meetings, freed %2$s</string>
     <string name="settings_cleanup_audio_partial">Cleaned %1$d meetings (%2$s); %3$d files could not be deleted (maybe in use)</string>
     <string name="settings_cleanup_audio_none">No old audio matched</string>
+    <string name="settings_cleanup_audio_failed">Could not clean up old audio — files may be in use. Try again later.</string>
 </resources>

@@ -80,8 +80,14 @@ interface TingoEnginePort {
     /** 清理残留文件（合成后遗留的音轨、part 与 tmp 文件），返回释放的字节数。 */
     fun cleanupLeftovers(): ULong
 
-    /** 删旧会议的音频（转写与纪要保持不动）；`olderThanDays = 0` 表示不限日期。 */
-    fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean): AudioCleanup
+    /**
+     * 删旧会议的音频（转写与纪要保持不动）。
+     *
+     * @param olderThanDays 0 表示不限日期
+     * @param busyIds 正在转写/写纪要的会议：一律跳过（桌面的 `meeting_busy`），
+     *   否则删掉正在被读的录音会让那一场转写中途失败
+     */
+    fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup
 
     /** 说话人列表（按首次发言顺序），带 AI 建议的位置。 */
     fun speakers(id: String): List<SpeakerInfo>
@@ -183,8 +189,11 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun cleanupLeftovers(): ULong = mapEngineCall { engine.cleanupLeftovers() }
 
-    override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean): AudioCleanup =
-        mapEngineCall { engine.cleanupAudio(olderThanDays, archivedOnly) }
+    override fun cleanupAudio(
+        olderThanDays: UInt,
+        archivedOnly: Boolean,
+        busyIds: List<String>,
+    ): AudioCleanup = mapEngineCall { engine.cleanupAudio(olderThanDays, archivedOnly, busyIds) }
 
     override fun speakers(id: String): List<SpeakerInfo> = mapEngineCall { engine.speakers(id) }
 

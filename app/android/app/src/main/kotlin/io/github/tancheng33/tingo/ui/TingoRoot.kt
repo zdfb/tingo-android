@@ -593,7 +593,11 @@ fun TingoRoot(
                                 settings = container.settings,
                                 storageStats = { container.engine.storageStats() },
                                 cleanupAudio = { days, archived ->
-                                    withContext(Dispatchers.IO) { container.engine.cleanupAudio(days.toUInt(), archived) }
+                                    // 正在转写/写纪要的会议跳过：删掉它们正在读的录音会让任务中途失败
+                                    val busy = container.tasks.tasks.value.map { it.meetingId }.filter { it.isNotBlank() }
+                                    withContext(Dispatchers.IO) {
+                                        container.engine.cleanupAudio(days.toUInt(), archived, busy)
+                                    }
                                 },
                                 // 热词存在引擎配置里；模型列表问用户配置的服务
                                 hotwordsPort = object : io.github.tancheng33.tingo.ui.settings.HotwordsPort {
@@ -630,6 +634,14 @@ fun TingoRoot(
                 }
                 androidx.compose.runtime.LaunchedEffect(hotwordsFailedText) {
                     hotwordsFailedText?.let { container.toasts.show(it, error = true) }
+                }
+                val cleanupFailedText = if (models.audioCleanupFailed) {
+                    stringResource(R.string.settings_cleanup_audio_failed)
+                } else {
+                    null
+                }
+                androidx.compose.runtime.LaunchedEffect(cleanupFailedText) {
+                    cleanupFailedText?.let { container.toasts.show(it, error = true) }
                 }
                 val libraryOpText = when (val result = models.libraryResult) {
                     null, is io.github.tancheng33.tingo.ui.settings.LibraryOpResult.BackedUp -> null

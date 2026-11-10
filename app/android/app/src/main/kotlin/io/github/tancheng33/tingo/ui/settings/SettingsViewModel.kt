@@ -95,6 +95,11 @@ data class SettingsUiState(
     val audioCleanupBusy: Boolean = false,
     /** 上一次清理的结果；null 表示这次打开设置页还没清过 */
     val audioCleanup: AudioCleanup? = null,
+    /** 上一次清理失败了：静默什么都不发生，用户会以为按钮坏了 */
+    val audioCleanupFailed: Boolean = false,
+    /** 上次清理用的天数：界面只在"选择仍与它一致"时显示结果，免得旧结果被当成本次结果 */
+    val audioCleanupDays: Int? = null,
+    val audioCleanupArchivedOnly: Boolean? = null,
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
     val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
@@ -157,13 +162,20 @@ class SettingsViewModel(
     /** 清理旧音频：结果留在状态里，界面自己决定怎么显示。 */
     fun cleanupOldAudio(olderThanDays: Int, archivedOnly: Boolean) {
         if (_state.value.audioCleanupBusy) return
-        _state.value = _state.value.copy(audioCleanupBusy = true, audioCleanup = null)
+        _state.value = _state.value.copy(
+            audioCleanupBusy = true,
+            audioCleanup = null,
+            audioCleanupFailed = false,
+            audioCleanupDays = olderThanDays,
+            audioCleanupArchivedOnly = archivedOnly,
+        )
         viewModelScope.launch(io) {
             val result = runCatching { cleanupAudio(olderThanDays, archivedOnly) }
             _state.value = _state.value.copy(
                 audioCleanupBusy = false,
                 // 失败也要让用户知道：静默什么都不发生，用户会以为按钮坏了
                 audioCleanup = result.getOrNull(),
+                audioCleanupFailed = result.isFailure,
             )
             if (result.isSuccess) refreshNow()
         }

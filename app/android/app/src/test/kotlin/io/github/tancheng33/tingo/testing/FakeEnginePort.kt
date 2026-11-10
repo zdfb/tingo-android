@@ -186,8 +186,12 @@ class FakeEnginePort(
     /** 清理旧音频的调用记录：`(olderThanDays, archivedOnly)`。 */
     val audioCleanups = mutableListOf<Pair<UInt, Boolean>>()
 
-    override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean): AudioCleanup {
+    /** 最近一次清理传进来的"正在处理"的会议 id */
+    var lastBusyIds: List<String> = emptyList()
+
+    override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup {
         audioCleanups += olderThanDays to archivedOnly
+        lastBusyIds = busyIds
         return AudioCleanup(freedBytes = 1024uL, meetings = 1u, failed = 0u)
     }
 

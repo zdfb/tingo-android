@@ -128,6 +128,8 @@ fun SettingsScreen(
                 onCleanupAudio = onCleanupAudio,
                 cleanupBusy = models.audioCleanupBusy,
                 cleanupResult = models.audioCleanup,
+                cleanupDays = models.audioCleanupDays,
+                cleanupArchivedOnly = models.audioCleanupArchivedOnly,
             )
             HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
         }
@@ -475,10 +477,14 @@ private fun StorageSection(
     onCleanupAudio: ((days: Int, archivedOnly: Boolean) -> Unit)?,
     cleanupBusy: Boolean,
     cleanupResult: AudioCleanup?,
+    cleanupDays: Int?,
+    cleanupArchivedOnly: Boolean?,
 ) {
     var days by rememberSaveable { mutableStateOf(90) }
     var archivedOnly by rememberSaveable { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
+    // 上一次的结果只对当时那组选择有意义：换了天数还挂着"已清理 3 场"会被读成本次结果
+    val showResult = cleanupResult?.takeIf { cleanupDays == days && cleanupArchivedOnly == archivedOnly }
     if (confirming) {
         // 删音频不可撤销（会议还在，但回听会没声音）：先说清楚再动手
         TingoConfirmDialog(
@@ -569,7 +575,7 @@ private fun StorageSection(
                 enabled = !cleanupBusy,
             )
         }
-        cleanupResult?.let { result ->
+        showResult?.let { result ->
             val text = when {
                 result.failed > 0u -> stringResource(
                     R.string.settings_cleanup_audio_partial,

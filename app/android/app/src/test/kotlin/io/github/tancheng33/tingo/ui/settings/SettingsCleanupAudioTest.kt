@@ -102,6 +102,36 @@ class SettingsCleanupAudioTest {
     }
 
     @Test
+    fun failureIsFlaggedSoTheUiCanSaySomething() = runTest(dispatcher) {
+        val vm = viewModel { _, _ -> error("文件被占用") }
+        advanceUntilIdle()
+
+        vm.cleanupOldAudio(30, archivedOnly = false)
+        advanceUntilIdle()
+
+        assertTrue("失败必须留下标记：静默失败会让人以为按钮坏了", vm.state.value.audioCleanupFailed)
+    }
+
+    @Test
+    fun theFlagIsClearedByTheNextAttempt() = runTest(dispatcher) {
+        var fail = true
+        val vm = viewModel { _, _ ->
+            if (fail) error("文件被占用") else AudioCleanup(freedBytes = 8uL, meetings = 1u, failed = 0u)
+        }
+        advanceUntilIdle()
+        vm.cleanupOldAudio(30, archivedOnly = false)
+        advanceUntilIdle()
+        assertTrue(vm.state.value.audioCleanupFailed)
+
+        fail = false
+        vm.cleanupOldAudio(30, archivedOnly = false)
+        advanceUntilIdle()
+
+        assertFalse("重试成功后不该还挂着失败提示", vm.state.value.audioCleanupFailed)
+        assertEquals(8uL, vm.state.value.audioCleanup?.freedBytes)
+    }
+
+    @Test
     fun tappingTwiceRunsOnlyOnce() = runTest(dispatcher) {
         var runs = 0
         val vm = viewModel { _, _ ->
@@ -127,5 +157,19 @@ class SettingsCleanupAudioTest {
 
         advanceUntilIdle()
         assertFalse(vm.state.value.audioCleanupBusy)
+    }
+
+    @Test
+    fun theResultRemembersWhichChoiceProducedIt() = runTest(dispatcher) {
+        val vm = viewModel { _, _ -> AudioCleanup(freedBytes = 16uL, meetings = 1u, failed = 0u) }
+        advanceUntilIdle()
+
+        vm.cleanupOldAudio(90, archivedOnly = true)
+        advanceUntilIdle()
+
+        // 界面据此只在"选择仍是 90 天 + 仅归档"时显示这条结果，
+        // 否则换成 30 天还挂着"已清理 1 场"会被读成本次结果
+        assertEquals(90, vm.state.value.audioCleanupDays)
+        assertEquals(true, vm.state.value.audioCleanupArchivedOnly)
     }
 }

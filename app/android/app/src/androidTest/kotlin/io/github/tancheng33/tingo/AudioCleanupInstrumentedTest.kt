@@ -37,13 +37,31 @@ class AudioCleanupInstrumentedTest {
         val old = meeting(root, "2020-01-01_1000_旧会", 4096)
         val recent = meeting(root, "2026-11-10_1000_新会", 2048)
 
-        val report = engine.cleanupAudio(olderThanDays = 30u, archivedOnly = false)
+        val report = engine.cleanupAudio(olderThanDays = 30u, archivedOnly = false, busyIds = emptyList())
 
         assertEquals("只该清掉那场旧会议", 1u, report.meetings)
         assertEquals(4096uL, report.freedBytes)
         assertFalse("旧会议的录音该被删掉", File(old, "录音.wav").exists())
         assertTrue("纪要必须留着", File(old, "纪要.md").isFile)
         assertTrue("30 天内的录音不能动", File(recent, "录音.wav").isFile)
+    }
+
+    @Test
+    fun aMeetingBeingTranscribedKeepsItsAudio() {
+        val engine = engine()
+        val root = engine.meetingsRoot()
+        val busy = meeting(root, "2020-01-01_1000_正在转写", 1024)
+        val idle = meeting(root, "2020-01-02_1000_空闲", 1024)
+
+        val report = engine.cleanupAudio(
+            olderThanDays = 0u,
+            archivedOnly = false,
+            busyIds = listOf("2020-01-01_1000_正在转写"),
+        )
+
+        assertEquals(1u, report.meetings)
+        assertTrue("正在转写的会议不能动", File(busy, "录音.wav").isFile)
+        assertFalse(File(idle, "录音.wav").exists())
     }
 
     @Test
@@ -54,7 +72,7 @@ class AudioCleanupInstrumentedTest {
         val live = meeting(root, "2020-01-02_1000_没归档", 512)
         engine.setArchived("2020-01-01_1000_归档的", true)
 
-        val report = engine.cleanupAudio(olderThanDays = 0u, archivedOnly = true)
+        val report = engine.cleanupAudio(olderThanDays = 0u, archivedOnly = true, busyIds = emptyList())
 
         assertEquals(1u, report.meetings)
         assertFalse(File(archived, "录音.wav").exists())

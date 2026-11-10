@@ -292,14 +292,14 @@ fn speaker_infos(tr: &engine_transcript::Transcript) -> Vec<SpeakerInfo> {
         })
         .collect()
 }
+/// 清音频时的天数上限（与桌面 `/api/storage/cleanup` 的 0–3650 一致）。
+const MAX_CLEANUP_DAYS: u32 = 3650;
+
 /// 回收站目录名。
 ///
 /// 引擎判定"是不是会议目录"看的是内容（有没有纪要/录音/转写），不是名字，
 /// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
-/// 清音频时的天数上限（与桌面 `/api/storage/cleanup` 的 0–3650 一致）。
-const MAX_CLEANUP_DAYS: u32 = 3650;
-
 const TRASH_DIR: &str = ".trash";
 
 /// 导入结果：会议 id 与它的目录。
@@ -612,7 +612,12 @@ impl TingoEngine {
     /// 与桌面 `/api/storage/cleanup` 的 `what: "audio"` 同一条语义：
     /// `older_than_days = 0` 表示"不限日期（全部）"，`archived_only` 只清已归档的会议。
     /// 会议本身还在库里，只是回听会失去声音——所以界面上必须先确认。
-    pub fn cleanup_audio(&self, older_than_days: u32, archived_only: bool) -> Result<AudioCleanup, EngineError> {
+    pub fn cleanup_audio(
+        &self,
+        older_than_days: u32,
+        archived_only: bool,
+        skip_ids: Vec<String>,
+    ) -> Result<AudioCleanup, EngineError> {
         if older_than_days > MAX_CLEANUP_DAYS {
             return Err(EngineError::InvalidInput {
                 detail: format!("天数要是 0–{MAX_CLEANUP_DAYS} 的整数"),
@@ -626,6 +631,11 @@ impl TingoEngine {
             // 日期按目录名里的会议日算（与桌面一致）：用文件修改时间会把"补传的老会议"当成新的
             let cutoff = chrono::Local::now().date_naive() - chrono::Days::new(older_than_days as u64);
             for summary in meetings::list(&root) {
+                // 有活正在跑（转写/纪要）的会议跳过：桌面用 meeting_busy 挡的是同一件事。
+                // 删掉正在被读的录音，那一场转写会中途炸掉。
+                if skip_ids.contains(&summary.id) {
+                    continue;
+                }
                 let dir = root.join(&summary.id);
                 let old = older_than_days == 0 || meetings::meeting_date(&dir) < cutoff;
                 if !old || (archived_only && !summary.archived) {
@@ -1788,7 +1798,7 @@ mod tests {
         let recent = meeting_with_audio(&root, "2026-11-10_1000_新会", 2048);
         let engine = TingoEngine::new(root.display().to_string());
 
-        let report = engine.cleanup_audio(30, false).unwrap();
+        let report = engine.cleanup_audio(30, false, Vec::new()).unwrap();
 
         assert_eq!(report.freed_bytes, 4096);
         assert_eq!(report.meetings, 1);
@@ -1805,7 +1815,7 @@ mod tests {
         let dir = meeting_with_audio(&root, "2026-11-10_1000_今天的会", 1024);
         let engine = TingoEngine::new(root.display().to_string());
 
-        let report = engine.cleanup_audio(0, false).unwrap();
+        let report = engine.cleanup_audio(0, false, Vec::new()).unwrap();
 
         assert_eq!(report.freed_bytes, 1024);
         assert!(!dir.join("录音.wav").exists());
@@ -1820,7 +1830,7 @@ mod tests {
         let engine = TingoEngine::new(root.display().to_string());
         engine.set_archived("2020-01-01_1000_归档的".to_string(), true).unwrap();
 
-        let report = engine.cleanup_audio(0, true).unwrap();
+        let report = engine.cleanup_audio(0, true, Vec::new()).unwrap();
 
         assert_eq!(report.meetings, 1);
         assert!(!archived.join("录音.wav").exists());
@@ -1829,11 +1839,28 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_audio_skips_meetings_that_are_being_processed() {
+        let root = temp_root("cleanup-audio-busy");
+        let busy = meeting_with_audio(&root, "2020-01-01_1000_正在转写", 1024);
+        let idle = meeting_with_audio(&root, "2020-01-02_1000_空闲", 1024);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let report = engine
+            .cleanup_audio(0, false, vec!["2020-01-01_1000_正在转写".to_string()])
+            .unwrap();
+
+        assert_eq!(report.meetings, 1);
+        assert!(busy.join("录音.wav").is_file(), "正在转写的会议不能删音频");
+        assert!(!idle.join("录音.wav").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn cleanup_audio_rejects_absurd_day_counts() {
         let root = temp_root("cleanup-audio-days");
         let engine = TingoEngine::new(root.display().to_string());
 
-        let err = engine.cleanup_audio(99_999, false).unwrap_err();
+        let err = engine.cleanup_audio(99_999, false, Vec::new()).unwrap_err();
 
         assert!(matches!(err, EngineError::InvalidInput { .. }), "越界天数要报参数错误：{err:?}");
         let _ = std::fs::remove_dir_all(&root);
