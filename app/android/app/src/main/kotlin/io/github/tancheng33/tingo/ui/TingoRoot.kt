@@ -697,6 +697,7 @@ fun TingoRoot(
                     onSaveHotwords = settingsViewModel::saveHotwords,
                     onAddHotword = settingsViewModel::addHotword,
                     onSaveAutoStopSilence = settingsViewModel::saveAutoStopSilence,
+                    onSaveMinutesLanguage = settingsViewModel::setMinutesLanguage,
                     onReplayOnboarding = {
                         onboardViewModel.restart()
                         showOnboarding = true

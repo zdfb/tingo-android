@@ -51,11 +51,16 @@ class MinutesService(
     ): File {
         require(transcript.sentences.isNotEmpty()) { "没有转写内容，无法生成纪要" }
 
-        val language = MinutesLanguage.resolve(
-            languageSetting(),
-            transcript.sentences.map { it.text },
+        val spoken = MinutesLanguage.detect(transcript.sentences.map { it.text })
+        val language = MinutesLanguage.resolve(languageSetting(), transcript.sentences.map { it.text })
+        val prompt = MinutesPrompt.build(
+            transcript,
+            glossary = glossary(language),
+            language = language,
+            meetingDate = meetingDate(meetingDir),
+            // 选定的纪要语言与会议说的话不一致时，明确要求翻译
+            spokenLanguage = spoken,
         )
-        val prompt = MinutesPrompt.build(transcript, glossary = glossary(language), language = language)
         var markdown = generator.generate(prompt, maxTokens, onToken)
         var problems = MinutesPrompt.validate(markdown, language)
 
@@ -75,6 +80,19 @@ class MinutesService(
 
         saveFinal(markdown)
         return File(meetingDir, FILE_NAME)
+    }
+
+    /**
+     * 会议日期，取自会议目录名（`2026-10-28_1430_复盘`）。
+     *
+     * 提示词要它才能把"下周五"换算成具体日子；目录名不像会议名时返回 null，
+     * 模板里就留空——比编一个日期好。
+     */
+    private fun meetingDate(meetingDir: File): String? {
+        val name = meetingDir.name
+        val date = runCatching { java.time.LocalDate.parse(name.take(10)) }.getOrNull() ?: return null
+        val weekdayZh = listOf("一", "二", "三", "四", "五", "六", "日")[date.dayOfWeek.value - 1]
+        return "${date}（星期$weekdayZh） / ${date} (${date.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)})"
     }
 
     /** 先写临时文件再改名：被系统杀掉时不会留下半截纪要。 */

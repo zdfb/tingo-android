@@ -72,7 +72,7 @@ class MinutesLanguageTest {
 
     @Test
     fun chinesePromptIsUnchanged() {
-        val prompt = MinutesPrompt.build(transcript("今天复盘注册转化。"))
+        val prompt = MinutesPrompt.build(transcript("今天复盘注册转化。"), language = MinutesLanguage.ZH)
 
         assertTrue(prompt.contains("## 一句话总结"))
         assertFalse(prompt.contains("## Summary"))
@@ -198,5 +198,68 @@ class MinutesLanguageTest {
 
         assertEquals(io.github.tancheng33.tingo.minutes.MinutesService.FILE_NAME, File(file.parentFile, file.name).name)
         assertTrue(file.readText().contains("## Summary"))
+    }
+
+    @Test
+    fun theMeetingDateReachesThePrompt() = runTest {
+        val dir = Files.createTempDirectory("2026-10-28_1430_复盘").toFile()
+        val seen = mutableListOf<String>()
+        val service = MinutesService(
+            generator = object : MinutesGenerator {
+                override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String {
+                    seen += prompt
+                    return "# 复盘\n\n## 一句话总结\n定了。\n\n## 议题与讨论\n### 1. 首发\n- 通过（[00:00]）\n\n## 决议\n- 发（[00:00]）\n\n## 待办\n| 事项 | 负责人 | 截止时间 | 出处 |\n|---|---|---|---|\n| 发 | 林 | 未明确 | [00:00] |\n\n## 待定问题与风险\n- 无"
+                }
+            },
+            languageSetting = { MinutesLanguage.ZH },
+        )
+
+        service.generate(
+            Transcript(
+                source = "录音.wav",
+                durationMs = 1_000,
+                sentences = listOf(TranscriptSentence(0, 0, 1_000, "下周五发版。")),
+            ),
+            dir,
+        )
+
+        // 没有日期，"下周五"就只能靠编——模板里必须带上会议日期
+        assertTrue("提示词里要带会议日期：${seen.first()}", seen.first().contains("2026-10-28"))
+    }
+
+    @Test
+    fun choosingEnglishForAChineseMeetingAsksForTranslation() {
+        val prompt = MinutesPrompt.build(
+            transcript("今天复盘注册转化。"),
+            language = MinutesLanguage.EN,
+            meetingDate = "2026-10-28（星期三）",
+            spokenLanguage = MinutesLanguage.ZH,
+        )
+
+        assertTrue("跨语言要明说翻译，否则模型照抄中文：$prompt", prompt.contains("write the minutes in English"))
+        assertFalse("没有跨语言时不该出现翻译指令", MinutesPrompt.build(
+            transcript("Ship it."),
+            language = MinutesLanguage.EN,
+            spokenLanguage = MinutesLanguage.EN,
+        ).contains("write the minutes in English"))
+    }
+
+    @Test
+    fun englishPromptUsesEnglishSpeakerLabelsButKeepsRealNames() {
+        val t = Transcript(
+            source = "录音.wav",
+            durationMs = 2_000,
+            sentences = listOf(
+                TranscriptSentence(0, 0, 1_000, "Let's ship it."),
+                TranscriptSentence(1, 1_000, 2_000, "Green."),
+            ),
+        )
+
+        val en = MinutesPrompt.build(t, language = MinutesLanguage.EN)
+        val zh = MinutesPrompt.build(t, language = MinutesLanguage.ZH)
+
+        assertTrue("英文纪要里不该出现「说话人1：」：$en", en.contains("[00:00] Speaker 1: Let's ship it."))
+        assertFalse(en.contains("说话人1："))
+        assertTrue(zh.contains("[00:00] 说话人1："))
     }
 }

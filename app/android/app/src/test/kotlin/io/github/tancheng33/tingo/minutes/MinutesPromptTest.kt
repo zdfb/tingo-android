@@ -21,7 +21,7 @@ class MinutesPromptTest {
 
     @Test
     fun promptCarriesTranscriptWithTimestampsAndNames() {
-        val prompt = MinutesPrompt.build(transcript)
+        val prompt = MinutesPrompt.build(transcript, language = MinutesLanguage.ZH)
 
         assertTrue(prompt.contains("[00:00] 林舟：今天复盘官网注册转化。"))
         assertTrue(prompt.contains("[00:03] 说话人2：转化率从百分之十二掉到百分之八点五。"))
@@ -30,7 +30,7 @@ class MinutesPromptTest {
 
     @Test
     fun promptStatesTheRequiredStructure() {
-        val prompt = MinutesPrompt.build(transcript)
+        val prompt = MinutesPrompt.build(transcript, language = MinutesLanguage.ZH)
 
         MinutesPrompt.REQUIRED_SECTIONS.forEach { assertTrue("提示词里缺章节 $it", prompt.contains(it)) }
         assertTrue(prompt.contains(MinutesPrompt.FISHBONE_SECTION))
@@ -42,7 +42,7 @@ class MinutesPromptTest {
         val long = transcript.copy(
             sentences = (0 until 1_000).map { TranscriptSentence(0, it * 1_000L, it * 1_000L + 900, "这一句有一点长，需要被截断。") },
         )
-        val prompt = MinutesPrompt.build(long, maxChars = 2_000)
+        val prompt = MinutesPrompt.build(long, maxChars = 2_000, language = MinutesLanguage.ZH)
 
         assertTrue(prompt.contains("后续内容已省略"))
         assertTrue(prompt.length < 6_000)
@@ -77,13 +77,13 @@ class MinutesPromptTest {
             ```
         """.trimIndent()
 
-        assertEquals(emptyList<String>(), MinutesPrompt.validate(markdown))
+        assertEquals(emptyList<String>(), MinutesPrompt.validate(markdown, MinutesLanguage.ZH))
         assertEquals(1, MinutesPrompt.fishboneBodies(markdown).size)
     }
 
     @Test
     fun reportsMissingSections() {
-        val problems = MinutesPrompt.validate("# 标题\n\n## 一句话总结\n没内容")
+        val problems = MinutesPrompt.validate("# 标题\n\n## 一句话总结\n没内容", MinutesLanguage.ZH)
 
         assertTrue(problems.any { it.contains("## 决议") })
         assertTrue(problems.any { it.contains("## 待办") })
@@ -96,7 +96,7 @@ class MinutesPromptTest {
             if (line.contains("\"problem\"")) "        {problem: 这不是 JSON}" else line
         }
 
-        val problems = MinutesPrompt.validate(markdown)
+        val problems = MinutesPrompt.validate(markdown, MinutesLanguage.ZH)
 
         assertTrue(problems.any { it.contains("不是合法 JSON") })
     }
@@ -105,13 +105,13 @@ class MinutesPromptTest {
     fun reasonsSectionWithoutFenceIsReported() {
         val markdown = validMinutes().replace("```fishbone", "```json")
 
-        assertTrue(MinutesPrompt.validate(markdown).any { it.contains("没有 fishbone 代码块") })
+        assertTrue(MinutesPrompt.validate(markdown, MinutesLanguage.ZH).any { it.contains("没有 fishbone 代码块") })
     }
 
     @Test
     fun retryPromptKeepsOriginalAndListsProblems() {
-        val original = MinutesPrompt.build(transcript)
-        val retried = MinutesPrompt.retryPrompt(original, listOf("缺少章节：## 待办"))
+        val original = MinutesPrompt.build(transcript, language = MinutesLanguage.ZH)
+        val retried = MinutesPrompt.retryPrompt(original, listOf("缺少章节：## 待办"), MinutesLanguage.ZH)
 
         assertTrue(retried.startsWith(original))
         assertTrue(retried.contains("缺少章节：## 待办"))
@@ -156,6 +156,7 @@ class MinutesPromptTest {
         val prompt = MinutesPrompt.build(
             transcript = transcript,
             glossary = "本场会议涉及的专有名词（人名、项目、系统名）：星河计划、Kafka。",
+            language = MinutesLanguage.ZH,
         )
 
         assertTrue("热词要在提示词里：$prompt", prompt.contains("星河计划"))
@@ -171,7 +172,7 @@ class MinutesPromptTest {
 
     @Test
     fun emptyGlossaryLeavesNoBlankParagraph() {
-        val prompt = MinutesPrompt.build(transcript = transcript)
+        val prompt = MinutesPrompt.build(transcript = transcript, language = MinutesLanguage.ZH)
 
         assertTrue("不该留下占位符", !prompt.contains("{glossary}"))
         assertTrue("不该多出一段空行：${prompt.substringAfter("书面化。").take(20)}", !prompt.contains("书面化。\n\n\n"))

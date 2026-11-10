@@ -74,8 +74,8 @@ fun SettingsScreen(
     /** 没走完的引导：回到上次那一步接着走（桌面对应设置页的"回到新手引导"） */
     onResumeOnboarding: (() -> Unit)? = null,
     onSaveAutoStopSilence: (Int) -> Unit = {},
-    /** 纪要语言：auto 跟会议说的话走 */
-    onSaveMinutesLanguage: (String) -> Unit = {},
+    /** 纪要语言：auto 跟会议说的话走。没有默认值——漏接就是"点了没反应" */
+    onSaveMinutesLanguage: (String) -> Unit,
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
     /** 清理旧音频：天数 0 表示不限日期 */
