@@ -26,7 +26,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 16 | 归档 | `/api/meetings/{id}`（archived） | 已有 | — |
 | 17 | 批量操作（归档/加标签/删音频/删除） | `/api/meetings/batch` | 已有（多选 + 批量条） | — |
 | 18 | 删除到废纸篓 + 恢复 | macOS 废纸篓 | 已有（`.trash/<id>`，可恢复/彻底清除） | — |
-| 19 | 存储空间管理与清理 | `disk.rs` + `/api/storage/cleanup`（可删旧的或已归档会议的音频） | 已有（总量/音频/残留 + 清理残留） | 只能清**残留**；不能"删掉 90 天前的音频/已归档会议音频"（桌面能，省空间时用得上） |
+| 19 | 存储空间管理与清理 | `disk.rs` + `/api/storage/cleanup`（可删旧的或已归档会议的音频） | 已有：总量/音频/残留 + 清残留 + **清旧音频**（0/30/90/180/365 天、仅已归档、删前确认） | 天数只给五档（桌面可填任意 0–3650）；不检查"正在处理的会议"（手机上同一时刻只可能有一件活，且界面会挡住） |
 | 20 | 导出 Markdown / ZIP | "复制为 Markdown"（`detail.ts`）；无 ZIP 导出 | 已有（md 与 zip 都能分享） | Android 多出 ZIP 打包；桌面是把 Markdown 拷到剪贴板 |
 | 21 | 导出 Word（docx） | `/api/meetings/{id}/docx`（macOS `textutil`） | 已有（直接写 OOXML；抬头/页脚/鱼骨图文字与桌面同口径） | 实现不同，内容等价 |
 | 22 | 导出 SRT 字幕 | `/api/meetings/{id}/srt` | 已有（命名与桌面一致，导出后走系统分享） | — |

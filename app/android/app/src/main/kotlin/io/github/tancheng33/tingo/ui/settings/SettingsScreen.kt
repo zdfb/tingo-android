@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.engine.AudioCleanup
 import io.github.tancheng33.tingo.ui.components.TingoConfirmDialog
 import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.settings.LlmConfig
@@ -73,6 +75,8 @@ fun SettingsScreen(
     onSaveAutoStopSilence: (Int) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
+    /** 清理旧音频：天数 0 表示不限日期 */
+    onCleanupAudio: ((days: Int, archivedOnly: Boolean) -> Unit)? = null,
     libraryBusy: Boolean = false,
     libraryResult: LibraryOpResult? = null,
     onBackupLibrary: () -> Unit = {},
@@ -118,7 +122,13 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         models.storage?.let { stats ->
-            StorageSection(stats = stats, onCleanupLeftovers = onCleanupLeftovers)
+            StorageSection(
+                stats = stats,
+                onCleanupLeftovers = onCleanupLeftovers,
+                onCleanupAudio = onCleanupAudio,
+                cleanupBusy = models.audioCleanupBusy,
+                cleanupResult = models.audioCleanup,
+            )
             HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
         }
 
@@ -462,7 +472,30 @@ private fun SettingsField(
 private fun StorageSection(
     stats: io.github.tancheng33.tingo.engine.StorageStats,
     onCleanupLeftovers: (() -> Unit)?,
+    onCleanupAudio: ((days: Int, archivedOnly: Boolean) -> Unit)?,
+    cleanupBusy: Boolean,
+    cleanupResult: AudioCleanup?,
 ) {
+    var days by rememberSaveable { mutableStateOf(90) }
+    var archivedOnly by rememberSaveable { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+    if (confirming) {
+        // 删音频不可撤销（会议还在，但回听会没声音）：先说清楚再动手
+        TingoConfirmDialog(
+            title = stringResource(R.string.settings_cleanup_audio_title),
+            body = stringResource(
+                if (days == 0) R.string.settings_cleanup_audio_body_all else R.string.settings_cleanup_audio_body,
+                days,
+            ) + (if (archivedOnly) "\n" + stringResource(R.string.settings_cleanup_audio_body_archived) else ""),
+            confirmLabel = stringResource(R.string.settings_cleanup_audio_confirm),
+            destructive = true,
+            onConfirm = {
+                confirming = false
+                onCleanupAudio?.invoke(days, archivedOnly)
+            },
+            onDismiss = { confirming = false },
+        )
+    }
     val colors = TingoTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -501,8 +534,67 @@ private fun StorageSection(
                 kind = PillKind.Soft,
             )
         }
+        // 清理旧音频：桌面在同一个"清理"入口里给"只清音频/按天/仅已归档"，
+        // 手机上做成一排天数胶囊 + 一个"仅已归档"开关
+        if (onCleanupAudio != null) {
+            Text(
+                stringResource(R.string.settings_cleanup_audio_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.muted,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CLEANUP_DAY_CHOICES.forEach { choice ->
+                    PillFilter(
+                        label = if (choice == 0) {
+                            stringResource(R.string.settings_cleanup_audio_all)
+                        } else {
+                            stringResource(R.string.settings_cleanup_audio_days, choice)
+                        },
+                        selected = choice == days,
+                        onClick = { days = choice },
+                    )
+                }
+            }
+            PillFilter(
+                label = stringResource(R.string.settings_cleanup_audio_archived_only),
+                selected = archivedOnly,
+                onClick = { archivedOnly = !archivedOnly },
+            )
+            PillButton(
+                label = stringResource(
+                    if (cleanupBusy) R.string.settings_cleanup_audio_running else R.string.settings_cleanup_audio,
+                ),
+                onClick = { confirming = true },
+                kind = PillKind.Soft,
+                enabled = !cleanupBusy,
+            )
+        }
+        cleanupResult?.let { result ->
+            val text = when {
+                result.failed > 0u -> stringResource(
+                    R.string.settings_cleanup_audio_partial,
+                    result.meetings.toInt(),
+                    mb(result.freedBytes),
+                    result.failed.toInt(),
+                )
+                result.meetings == 0u -> stringResource(R.string.settings_cleanup_audio_none)
+                else -> stringResource(
+                    R.string.settings_cleanup_audio_done,
+                    result.meetings.toInt(),
+                    mb(result.freedBytes),
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (result.failed > 0u) colors.amber else colors.green,
+            )
+        }
     }
 }
+
+/** 清理旧音频的候选天数：0 = 不限日期（全部）。 */
+private val CLEANUP_DAY_CHOICES = listOf(0, 30, 90, 180, 365)
 
 /** 字节转 MB：设置页只需要量级，不显示小数。 */
 private fun mb(bytes: ULong): String = "${bytes / 1_000_000u} MB"

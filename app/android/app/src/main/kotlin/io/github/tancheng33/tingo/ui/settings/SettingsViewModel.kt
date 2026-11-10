@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import io.github.tancheng33.tingo.engine.AudioCleanup
 import io.github.tancheng33.tingo.engine.GlossaryTerm
 
 import androidx.lifecycle.ViewModel
@@ -90,6 +91,10 @@ data class SettingsUiState(
     val glossary: List<GlossaryTerm> = emptyList(),
     /** 引导走完了没有：设置页据此决定显示"继续新手引导"还是只有"重玩" */
     val onboarded: Boolean = true,
+    /** 正在清理旧音频（引擎在删文件，别让按钮连点） */
+    val audioCleanupBusy: Boolean = false,
+    /** 上一次清理的结果；null 表示这次打开设置页还没清过 */
+    val audioCleanup: AudioCleanup? = null,
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
     val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
@@ -115,6 +120,14 @@ class SettingsViewModel(
     private val settings: AppSettings,
     /** 热词读写与拉取模型列表的能力；测试里用假实现 */
     private val hotwordsPort: HotwordsPort = HotwordsPort.None,
+    /**
+     * 删旧会议的音频（转写、纪要留着）。`olderThanDays = 0` 表示不限日期。
+     *
+     * 由外壳注入：ViewModel 不该自己拿引擎。
+     */
+    private val cleanupAudio: suspend (olderThanDays: Int, archivedOnly: Boolean) -> AudioCleanup = { _, _ ->
+        AudioCleanup(freedBytes = 0uL, meetings = 0u, failed = 0u)
+    },
     private val storageStats: suspend () -> StorageStats = {
         StorageStats(count = 0u, totalBytes = 0uL, audioBytes = 0uL, leftoverBytes = 0uL, largest = emptyList())
     },
@@ -139,6 +152,21 @@ class SettingsViewModel(
             }
         }
         refresh()
+    }
+
+    /** 清理旧音频：结果留在状态里，界面自己决定怎么显示。 */
+    fun cleanupOldAudio(olderThanDays: Int, archivedOnly: Boolean) {
+        if (_state.value.audioCleanupBusy) return
+        _state.value = _state.value.copy(audioCleanupBusy = true, audioCleanup = null)
+        viewModelScope.launch(io) {
+            val result = runCatching { cleanupAudio(olderThanDays, archivedOnly) }
+            _state.value = _state.value.copy(
+                audioCleanupBusy = false,
+                // 失败也要让用户知道：静默什么都不发生，用户会以为按钮坏了
+                audioCleanup = result.getOrNull(),
+            )
+            if (result.isSuccess) refreshNow()
+        }
     }
 
     fun refresh() {

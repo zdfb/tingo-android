@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.detail
 
 import io.github.tancheng33.tingo.audio.AudioPlayer
+import io.github.tancheng33.tingo.engine.AudioCleanup
 import io.github.tancheng33.tingo.engine.Capabilities
 import io.github.tancheng33.tingo.engine.MeetingDetail
 import io.github.tancheng33.tingo.engine.MeetingSummary
@@ -114,6 +115,8 @@ class DetailPlaybackTest {
         override fun listTrash(): List<io.github.tancheng33.tingo.engine.TrashItem> = emptyList()
         override fun purgeTrash(id: String): ULong = 0uL
         override fun cleanupLeftovers(): ULong = 0uL
+        override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean): AudioCleanup =
+            AudioCleanup(freedBytes = 0uL, meetings = 0u, failed = 0u)
         override fun speakers(id: String) = emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
         override fun setSpeakerNames(id: String, names: List<String>) = Unit
         override fun speakerPrompt(id: String, language: String) =

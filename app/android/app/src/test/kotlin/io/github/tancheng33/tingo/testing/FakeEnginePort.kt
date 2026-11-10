@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo.testing
 
+import io.github.tancheng33.tingo.engine.AudioCleanup
 import io.github.tancheng33.tingo.engine.ImportedMeeting
 import io.github.tancheng33.tingo.engine.Capabilities
 import io.github.tancheng33.tingo.engine.Fishbone
@@ -180,6 +181,14 @@ class FakeEnginePort(
         importedAudio += Triple(wavPath, title, modifiedMs)
         val id = "2026-11-07_1000_$title"
         return ImportedMeeting(id = id, dir = "/fake/tingo/meetings/$id")
+    }
+
+    /** 清理旧音频的调用记录：`(olderThanDays, archivedOnly)`。 */
+    val audioCleanups = mutableListOf<Pair<UInt, Boolean>>()
+
+    override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean): AudioCleanup {
+        audioCleanups += olderThanDays to archivedOnly
+        return AudioCleanup(freedBytes = 1024uL, meetings = 1u, failed = 0u)
     }
 
     /** 导入过的录音（用例据此断言解码产物真的交到了引擎） */

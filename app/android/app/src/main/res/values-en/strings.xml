@@ -255,4 +255,18 @@
     <string name="onboard_test_system_note">Recording the other side (system audio) needs the system screen-capture permission; Tingo asks for it on your first recording, not here.</string>
     <string name="onboard_perm_request">Allow microphone</string>
     <string name="settings_resume_onboarding">Continue the tour</string>
+    <string name="settings_cleanup_audio">Clean up old audio…</string>
+    <string name="settings_cleanup_audio_running">Cleaning…</string>
+    <string name="settings_cleanup_audio_hint">Only recordings are deleted; transcripts, minutes and exports stay. Those meetings will no longer be playable.</string>
+    <string name="settings_cleanup_audio_all">Any date</string>
+    <string name="settings_cleanup_audio_days">Older than %1$d days</string>
+    <string name="settings_cleanup_audio_archived_only">Archived only</string>
+    <string name="settings_cleanup_audio_title">Delete old audio?</string>
+    <string name="settings_cleanup_audio_body">Recordings of meetings older than %1$d days will be deleted. Transcripts and minutes stay, but those meetings **can no longer be played back**, and this cannot be undone.</string>
+    <string name="settings_cleanup_audio_body_all">Recordings of **every** meeting will be deleted. Transcripts and minutes stay, but they **can no longer be played back**, and this cannot be undone.</string>
+    <string name="settings_cleanup_audio_body_archived">Only archived meetings are touched.</string>
+    <string name="settings_cleanup_audio_confirm">Delete audio</string>
+    <string name="settings_cleanup_audio_done">Cleaned %1$d meetings, freed %2$s</string>
+    <string name="settings_cleanup_audio_partial">Cleaned %1$d meetings (%2$s); %3$d files could not be deleted (maybe in use)</string>
+    <string name="settings_cleanup_audio_none">No old audio matched</string>
 </resources>

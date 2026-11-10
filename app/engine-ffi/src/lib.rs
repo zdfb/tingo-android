@@ -208,6 +208,16 @@ pub struct StorageStats {
     pub largest: Vec<MeetingUsage>,
 }
 
+/// 清理旧音频的结果：删了多少、几场会议、有多少没删掉。
+///
+/// `failed` 不为 0 时界面必须说出来（例如文件正被占用），不能只报"已清理"。
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AudioCleanup {
+    pub freed_bytes: u64,
+    pub meetings: u32,
+    pub failed: u32,
+}
+
 /// 批量操作里单个会议的结果：失败不中断其余会议。
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BatchOutcome {
@@ -287,6 +297,9 @@ fn speaker_infos(tr: &engine_transcript::Transcript) -> Vec<SpeakerInfo> {
 /// 引擎判定"是不是会议目录"看的是内容（有没有纪要/录音/转写），不是名字，
 /// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
+/// 清音频时的天数上限（与桌面 `/api/storage/cleanup` 的 0–3650 一致）。
+const MAX_CLEANUP_DAYS: u32 = 3650;
+
 const TRASH_DIR: &str = ".trash";
 
 /// 导入结果：会议 id 与它的目录。
@@ -591,6 +604,53 @@ impl TingoEngine {
         let root = self.paths.meetings_root.clone();
         guard("storage_stats", move || {
             Ok(parse_storage(&meetings::storage(&root, |_| false)))
+        })
+    }
+
+    /// 删掉旧会议的**音频**（转写、纪要、导出都保留）。
+    ///
+    /// 与桌面 `/api/storage/cleanup` 的 `what: "audio"` 同一条语义：
+    /// `older_than_days = 0` 表示"不限日期（全部）"，`archived_only` 只清已归档的会议。
+    /// 会议本身还在库里，只是回听会失去声音——所以界面上必须先确认。
+    pub fn cleanup_audio(&self, older_than_days: u32, archived_only: bool) -> Result<AudioCleanup, EngineError> {
+        if older_than_days > MAX_CLEANUP_DAYS {
+            return Err(EngineError::InvalidInput {
+                detail: format!("天数要是 0–{MAX_CLEANUP_DAYS} 的整数"),
+            });
+        }
+        let root = self.paths.meetings_root.clone();
+        guard("cleanup_audio", move || {
+            let mut freed = 0u64;
+            let mut meetings_touched = 0u32;
+            let mut failed = 0u32;
+            // 日期按目录名里的会议日算（与桌面一致）：用文件修改时间会把"补传的老会议"当成新的
+            let cutoff = chrono::Local::now().date_naive() - chrono::Days::new(older_than_days as u64);
+            for summary in meetings::list(&root) {
+                let dir = root.join(&summary.id);
+                let old = older_than_days == 0 || meetings::meeting_date(&dir) < cutoff;
+                if !old || (archived_only && !summary.archived) {
+                    continue;
+                }
+                let mut touched = false;
+                for file in meetings::audio_files(&dir) {
+                    let bytes = meetings::size_of(&file);
+                    match std::fs::remove_file(&file) {
+                        Ok(()) => {
+                            freed += bytes;
+                            touched = true;
+                        }
+                        Err(_) => failed += 1,
+                    }
+                }
+                if touched {
+                    meetings_touched += 1;
+                }
+            }
+            Ok(AudioCleanup {
+                freed_bytes: freed,
+                meetings: meetings_touched,
+                failed,
+            })
         })
     }
 
@@ -1706,6 +1766,76 @@ mod tests {
         assert!(!dir.join("mic.wav").exists());
         assert!(!dir.join("system.part").exists());
         assert_eq!(engine.storage_stats().unwrap().leftover_bytes, 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- 清理旧音频 ----
+
+    /// 造一场带音频的会议：`录音.wav` + 转写。
+    fn meeting_with_audio(root: &Path, id: &str, audio_bytes: usize) -> PathBuf {
+        let dir = root.join("meetings").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("录音.wav"), vec![0u8; audio_bytes]).unwrap();
+        std::fs::write(dir.join("纪要.md"), "# 标题\n").unwrap();
+        dir
+    }
+
+    #[test]
+    fn cleanup_audio_removes_old_audio_but_keeps_minutes() {
+        let root = temp_root("cleanup-audio");
+        // 会议日来自目录名：2020 年的那场算"旧"，今天的不算
+        let old = meeting_with_audio(&root, "2020-01-01_1000_旧会", 4096);
+        let recent = meeting_with_audio(&root, "2026-11-10_1000_新会", 2048);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let report = engine.cleanup_audio(30, false).unwrap();
+
+        assert_eq!(report.freed_bytes, 4096);
+        assert_eq!(report.meetings, 1);
+        assert_eq!(report.failed, 0);
+        assert!(!old.join("录音.wav").exists(), "旧会议的音频该被删掉");
+        assert!(old.join("纪要.md").is_file(), "纪要必须留着");
+        assert!(recent.join("录音.wav").is_file(), "30 天内的会议不能被清");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_audio_zero_days_means_everything() {
+        let root = temp_root("cleanup-audio-all");
+        let dir = meeting_with_audio(&root, "2026-11-10_1000_今天的会", 1024);
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let report = engine.cleanup_audio(0, false).unwrap();
+
+        assert_eq!(report.freed_bytes, 1024);
+        assert!(!dir.join("录音.wav").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_audio_can_limit_itself_to_archived_meetings() {
+        let root = temp_root("cleanup-audio-archived");
+        let archived = meeting_with_audio(&root, "2020-01-01_1000_归档的", 512);
+        let live = meeting_with_audio(&root, "2020-01-02_1000_没归档", 512);
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.set_archived("2020-01-01_1000_归档的".to_string(), true).unwrap();
+
+        let report = engine.cleanup_audio(0, true).unwrap();
+
+        assert_eq!(report.meetings, 1);
+        assert!(!archived.join("录音.wav").exists());
+        assert!(live.join("录音.wav").is_file(), "只清已归档的");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_audio_rejects_absurd_day_counts() {
+        let root = temp_root("cleanup-audio-days");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let err = engine.cleanup_audio(99_999, false).unwrap_err();
+
+        assert!(matches!(err, EngineError::InvalidInput { .. }), "越界天数要报参数错误：{err:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 

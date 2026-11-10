@@ -255,4 +255,18 @@
     <string name="onboard_test_system_note">系统内录（会议软件里对方的声音）需要系统"录屏"授权，会在你第一次录音时才问，这里不测。</string>
     <string name="onboard_perm_request">授权麦克风</string>
     <string name="settings_resume_onboarding">继续新手引导</string>
+    <string name="settings_cleanup_audio">清理旧音频…</string>
+    <string name="settings_cleanup_audio_running">清理中…</string>
+    <string name="settings_cleanup_audio_hint">只删录音，转写、纪要和导出都保留。删掉后这场会议就不能回听了。</string>
+    <string name="settings_cleanup_audio_all">不限日期</string>
+    <string name="settings_cleanup_audio_days">%1$d 天前</string>
+    <string name="settings_cleanup_audio_archived_only">仅已归档</string>
+    <string name="settings_cleanup_audio_title">删除旧音频？</string>
+    <string name="settings_cleanup_audio_body">会删掉 %1$d 天前的会议录音。转写与纪要保留，但这些会议**不能再回听**，也无法撤销。</string>
+    <string name="settings_cleanup_audio_body_all">会删掉**所有**会议的录音。转写与纪要保留，但**不能再回听**，也无法撤销。</string>
+    <string name="settings_cleanup_audio_body_archived">只处理已归档的会议。</string>
+    <string name="settings_cleanup_audio_confirm">删除音频</string>
+    <string name="settings_cleanup_audio_done">已清理 %1$d 场会议的音频，释放 %2$s</string>
+    <string name="settings_cleanup_audio_partial">已清理 %1$d 场（%2$s），另有 %3$d 个文件没能删掉（可能正被占用）</string>
+    <string name="settings_cleanup_audio_none">没有符合条件的旧音频</string>
 </resources>

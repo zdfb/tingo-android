@@ -592,6 +592,9 @@ fun TingoRoot(
                                 catalog = container.catalog,
                                 settings = container.settings,
                                 storageStats = { container.engine.storageStats() },
+                                cleanupAudio = { days, archived ->
+                                    withContext(Dispatchers.IO) { container.engine.cleanupAudio(days.toUInt(), archived) }
+                                },
                                 // 热词存在引擎配置里；模型列表问用户配置的服务
                                 hotwordsPort = object : io.github.tancheng33.tingo.ui.settings.HotwordsPort {
                                     override suspend fun load(): List<String> = container.engine.hotwords()
@@ -688,6 +691,9 @@ fun TingoRoot(
                         }
                     } else {
                         null
+                    },
+                    onCleanupAudio = { days, archivedOnly ->
+                        settingsViewModel.cleanupOldAudio(days, archivedOnly)
                     },
                     onCleanupLeftovers = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
                         {
