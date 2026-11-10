@@ -17,8 +17,14 @@ interface MinutesGenerator {
  */
 class MinutesService(
     private val generator: MinutesGenerator,
-    /** 提示词里的"专有名词"段；由调用方从引擎取（与桌面同一份文案）。 */
-    private val glossary: () -> String = { "" },
+    /**
+     * 提示词里的"专有名词"段；由调用方从引擎按**纪要语言**取（与桌面同一份文案）。
+     *
+     * 参数是 "zh"/"en"：英文纪要里塞一段中文句子，模型会跟着改口。
+     */
+    private val glossary: (language: String) -> String = { "" },
+    /** 纪要语言设置：`auto | zh | en`（桌面 `[minutes] language` 同一套取值）。 */
+    private val languageSetting: () -> String = { MinutesLanguage.AUTO },
     private val maxTokens: Int = 1_200,
 ) {
     /** @param draft 自检不通过时保留的草稿文件（可能为 null：连草稿都写不下去） */
@@ -45,13 +51,21 @@ class MinutesService(
     ): File {
         require(transcript.sentences.isNotEmpty()) { "没有转写内容，无法生成纪要" }
 
-        val prompt = MinutesPrompt.build(transcript, glossary = glossary())
+        val language = MinutesLanguage.resolve(
+            languageSetting(),
+            transcript.sentences.map { it.text },
+        )
+        val prompt = MinutesPrompt.build(transcript, glossary = glossary(language), language = language)
         var markdown = generator.generate(prompt, maxTokens, onToken)
-        var problems = MinutesPrompt.validate(markdown)
+        var problems = MinutesPrompt.validate(markdown, language)
 
         if (problems.isNotEmpty()) {
-            markdown = generator.generate(MinutesPrompt.retryPrompt(prompt, problems), maxTokens, onToken)
-            problems = MinutesPrompt.validate(markdown)
+            markdown = generator.generate(
+                MinutesPrompt.retryPrompt(prompt, problems, language),
+                maxTokens,
+                onToken,
+            )
+            problems = MinutesPrompt.validate(markdown, language)
         }
         if (problems.isNotEmpty()) {
             // 规格要求"保留原文供手动编辑"：不写坏的 纪要.md，但把模型输出留在草稿里

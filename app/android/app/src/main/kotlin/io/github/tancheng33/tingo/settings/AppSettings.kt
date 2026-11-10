@@ -1,8 +1,9 @@
 package io.github.tancheng33.tingo.settings
 
-import io.github.tancheng33.tingo.recording.SilenceWatcher
-
 import android.content.Context
+import android.content.SharedPreferences
+import io.github.tancheng33.tingo.minutes.MinutesLanguage
+import io.github.tancheng33.tingo.recording.SilenceWatcher
 
 /** 界面语言。取值直接存成 BCP-47 tag，方便将来加语言。 */
 enum class AppLanguage(val tag: String) {
@@ -75,6 +76,16 @@ class AppSettings(private val store: KeyValueStore) {
         set(value) = store.putString(KEY_AUTO_STOP, value.coerceIn(0, MAX_SILENCE_MIN).toString())
 
     /**
+     * 纪要语言：`auto | zh | en`（桌面 `[minutes] language` 同一套取值）。
+     *
+     * `auto` 是"跟这场会议说的话一致"。缺省 auto：中文会议写中文纪要，
+     * 英文会议不至于硬写出一篇中文。
+     */
+    var minutesLanguage: String
+        get() = MinutesLanguage.normalize(store.getString(KEY_MINUTES_LANGUAGE).orEmpty())
+        set(value) = store.putString(KEY_MINUTES_LANGUAGE, MinutesLanguage.normalize(value))
+
+    /**
      * 新手引导走完了没有。
      *
      * 桌面端记在 localStorage；这里记在应用私有偏好里。没有这个键 = 没走过（新装的用户），
@@ -98,6 +109,7 @@ class AppSettings(private val store: KeyValueStore) {
         set(value) = store.putString(KEY_ONBOARD_STEP, value.coerceAtLeast(0).toString())
 
     private companion object {
+        const val KEY_MINUTES_LANGUAGE = "minutes_language"
         const val KEY_ONBOARD_STEP = "onboard_step"
         const val KEY_AUTO_STOP = "auto_stop_silence_min"
         const val MAX_SILENCE_MIN = 60

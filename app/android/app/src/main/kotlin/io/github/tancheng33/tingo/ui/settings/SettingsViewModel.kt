@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.settings
 
 import io.github.tancheng33.tingo.engine.AudioCleanup
+import io.github.tancheng33.tingo.minutes.MinutesLanguage
 import io.github.tancheng33.tingo.engine.GlossaryTerm
 
 import androidx.lifecycle.ViewModel
@@ -91,6 +92,8 @@ data class SettingsUiState(
     val glossary: List<GlossaryTerm> = emptyList(),
     /** 引导走完了没有：设置页据此决定显示"继续新手引导"还是只有"重玩" */
     val onboarded: Boolean = true,
+    /** 纪要语言：auto | zh | en（桌面 `[minutes] language`） */
+    val minutesLanguage: String = MinutesLanguage.AUTO,
     /** 正在清理旧音频（引擎在删文件，别让按钮连点） */
     val audioCleanupBusy: Boolean = false,
     /** 上一次清理的结果；null 表示这次打开设置页还没清过 */
@@ -179,6 +182,12 @@ class SettingsViewModel(
             )
             if (result.isSuccess) refreshNow()
         }
+    }
+
+    /** 纪要语言：auto 表示跟会议说的话一致。 */
+    fun setMinutesLanguage(value: String) {
+        settings.minutesLanguage = value
+        _state.value = _state.value.copy(minutesLanguage = settings.minutesLanguage)
     }
 
     fun refresh() {
@@ -299,6 +308,7 @@ class SettingsViewModel(
                 glossary = glossary,
                 onboarded = settings.onboarded,
                 autoStopSilenceMin = settings.autoStopSilenceMin,
+                minutesLanguage = settings.minutesLanguage,
             )
         } catch (e: Exception) {
             // 统计失败（例如目录不可读）不该把界面卡在 loading

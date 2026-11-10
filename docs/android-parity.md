@@ -13,7 +13,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 3 | 静音自动停录 | `autostop.rs`（5 秒窗口 RMS 门限 + 保留 30 秒） | 已有：每 tick 取两路峰值，连续 N 分钟无声自动结束并截掉尾巴 | **门限是峰值刻度不是桌面那套 dB 刻度**；未做"会议软件退出即结束"与"边录边转写算有声" |
 | 4 | 转写（Paraformer + 标点 + 声纹聚类） | `asr.rs` + `cluster.rs` | 已有（sherpa-onnx） | — |
 | 5 | Apple Speech 可选后端 | `apple_speech.rs` | 不适用（macOS 专有） | 不迁移 |
-| 6 | 纪要生成 | `summarize.rs`（LLM API） | 已有（远端 API） | **提示词与自检只支持中文**；桌面可以在设置里选纪要语言 |
+| 6 | 纪要生成 | `summarize.rs`（LLM API，中英两套提示词 + 自动判断会议语言） | 已有（远端 API）；设置页可选**纪要语言**（跟会议/中文/英文），`auto` 按正文汉字占比判断（≥30% 算中文，与桌面同一门限），英文章节与英文自检成对使用 | 不做长会议分段提炼（`chunk`/`reduce` 两条提示词未移植）：提示词给到 48k 字符，超出部分截断并告知模型；桌面同一份稿子会分段再合并 |
 | 7 | 纪要历史版本（含手工编辑纪要） | `/api/meetings/{id}/minutes/history` | 已有（详情页溢出菜单：编辑 / 历史 / 恢复 / 删除） | — |
 | 8 | 纪要自检与重试 | 桌面无（只有分段提炼/合并） | 已有（`MinutesService` 的结构校验 + 一次重试） | Android 独有，不是对照项 |
 | 9 | 鱼骨图 | `fishbone.rs` | 已有（解析 + 卡片） | — |

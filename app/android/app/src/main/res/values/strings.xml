@@ -270,4 +270,9 @@
     <string name="settings_cleanup_audio_partial">已清理 %1$d 场（%2$s），另有 %3$d 个文件没能删掉（可能正被占用）</string>
     <string name="settings_cleanup_audio_none">没有符合条件的旧音频</string>
     <string name="settings_cleanup_audio_failed">旧音频没清理成功：可能文件正被占用，稍后再试</string>
+    <string name="settings_minutes_language">纪要语言</string>
+    <string name="settings_minutes_language_hint">跟会议说的话一致最省事；也可以固定中文或英文（英文会议也能写英文纪要）。</string>
+    <string name="settings_minutes_language_auto">跟会议语言</string>
+    <string name="settings_minutes_language_zh">中文</string>
+    <string name="settings_minutes_language_en">English</string>
 </resources>

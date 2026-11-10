@@ -270,4 +270,9 @@
     <string name="settings_cleanup_audio_partial">Cleaned %1$d meetings (%2$s); %3$d files could not be deleted (maybe in use)</string>
     <string name="settings_cleanup_audio_none">No old audio matched</string>
     <string name="settings_cleanup_audio_failed">Could not clean up old audio — files may be in use. Try again later.</string>
+    <string name="settings_minutes_language">Minutes language</string>
+    <string name="settings_minutes_language_hint">Following the spoken language is the default; you can also fix it to Chinese or English.</string>
+    <string name="settings_minutes_language_auto">Match meeting</string>
+    <string name="settings_minutes_language_zh">中文</string>
+    <string name="settings_minutes_language_en">English</string>
 </resources>

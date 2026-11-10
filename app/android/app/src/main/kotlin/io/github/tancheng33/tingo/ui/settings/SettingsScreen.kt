@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.engine.AudioCleanup
+import io.github.tancheng33.tingo.minutes.MinutesLanguage
 import io.github.tancheng33.tingo.ui.components.TingoConfirmDialog
 import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.settings.LlmConfig
@@ -73,6 +74,8 @@ fun SettingsScreen(
     /** 没走完的引导：回到上次那一步接着走（桌面对应设置页的"回到新手引导"） */
     onResumeOnboarding: (() -> Unit)? = null,
     onSaveAutoStopSilence: (Int) -> Unit = {},
+    /** 纪要语言：auto 跟会议说的话走 */
+    onSaveMinutesLanguage: (String) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
     /** 清理旧音频：天数 0 表示不限日期 */
@@ -155,6 +158,11 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         AutoStopSection(minutes = models.autoStopSilenceMin, onSelect = onSaveAutoStopSilence)
+
+        MinutesLanguageSection(
+            language = models.minutesLanguage,
+            onSelect = onSaveMinutesLanguage,
+        )
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
@@ -746,6 +754,37 @@ private fun AutoStopSection(minutes: Int, onSelect: (Int) -> Unit) {
                     },
                     selected = option == minutes,
                     onClick = { onSelect(option) },
+                )
+            }
+        }
+    }
+}
+
+/** 纪要语言：跟会议说的话走 / 中文 / 英文（桌面在"纪要"设置里有同一组选项）。 */
+@Composable
+private fun MinutesLanguageSection(language: String, onSelect: (String) -> Unit) {
+    val colors = TingoTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.settings_minutes_language),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        Text(
+            stringResource(R.string.settings_minutes_language_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.muted,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                MinutesLanguage.AUTO to R.string.settings_minutes_language_auto,
+                MinutesLanguage.ZH to R.string.settings_minutes_language_zh,
+                MinutesLanguage.EN to R.string.settings_minutes_language_en,
+            ).forEach { (value, label) ->
+                PillFilter(
+                    label = stringResource(label),
+                    selected = MinutesLanguage.normalize(language) == value,
+                    onClick = { onSelect(value) },
                 )
             }
         }

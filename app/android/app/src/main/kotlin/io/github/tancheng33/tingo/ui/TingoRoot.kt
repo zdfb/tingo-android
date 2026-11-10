@@ -995,9 +995,10 @@ private fun DetailRoute(
                                 configProvider = { container.settings.llm },
                                 client = UrlHttpJsonClient(),
                             ),
-                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案。
-                            // 提示词模板只有中文，所以这段恒取中文，不跟界面语言走。
-                            glossary = { container.engine.minutesGlossary("zh") },
+                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案，
+                            // 但语言要跟纪要语言一致（英文纪要里塞中文句子，模型会跟着改口）。
+                            glossary = { lang -> container.engine.minutesGlossary(lang) },
+                            languageSetting = { container.settings.minutesLanguage },
                         )
                     },
                     isConfigured = { container.settings.llm.isConfigured },
