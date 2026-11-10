@@ -353,6 +353,8 @@ fun DetailScreen(
                         minutes = state.minutes,
                         minutesFailure = state.minutesFailure,
                         fishbone = detail?.fishbone,
+                        transcript = detail?.transcript,
+                        onPlayFrom = onSentenceClick,
                         generation = minutesGeneration,
                         onGenerate = onGenerateMinutes,
                         onCancel = onCancelMinutes,
@@ -377,6 +379,9 @@ private fun MinutesPane(
     minutes: MinutesDoc?,
     minutesFailure: FailureKind?,
     fishbone: Fishbone?,
+    /** 转写正文：鱼骨图的"有没有原话支撑"与时间戳跳转都要它 */
+    transcript: io.github.tancheng33.tingo.engine.Transcript?,
+    onPlayFrom: (ULong) -> Unit,
     generation: MinutesUiState,
     onGenerate: () -> Unit,
     onCancel: () -> Unit,
@@ -411,7 +416,7 @@ private fun MinutesPane(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(section.heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (section.kind == SectionKind.ROOT_CAUSE && fishbone != null) {
-                        FishboneCard(fishbone)
+                        FishboneCard(fishbone, transcript = transcript, onPlayFrom = onPlayFrom)
                     } else {
                         // 有 ```fishbone 代码块但没解析出图，就照原文展示并标注，别让用户以为内容丢了
                         if (section.body.contains(FISHBONE_FENCE)) {
@@ -429,20 +434,79 @@ private fun MinutesPane(
     }
 }
 
-/** 鱼骨图：分支 + 每个分支引用的原话时间戳；没有可解析的图时退回原文。 */
+/**
+ * 鱼骨图：分支 + 每条分支的**原文核对**。
+ *
+ * 桌面把"结论有出处"当卖点：每条分支会数它引用了多少段原话、共多少字，
+ * 一段都对不上就直接标「无原文依据」。手机上原来只把时间戳画成不可点的胶囊，
+ * 等于把"编出来的原因"和"有原话的原因"画成一样。
+ *
+ * @param onPlayFrom 点时间戳就跳到那句开始播（与转写里的句子同一个动作）
+ */
 @Composable
-private fun FishboneCard(fishbone: Fishbone) {
+private fun FishboneCard(
+    fishbone: Fishbone,
+    transcript: io.github.tancheng33.tingo.engine.Transcript?,
+    onPlayFrom: (ULong) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    val summary = FishboneGrounding.summarize(fishbone, transcript)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(fishbone.problem, style = MaterialTheme.typography.titleSmall)
-        fishbone.branches.forEach { branch ->
-            Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = if (summary.withoutEvidence > 0) {
+                stringResource(
+                    R.string.detail_fishbone_summary_partial,
+                    summary.branches,
+                    summary.quotes,
+                    summary.withoutEvidence,
+                )
+            } else {
+                stringResource(R.string.detail_fishbone_summary, summary.branches, summary.quotes)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (summary.withoutEvidence > 0) colors.amber else colors.muted,
+        )
+        fishbone.branches.filter { it.title.isNotBlank() }.forEach { branch ->
+            val grounding = FishboneGrounding.ground(branch.refs, transcript)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(branch.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 if (branch.detail.isNotBlank()) {
                     Text(branch.detail, style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    branch.refs.forEach { ref ->
-                        AssistChip(onClick = {}, label = { Text(ref) })
+                Text(
+                    text = when (grounding.level) {
+                        FishboneGrounding.Level.NONE -> stringResource(R.string.detail_fishbone_no_evidence)
+                        FishboneGrounding.Level.WEAK -> stringResource(
+                            R.string.detail_fishbone_weak,
+                            grounding.quotes.size,
+                            grounding.chars,
+                        )
+                        FishboneGrounding.Level.OK -> stringResource(
+                            R.string.detail_fishbone_quotes,
+                            grounding.quotes.size,
+                            grounding.chars,
+                        )
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when (grounding.level) {
+                        FishboneGrounding.Level.NONE -> colors.amber
+                        FishboneGrounding.Level.WEAK -> colors.amber
+                        FishboneGrounding.Level.OK -> colors.muted
+                    },
+                )
+                if (grounding.quotes.isNotEmpty()) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        grounding.quotes.forEach { quote ->
+                            AssistChip(
+                                onClick = { onPlayFrom(quote.ms.toULong()) },
+                                label = {
+                                    Text(
+                                        io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
                 HorizontalDivider()

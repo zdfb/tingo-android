@@ -277,4 +277,9 @@
     <string name="settings_minutes_language_en">English</string>
     <string name="library_delete_busy">This meeting is still being processed — stop the task before deleting it</string>
     <string name="record_live_hint">Live text — the transcript after recording is what counts</string>
+    <string name="detail_fishbone_summary">%1$d branches · %2$d quotes</string>
+    <string name="detail_fishbone_summary_partial">%1$d branches · %2$d quotes · %3$d with no evidence</string>
+    <string name="detail_fishbone_no_evidence">No evidence</string>
+    <string name="detail_fishbone_weak">Thin evidence · %1$d quote(s) · %2$d chars</string>
+    <string name="detail_fishbone_quotes">%1$d quote(s) · %2$d chars</string>
 </resources>
