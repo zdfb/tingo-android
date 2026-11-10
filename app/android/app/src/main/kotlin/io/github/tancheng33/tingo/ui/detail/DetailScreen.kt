@@ -485,6 +485,8 @@ private fun FishboneCard(
 ) {
     val colors = TingoTheme.colors
     val summary = FishboneGrounding.summarize(fishbone, transcript)
+    // 展开哪一条（按标题记，重新加载纪要后标题不变就不会错位）
+    var expanded by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(fishbone.problem, style = MaterialTheme.typography.titleSmall)
         Text(
@@ -503,7 +505,22 @@ private fun FishboneCard(
         )
         fishbone.branches.filter { it.title.isNotBlank() }.forEach { branch ->
             val grounding = FishboneGrounding.ground(branch.refs, transcript)
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // 点一下展开原话：桌面上每条分支点开就能看到"这句话是谁在哪一刻说的"。
+            // 只有真的有引用才可点，否则展开一个空盒子只会让人困惑。
+            val expandable = grounding.quotes.isNotEmpty()
+            val expandedNow = expanded == branch.title
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (expandable) {
+                            Modifier.clickable { expanded = if (expandedNow) null else branch.title }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(branch.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 if (branch.detail.isNotBlank()) {
                     Text(branch.detail, style = MaterialTheme.typography.bodySmall)
@@ -523,28 +540,63 @@ private fun FishboneCard(
                         )
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = when (grounding.level) {
-                        FishboneGrounding.Level.NONE -> colors.amber
-                        FishboneGrounding.Level.WEAK -> colors.amber
-                        FishboneGrounding.Level.OK -> colors.muted
-                    },
+                    color = if (grounding.level == FishboneGrounding.Level.OK) colors.muted else colors.amber,
                 )
-                if (grounding.quotes.isNotEmpty()) {
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (expandable) {
+                    if (expandedNow) {
                         grounding.quotes.forEach { quote ->
-                            AssistChip(
-                                onClick = { onPlayFrom(quote.ms.toULong()) },
-                                label = {
-                                    Text(
-                                        io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms),
-                                    )
-                                },
-                            )
+                            FishboneQuoteRow(quote = quote, onPlayFrom = onPlayFrom)
+                        }
+                    } else {
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            grounding.quotes.forEach { quote ->
+                                AssistChip(
+                                    onClick = { onPlayFrom(quote.ms.toULong()) },
+                                    label = {
+                                        Text(
+                                            io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
                 HorizontalDivider()
             }
+        }
+    }
+}
+
+/**
+ * 鱼骨图里的一条引用：时间戳（点它回听）+ 说话人 + 原话。
+ *
+ * 与桌面同一个信息量：桌面在分支下面展开的就是"谁说、什么时候、说了什么"。
+ * 没有这段原话，用户只能相信模型总结的因果，没法自己判断。
+ */
+@Composable
+private fun FishboneQuoteRow(quote: FishboneGrounding.Quote, onPlayFrom: (ULong) -> Unit) {
+    val colors = TingoTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(
+            onClick = { onPlayFrom(quote.ms.toULong()) },
+            label = { Text(io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms)) },
+        )
+        Column(Modifier.weight(1f)) {
+            if (quote.speaker.isNotBlank()) {
+                Text(
+                    text = quote.speaker,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.muted,
+                )
+            }
+            Text(quote.text, style = MaterialTheme.typography.bodySmall, color = colors.text2)
         }
     }
 }
