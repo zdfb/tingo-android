@@ -234,6 +234,14 @@ fun TingoRoot(
     val autoStoppedAfter by recordViewModel.autoStoppedAfter.collectAsStateWithLifecycle()
     val runningTasks by container.tasks.tasks.collectAsStateWithLifecycle()
     val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
+    // 刚录完的会议：等录完那一刻记下来，进详情页后自动开始转写（桌面同样是"结束即转写"）
+    var pendingAutoTranscribe by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    // 转写完了接着写纪要的那一场；只在"刚录完"这条链上设，手动转写不会触发
+    var pendingAutoMinutes by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
     // 选文件走系统选择器（不开 SAF 持久授权：我们只读一次，马上解码进库）
@@ -455,6 +463,13 @@ fun TingoRoot(
         val onOpenMeeting: (String) -> Unit = { id ->
             if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
         }
+    // 录音结束：直接进那场会议并自动转写。桌面上"结束"之后就不用再点一次转写，
+    // 手机上原来要"打开会议 → 点转写"两步，用户常在第一步就以为完事了
+    androidx.compose.runtime.LaunchedEffect(recordState) {
+        val finished = recordState as? RecordUiState.Finished ?: return@LaunchedEffect
+        pendingAutoTranscribe = finished.meetingId
+        onOpenMeeting(finished.meetingId)
+    }
     // 导入完成就进那场会议的详情（与录音结束后的行为一致）
     androidx.compose.runtime.LaunchedEffect(importState.meetingId) {
         val id = importState.meetingId
@@ -579,6 +594,13 @@ fun TingoRoot(
                             runCatching { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } }
                         },
                         onChanged = libraryViewModel::refresh,
+                        autoTranscribe = pendingAutoTranscribe == id,
+                        onAutoTranscribeStarted = {
+                            pendingAutoTranscribe = null
+                            pendingAutoMinutes = id
+                        },
+                        autoMinutes = pendingAutoMinutes == id,
+                        onAutoMinutesStarted = { pendingAutoMinutes = null },
                     )
                             } ?: EmptyDetailHint()
                         }
@@ -603,6 +625,13 @@ fun TingoRoot(
                     onOpenSettings = { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } },
                     seekMs = seek,
                     onChanged = libraryViewModel::refresh,
+                    autoTranscribe = pendingAutoTranscribe == id,
+                    onAutoTranscribeStarted = {
+                        pendingAutoTranscribe = null
+                        pendingAutoMinutes = id
+                    },
+                    autoMinutes = pendingAutoMinutes == id,
+                    onAutoMinutesStarted = { pendingAutoMinutes = null },
                 )
                 // 跳一次就够：返回后再进来不该又跳回同一句
                 androidx.compose.runtime.LaunchedEffect(seek) { pendingSeekMs = null }
@@ -919,6 +948,13 @@ private fun DetailRoute(
     seekMs: Long? = null,
     /** 改名/标签等写操作后通知调用方刷新列表 */
     onChanged: () -> Unit = {},
+    /** 刚录完的这一场：进页面就自动开始转写（桌面按"结束即转写"走同一条路） */
+    autoTranscribe: Boolean = false,
+    /** 自动转写启动过就撤掉，避免返回本页又跑一遍 */
+    onAutoTranscribeStarted: () -> Unit = {},
+    /** 自动转写之后接着写纪要（桌面"结束即转写、转写完就写纪要"同一条链） */
+    autoMinutes: Boolean = false,
+    onAutoMinutesStarted: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1000,6 +1036,12 @@ private fun DetailRoute(
     )
     val transcription by transcriptionViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { transcriptionViewModel.prepare() }
+    // 录完自动转写：等 prepare 把音轨备好（Idle）再开跑，否则 start 会因为"没有录音"直接失败
+    androidx.compose.runtime.LaunchedEffect(meetingId, autoTranscribe, transcription) {
+        if (!autoTranscribe || transcription !is TranscriptionUiState.Idle) return@LaunchedEffect
+        transcriptionViewModel.start()
+        onAutoTranscribeStarted()
+    }
 
     val minutesViewModel: MinutesViewModel = viewModel(
         key = "minutes-$meetingId",
@@ -1030,6 +1072,20 @@ private fun DetailRoute(
     )
     val minutesState by minutesViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { minutesViewModel.prepare() }
+    // 转写一完成就接着写纪要：没配模型服务时 prepare 会把状态置成 NotConfigured，
+    // 那就不要自动开（那条路是"去设置"，不是"重试一次就会好"）
+    androidx.compose.runtime.LaunchedEffect(meetingId, autoMinutes, transcription, minutesState, state.detail) {
+        if (!autoMinutes) return@LaunchedEffect
+        val shouldStart = io.github.tancheng33.tingo.ui.detail.AutoChain.shouldAutoStartMinutes(
+            armed = autoMinutes,
+            transcription = transcription,
+            hasMinutes = !state.detail?.minutesText.isNullOrBlank(),
+            minutes = minutesState,
+        )
+        // 条件不满足也把标记撤掉：留着它下次进页面又试一遍
+        onAutoMinutesStarted()
+        if (shouldStart) minutesViewModel.start()
+    }
 
     // 转写/纪要写进会议目录后重新读详情：不然界面会一直停在"暂无转写""暂无纪要"
     androidx.compose.runtime.LaunchedEffect(transcription) {
