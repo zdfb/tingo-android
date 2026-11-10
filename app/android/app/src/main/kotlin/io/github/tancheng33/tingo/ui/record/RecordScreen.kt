@@ -564,11 +564,14 @@ private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
         tasks.forEach { task ->
             // 用 key 绑定行身份：任务完成时会从中间抽走一行，没有 key 会让进度条串到别的行上
             key(task.key) {
+            // 会议目录还没建好的（导入刚起步）没有可打开的东西：这一行先不可点，
+            // 否则用户点上去毫无反应，比"不能点"更像卡死
+            val openable = task.meetingId.isNotBlank()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.card, TingoDimens.cardShape)
-                    .clickable { onOpen(task.meetingId) }
+                    .then(if (openable) Modifier.clickable { onOpen(task.meetingId) } else Modifier)
                     .padding(TingoDimens.gapTight),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {

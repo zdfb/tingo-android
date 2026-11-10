@@ -13,6 +13,7 @@ import io.github.tancheng33.tingo.recording.WavTrim
 import io.github.tancheng33.tingo.recording.RecordingKeepAlive
 import io.github.tancheng33.tingo.recording.SystemAudioTrack
 import io.github.tancheng33.tingo.recording.TrackMerger
+import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.recording.WavWriter
@@ -123,10 +124,11 @@ class RecordViewModel(
         // 标记要在启动协程之前就打上：连点两次时协程还没跑起来，检查会漏
         _import.value = ImportState(progress = 0f)
         // 一次导入一个 key：会议目录建好之前还没有 id，只能用序号占位
-        val taskKey = "${TaskKind.IMPORT.name}:import-${System.nanoTime()}"
+        val taskKey = RunningTask.pendingKey(TaskKind.IMPORT, System.nanoTime().toString())
         // 与落库时的会议名同一条规则（去扩展名），首页那一行才不会带着 .m4a
         val shownTitle = title.ifBlank { AudioDecoder.titleOf(source.name) }
         tasks?.start(taskKey, meetingId = "", title = shownTitle, kind = TaskKind.IMPORT, fraction = 0f)
+        // 解码占进度条前 15%（与 AudioImport 同一条分配），此后由转写回调继续推
         viewModelScope.launch(io) {
             try {
                 val id = importer.run(
@@ -134,8 +136,9 @@ class RecordViewModel(
                     title = title,
                     modifiedMs = modifiedMs,
                     onCreated = { created ->
-                        // 目录建好后换成真实 id：首页那一行才能点进会议
-                        tasks?.start(taskKey, created, shownTitle, TaskKind.IMPORT, fraction = null)
+                        // 目录建好后补上真实 id（原地替换，别让这一行跳到列表末尾）；
+                        // 进度已知，不要闪一下"没进度"
+                        tasks?.attach(taskKey, created, shownTitle, fraction = AudioImport.DECODE_SHARE)
                     },
                     onProgress = { fraction ->
                         _import.value = ImportState(progress = fraction)

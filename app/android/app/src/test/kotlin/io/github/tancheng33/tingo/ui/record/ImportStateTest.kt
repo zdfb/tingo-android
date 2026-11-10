@@ -132,7 +132,7 @@ class ImportStateTest {
     }
 
     @Test
-    fun importTaskCarriesTheRealMeetingIdOnceTheDirectoryExists() = runTest(dispatcher) {
+    fun successfulImportEndsWithTheMeetingIdAndNoRunningRow() = runTest(dispatcher) {
         val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
         val vm = viewModel(importer(engine = FakeEnginePort()), tasks)
 

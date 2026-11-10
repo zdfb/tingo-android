@@ -27,6 +27,12 @@ data class RunningTask(
 ) {
     companion object {
         fun keyOf(kind: TaskKind, meetingId: String): String = "${kind.name}:$meetingId"
+
+        /**
+         * 会议还没建出来的任务（导入）：先按一个临时令牌登记，目录建好再 [TaskCenter.attach]。
+         * 令牌用调用方给的不重复值，别拿字段拼。
+         */
+        fun pendingKey(kind: TaskKind, token: String): String = "${kind.name}:pending:$token"
     }
 }
 
@@ -53,6 +59,17 @@ class TaskCenter {
     fun start(key: String, meetingId: String, title: String, kind: TaskKind, fraction: Float? = null) {
         val task = RunningTask(key, meetingId, title, kind, fraction)
         _tasks.update { tasks -> tasks.filterNot { it.key == key } + task }
+    }
+
+    /**
+     * 任务"落了地"：把临时登记换成真实会议，**位置不变**。
+     *
+     * 不能"注销再登记"——那会让这一行在列表里跳到末尾，用户会以为刚又多了一件活。
+     */
+    fun attach(key: String, meetingId: String, title: String, fraction: Float?) {
+        _tasks.update { tasks ->
+            tasks.map { if (it.key == key) it.copy(meetingId = meetingId, title = title, fraction = fraction) else it }
+        }
     }
 
     fun progress(key: String, fraction: Float?) {
