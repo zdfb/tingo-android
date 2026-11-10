@@ -117,4 +117,6 @@ jobs:
           arch: x86_64
           disable-animations: true
           working-directory: app/android
-          script: ./gradlew :app:connectedDebugAndroidTest -PtingoSkipBundledModels=true
+          # CI 上没有内置模型（300+ MB 不进仓库），跳过依赖模型的五个用例类（它们在本机用真模型跑过，
+          # 见 app/android/README.md 的实机验收记录）。整条命令写成一行：折行会往类名里塞空格
+          script: ./gradlew :app:connectedDebugAndroidTest -PtingoSkipBundledModels=true -Pandroid.testInstrumentationRunnerArguments.notClass=io.github.tancheng33.tingo.BundledModelInstrumentedTest,io.github.tancheng33.tingo.HomeScreenInstrumentedTest,io.github.tancheng33.tingo.RecognitionInstrumentedTest,io.github.tancheng33.tingo.PipelineInstrumentedTest,io.github.tancheng33.tingo.SherpaRuntimeTest
