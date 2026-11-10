@@ -108,7 +108,8 @@ class DetailPlaybackTest {
         override fun setTags(id: String, tags: List<String>): List<String> = tags
         override fun batch(ids: List<String>, action: String, tag: String): List<io.github.tancheng33.tingo.engine.BatchOutcome> =
             ids.map { io.github.tancheng33.tingo.engine.BatchOutcome(it, true, "") }
-        override fun search(query: String) = io.github.tancheng33.tingo.engine.SearchResults(query, emptyList(), emptyList())
+        override fun search(query: String, language: String) =
+            io.github.tancheng33.tingo.engine.SearchResults(query, emptyList(), emptyList())
         override fun storageStats() = io.github.tancheng33.tingo.engine.StorageStats(0u, 0uL, 0uL, 0uL, emptyList())
         override fun deleteToTrash(id: String): ULong = 0uL
         override fun restoreFromTrash(id: String) = Unit

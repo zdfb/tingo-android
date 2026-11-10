@@ -169,7 +169,7 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun batch(ids: List<String>, action: String, tag: String): Nothing = fail()
 
-    override fun search(query: String): Nothing = fail()
+    override fun search(query: String, language: String): Nothing = fail()
 
     override fun storageStats(): Nothing = fail()
 

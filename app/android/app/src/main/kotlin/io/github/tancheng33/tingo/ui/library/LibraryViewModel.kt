@@ -64,6 +64,12 @@ class LibraryViewModel(
      * "点进去是一场不存在的会议"。
      */
     private val tasks: TaskCenter? = null,
+    /**
+     * 界面语言（"zh"/"en"）：搜索命中里的说话人按它显示。
+     *
+     * 每次搜索时才读：用户在设置里改了语言，不必重建 ViewModel。
+     */
+    private val language: () -> String = { "zh" },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)
@@ -150,7 +156,7 @@ class LibraryViewModel(
         searchJob = viewModelScope.launch(io) {
             delay(SEARCH_DEBOUNCE_MS)
             val result = try {
-                repository.search(needle)
+                repository.search(needle, language())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: TingoFailure) {

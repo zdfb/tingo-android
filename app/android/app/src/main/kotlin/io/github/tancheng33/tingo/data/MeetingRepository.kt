@@ -59,7 +59,9 @@ class MeetingRepository(
         withContext(io) { engine.batch(ids, action.wire, tag) }
 
     /** 跨会议搜索（纪要 + 转写正文，含模糊匹配）。 */
-    suspend fun search(query: String): SearchResults = withContext(io) { engine.search(query) }
+    /** 搜索；`language` 决定没改名的说话人怎么显示（说话人1 / Speaker 1） */
+    suspend fun search(query: String, language: String = "zh"): SearchResults =
+        withContext(io) { engine.search(query, language) }
 
     /** 删除到回收站；返回释放的字节数。 */
     suspend fun deleteToTrash(id: String): ULong = withContext(io) { engine.deleteToTrash(id) }

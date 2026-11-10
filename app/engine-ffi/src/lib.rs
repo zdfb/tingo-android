@@ -591,10 +591,16 @@ impl TingoEngine {
     }
 
     /// 跨会议搜索：纪要正文 + 转写正文，含桌面版那套"术语扩展 + 差一个字"的模糊匹配。
-    pub fn search(&self, query: String) -> Result<SearchResults, EngineError> {
+    /// 跨会议搜索。
+    ///
+    /// `language` 是界面语言（"zh" / "en"）：没改过名的说话人在结果里写"说话人1"还是
+    /// "Speaker 1" 由它决定。之前这里固定按中文渲染，英文界面搜出来满屏中文标签。
+    pub fn search(&self, query: String, language: String) -> Result<SearchResults, EngineError> {
         let root = self.paths.meetings_root.clone();
         guard("search", move || {
-            let value = tingo_engine::terms::search(&root, &query, tingo_engine::i18n::Lang::Zh);
+            // 认不出就当中文：界面语言只有这两种，缺省值必须是"能看"的那个
+            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let value = tingo_engine::terms::search(&root, &query, lang);
             Ok(parse_search(&query, &value))
         })
     }
@@ -1692,12 +1698,35 @@ mod tests {
 ").unwrap();
 
         let engine = TingoEngine::new(root.display().to_string());
-        let result = engine.search("验证码".to_string()).unwrap();
+        let result = engine.search("验证码".to_string(), "zh".to_string()).unwrap();
 
         assert_eq!(result.query, "验证码");
         assert!(!result.hits.is_empty(), "应命中识别错字，实际：{result:?}");
         assert!(result.hits.iter().all(|h| h.meeting_id == "2026-10-28_1430_复盘"));
         assert!(result.hits.iter().any(|h| h.start_ms == 1000 || h.in_minutes));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_renders_speaker_names_in_the_ui_language() {
+        let root = temp_root("search-lang");
+        let dir = meeting(&root, "2026-10-28_1430_周会");
+        std::fs::write(
+            dir.join("transcript.json"),
+            r#"{"source":"录音.wav","duration_ms":6000,"sentences":[{"speaker":0,"start_ms":500,"end_ms":1500,"text":"注册页改完了"}]}"#,
+        )
+        .unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let zh = engine.search("注册页".to_string(), "zh".to_string()).unwrap();
+        let en = engine.search("注册页".to_string(), "en".to_string()).unwrap();
+
+        assert_eq!(zh.hits.first().map(|h| h.speaker.clone()), Some("说话人1".to_string()));
+        assert_eq!(
+            en.hits.first().map(|h| h.speaker.clone()),
+            Some("Speaker 1".to_string()),
+            "英文界面下不该还写着「说话人1」"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

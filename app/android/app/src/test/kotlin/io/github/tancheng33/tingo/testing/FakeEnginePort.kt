@@ -117,7 +117,8 @@ class FakeEnginePort(
         return onBatch(ids, action, tag)
     }
 
-    override fun search(query: String): SearchResults {
+    override fun search(query: String, language: String): SearchResults {
+        searchedLanguage = language
         searches += query
         return onSearch(query)
     }
@@ -182,6 +183,9 @@ class FakeEnginePort(
         val id = "2026-11-07_1000_$title"
         return ImportedMeeting(id = id, dir = "/fake/tingo/meetings/$id")
     }
+
+    /** 搜索时传进来的界面语言（用例据此断言标签按语言渲染）。 */
+    var searchedLanguage: String? = null
 
     /** 清理旧音频的调用记录：`(olderThanDays, archivedOnly)`。 */
     val audioCleanups = mutableListOf<Pair<UInt, Boolean>>()

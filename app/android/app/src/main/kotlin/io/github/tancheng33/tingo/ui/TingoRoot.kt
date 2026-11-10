@@ -148,7 +148,14 @@ fun TingoRoot(
 
     val libraryViewModel: LibraryViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { LibraryViewModel(MeetingRepository(container.engine), tasks = container.tasks) }
+            initializer {
+                LibraryViewModel(
+                    repository = MeetingRepository(container.engine),
+                    tasks = container.tasks,
+                    // 搜索里的说话人标签跟界面语言走（引擎按 lang 渲染）
+                    language = { container.uiLanguage() },
+                )
+            }
         },
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()

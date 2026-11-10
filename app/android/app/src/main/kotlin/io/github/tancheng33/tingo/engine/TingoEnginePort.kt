@@ -61,8 +61,12 @@ interface TingoEnginePort {
     /** 批量操作，按 id 逐个返回结果；`tag` 只对 tag_add / tag_remove 有意义。 */
     fun batch(ids: List<String>, action: String, tag: String): List<BatchOutcome>
 
-    /** 跨会议搜索（纪要正文 + 转写正文，含模糊匹配）。 */
-    fun search(query: String): SearchResults
+    /**
+     * 跨会议搜索（纪要正文 + 转写正文，含模糊匹配）。
+     *
+     * @param language 界面语言（"zh"/"en"）：没改名的说话人按它渲染（说话人1 / Speaker 1）
+     */
+    fun search(query: String, language: String): SearchResults
 
     /** 存储统计：总量、音频、可清理的残留。 */
     fun storageStats(): StorageStats
@@ -175,7 +179,8 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
     override fun batch(ids: List<String>, action: String, tag: String): List<BatchOutcome> =
         mapEngineCall { engine.batch(ids, action, tag) }
 
-    override fun search(query: String): SearchResults = mapEngineCall { engine.search(query) }
+    override fun search(query: String, language: String): SearchResults =
+        mapEngineCall { engine.search(query, language) }
 
     override fun storageStats(): StorageStats = mapEngineCall { engine.storageStats() }
 

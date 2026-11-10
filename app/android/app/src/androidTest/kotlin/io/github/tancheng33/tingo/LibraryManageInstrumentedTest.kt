@@ -79,7 +79,7 @@ class LibraryManageInstrumentedTest {
 
         // 引擎的模糊匹配要求词长 ≥4（3 个字的词差一个字太容易误中），
         // 所以这里用完整的"短信验证码延迟"去撞"短信验正码延迟"
-        val result = engine.search("短信验证码延迟")
+        val result = engine.search("短信验证码延迟", "zh")
 
         assertTrue("应按识别错字模糊命中，实际：${result.hits}", result.hits.isNotEmpty())
         assertEquals("2026-11-03_1400_复盘", result.hits.first().meetingId)

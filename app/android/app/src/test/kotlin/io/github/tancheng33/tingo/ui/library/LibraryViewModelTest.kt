@@ -34,8 +34,8 @@ class LibraryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(engine: FakeEnginePort) =
-        LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+    private fun viewModel(engine: FakeEnginePort, language: () -> String = { "zh" }) =
+        LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = language)
 
     @Test
     fun showsContentForLoadedMeetings() = runTest(dispatcher) {
@@ -192,5 +192,36 @@ class LibraryViewModelTest {
 
         assertEquals(FailureKind.PERMISSION_DENIED, vm.lastError.value)
         assertTrue(vm.state.value is LibraryUiState.Content)
+    }
+
+    @Test
+    fun searchAsksForTheUiLanguage() = runTest(dispatcher) {
+        val engine = FakeEnginePort()
+        val vm = viewModel(engine, language = { "en" })
+        advanceUntilIdle()
+
+        vm.onQueryChange("注册页")
+        advanceUntilIdle()
+
+        // 引擎按这个值渲染没改名的说话人：传错了英文界面会显示"说话人1"
+        assertEquals("en", engine.searchedLanguage)
+    }
+
+    @Test
+    fun searchReadsTheLanguageEveryTime() = runTest(dispatcher) {
+        val engine = FakeEnginePort()
+        var lang = "zh"
+        val vm = viewModel(engine, language = { lang })
+        advanceUntilIdle()
+
+        vm.onQueryChange("注册页")
+        advanceUntilIdle()
+        assertEquals("zh", engine.searchedLanguage)
+
+        // 用户在设置里改成英文后不必重建 ViewModel
+        lang = "en"
+        vm.onQueryChange("注册页")
+        advanceUntilIdle()
+        assertEquals("en", engine.searchedLanguage)
     }
 }
