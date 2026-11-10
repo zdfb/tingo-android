@@ -180,6 +180,12 @@ fun TingoRoot(
     androidx.compose.runtime.LaunchedEffect(batchFailureText) {
         batchFailureText?.let { container.toasts.show(it, error = true) }
     }
+    // 正在处理中的会议不能被删：桌面在服务端拒绝，Android 在这里拒绝并说明原因
+    val busyBlocked by libraryViewModel.busyBlocked.collectAsStateWithLifecycle()
+    val busyBlockText = stringResource(R.string.library_delete_busy)
+    androidx.compose.runtime.LaunchedEffect(busyBlocked) {
+        if (busyBlocked > 0) container.toasts.show(busyBlockText, error = true)
+    }
     // 回收站视图与"列表/详情"共用同一页：用状态切换而不是再加一条导航路由
     val trashVisible by libraryViewModel.trashVisible.collectAsStateWithLifecycle()
     // 搜索命中要跳到具体毫秒：详情页的播放器接这个值
@@ -289,15 +295,39 @@ fun TingoRoot(
     // 否则切页之后点"开始录音"会直接撞上没授权（采集抛异常，用户只看到"麦克风不可用"）
     // 权限状态在读的那一刻才准：用户可能刚从系统设置里授权回来（出去的这段时间界面不重组）
     var micGranted by remember { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { /* 没有通知权限也能录音，只是状态栏看不到：界面自己会提示 */ }
+
+    // 授权回来后要接着走的那半段启动流程；空 lambda 表示这次授权不是为录音弹的
+    var startRecordingAfterMicGranted: () -> Unit by remember { mutableStateOf<() -> Unit>({}) }
+
+    // 权限齐了之后的启动流程：通知权限、系统内录授权，最后才真正开录
+    val beginRecording: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                recordContext,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (systemAudioEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val manager = recordContext.getSystemService(MediaProjectionManager::class.java)
+            projectionLauncher.launch(manager.createScreenCaptureIntent())
+        } else {
+            recordViewModel.start()
+        }
+    }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
     ) { granted ->
         // startRecording 会重新判定一次权限；这里同步一下，引导页那两行状态才立刻变
         micGranted = granted || micGranted
+        // 授权是"为了录这一场"才弹的：同意之后直接把这场录起来，
+        // 否则用户点了一次开始、授权后什么都没发生，还得再点一次（以为按钮坏了）
+        if (granted) startRecordingAfterMicGranted()
     }
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { /* 没有通知权限也能录音，只是状态栏看不到：界面自己会提示 */ }
 
     val startRecording: () -> Unit = {
         val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
@@ -305,22 +335,10 @@ fun TingoRoot(
             android.Manifest.permission.RECORD_AUDIO,
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!micGranted) {
+            startRecordingAfterMicGranted = beginRecording
             micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    recordContext,
-                    android.Manifest.permission.POST_NOTIFICATIONS,
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
-            if (systemAudioEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val manager = recordContext.getSystemService(MediaProjectionManager::class.java)
-                projectionLauncher.launch(manager.createScreenCaptureIntent())
-            } else {
-                recordViewModel.start()
-            }
+            beginRecording()
         }
     }
 

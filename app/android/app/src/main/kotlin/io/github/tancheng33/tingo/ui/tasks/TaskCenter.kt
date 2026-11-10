@@ -82,6 +82,10 @@ class TaskCenter {
     }
 
     /** 会议被删了：把它的活都撤掉，免得点进去是一场不存在的会议。 */
+    /** 正在跑的任务涉及的会议 id（删除/清理要跳过它们，桌面的 `meeting_busy` 是同一件事）。 */
+    fun busyMeetingIds(): Set<String> =
+        _tasks.value.mapNotNull { it.meetingId.takeIf { id -> id.isNotBlank() } }.toSet()
+
     fun forget(meetingId: String) {
         _tasks.update { tasks -> tasks.filterNot { it.meetingId == meetingId } }
     }

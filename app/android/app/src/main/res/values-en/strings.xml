@@ -275,4 +275,5 @@
     <string name="settings_minutes_language_auto">Match meeting</string>
     <string name="settings_minutes_language_zh">中文</string>
     <string name="settings_minutes_language_en">English</string>
+    <string name="library_delete_busy">This meeting is still being processed — stop the task before deleting it</string>
 </resources>

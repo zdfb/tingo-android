@@ -94,6 +94,10 @@ class LibraryViewModel(
     private var failureSeq = 0L
 
     private val _lastBatchFailures = MutableStateFlow(0)
+
+    /** 因为"正在处理"而被拒绝的删除次数：界面据此提示，而不是静默什么都不做 */
+    private val _busyBlocked = MutableStateFlow(0)
+    val busyBlocked: StateFlow<Int> = _busyBlocked.asStateFlow()
     val lastBatchFailures: StateFlow<Int> = _lastBatchFailures.asStateFlow()
 
     /** 批量失败的第一条原因：只说"3 场失败"没法让人判断该做什么。 */
@@ -175,6 +179,14 @@ class LibraryViewModel(
         }
     }
 
+    /**
+     * 这场会议是不是有活正在跑（录音、转写、写纪要、导入）。
+     *
+     * 桌面在服务端用 `meeting_busy` 挡住"删掉正在处理的会议"；Android 只有一个进程，
+     * 在这里挡同一件事——否则删掉目录会让正在跑的转写把结果写到半截路径上。
+     */
+    private fun busy(id: String): Boolean = tasks?.busyMeetingIds()?.contains(id) == true
+
     /** 归档或取消归档；成功后刷新列表，失败就保留原列表并记下原因。 */
     fun setArchived(id: String, archived: Boolean) {
         viewModelScope.launch(io) {
@@ -190,6 +202,7 @@ class LibraryViewModel(
 
     /** 彻底删除整场会议（不进回收站）；界面负责先确认。 */
     fun delete(id: String) {
+        if (rejectIfBusy(id)) return
         viewModelScope.launch(io) {
             try {
                 repository.delete(id)
@@ -204,6 +217,7 @@ class LibraryViewModel(
 
     /** 删除到回收站：可恢复，是界面上"删除"的默认动作。 */
     fun deleteToTrash(id: String) {
+        if (rejectIfBusy(id)) return
         viewModelScope.launch(io) {
             try {
                 repository.deleteToTrash(id)
@@ -323,25 +337,36 @@ class LibraryViewModel(
     fun runBatch(action: BatchAction, tag: String = "") {
         val ids = selection.toList()
         if (ids.isEmpty()) return
+        // 正在处理的会议整场跳过：桌面同样拒绝（`meeting_busy`），这里按条数告诉用户
+        val busyIds = ids.filter { busy(it) }
+        val runnable = ids.filterNot { busy(it) }
+        if (busyIds.isNotEmpty()) _busyBlocked.value += busyIds.size
         // 上一批的失败数不能带进来：用户看到的是这一批的结果
         _lastBatchFailures.value = 0
         _lastBatchReason.value = null
         viewModelScope.launch(io) {
             val failures = try {
-                val outcomes = repository.batch(ids, action, tag)
+                val outcomes = repository.batch(runnable, action, tag)
                 // 批量删除也是一条删除路径：漏掉这里，首页会挂着一场删掉的会议
                 if (action == BatchAction.DELETE) outcomes.filter { it.ok }.forEach { tasks?.forget(it.id) }
                 _lastBatchReason.value = outcomes.firstOrNull { !it.ok }?.error?.takeIf { it.isNotBlank() }
-                outcomes.count { !it.ok }
+                outcomes.count { !it.ok } + busyIds.size
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
                 _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
-                ids.size
+                runnable.size + busyIds.size
             }
             _lastBatchFailures.value = failures
             selection = emptySet()
             refreshNow()
         }
+    }
+
+    /** 拒绝一次删除：告诉界面"这场正在处理"，别让它以为按钮坏了。 */
+    private fun rejectIfBusy(id: String): Boolean {
+        if (!busy(id)) return false
+        _busyBlocked.value += 1
+        return true
     }
 
     fun onArchivedOnlyChange(enabled: Boolean) {

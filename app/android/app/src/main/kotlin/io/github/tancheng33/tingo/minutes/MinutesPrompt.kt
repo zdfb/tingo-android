@@ -174,13 +174,13 @@ Notes by part:
     /**
      * 拼提示词时把转写压成「[mm:ss] 说话人：内容」，与桌面版一致。
      *
-     * @param maxChars 提示词里最多放多少字符。远端模型的上下文比手机上的 0.6B 宽得多，
-     *   所以给到 48k 字符（约两小时的会）；真遇到超长会议再截断，并明确告诉模型"后面没了"，
-     *   否则它会当成全文都在、编出不存在的内容。
+     * @param maxChars 提示词里最多放多少字符：与桌面远端模型同为 40000。
+     *   调用方（`MinutesService`）在这之前就会把超长的会议分段提炼，所以这里的截断只是兜底——
+     *   真要截断也要明确告诉模型"后面没了"，否则它会当成全文都在、编出不存在的内容。
      */
     fun build(
         transcript: Transcript,
-        maxChars: Int = 48_000,
+        maxChars: Int = MinutesService.DEFAULT_MAX_CHARS,
         glossary: String = "",
         language: String,
         meetingDate: String? = null,

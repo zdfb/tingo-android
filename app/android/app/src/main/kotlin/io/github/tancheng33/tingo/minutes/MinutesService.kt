@@ -161,8 +161,13 @@ class MinutesService(
     }
 
     companion object {
-        /** 与 `MinutesPrompt.build` 的默认值一致：约两小时的会议 */
-        const val DEFAULT_MAX_CHARS = 48_000
+        /**
+         * 单次生成的上限字符数。
+         *
+         * 与桌面远端模型一致（`summarize.rs::default_max_chars` 不走 Ollama 时固定 40000）；
+         * 超过就分段提炼，不再靠截断。
+         */
+        const val DEFAULT_MAX_CHARS = 40_000
 
         /** 分段提炼只输出条目，给 600 就够 */
         const val CHUNK_MAX_TOKENS = 600
