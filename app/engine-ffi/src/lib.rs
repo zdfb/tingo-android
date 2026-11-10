@@ -345,8 +345,13 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
             meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
         }
         "delete_audio" => {
+            // 与桌面 batch 同一条路径：录音移到回收站，转写与纪要留下。直接 remove_file 会
+            // 让"批量只删录音"变成不可恢复，和界面上说的"可从废纸篓恢复"对不上。
+            let trash = root.join(TRASH_DIR).join(id);
+            std::fs::create_dir_all(&trash).map_err(|e| io_error(e, "batch"))?;
             for file in meetings::audio_files(&dir) {
-                std::fs::remove_file(&file).map_err(|e| io_error(e, "batch"))?;
+                let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
+                std::fs::rename(&file, trash.join(&name)).map_err(|e| io_error(e, "batch"))?;
             }
             Ok(())
         }
@@ -680,6 +685,41 @@ impl TingoEngine {
                 meetings: meetings_touched,
                 failed,
             })
+        })
+    }
+
+    /// 只删这场会议的录音：移到回收站（可恢复），转写与纪要留在原位。返回腾出的字节数。
+    ///
+    /// 与桌面 `server.rs::delete_audio` 同一语义：桌面界面的确认框写的是"录音会移到废纸篓"，
+    /// 所以这里不能直接 `remove_file`，否则用户点错了就再也拿不回来。
+    ///
+    /// @param skip_ids 正在转写/写纪要的会议 id：删掉正在被读的录音会让那一场中途炸掉
+    pub fn delete_audio(&self, id: String, skip_ids: Vec<String>) -> Result<u64, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("delete_audio", move || {
+            let dir = meeting_dir(&root, &id)?;
+            if skip_ids.contains(&id) {
+                return Err(EngineError::InvalidInput {
+                    detail: "这场会议还在处理中，等它跑完再删录音".to_string(),
+                });
+            }
+            let files = meetings::audio_files(&dir);
+            if files.is_empty() {
+                return Err(EngineError::Missing {
+                    detail: "这场会议没有录音文件".to_string(),
+                });
+            }
+            let trash = root.join(TRASH_DIR).join(&id);
+            std::fs::create_dir_all(&trash).map_err(|e| io_error(e, "delete_audio"))?;
+            let mut freed = 0u64;
+            for file in files {
+                let bytes = meetings::size_of(&file);
+                let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
+                let target = trash.join(&name);
+                std::fs::rename(&file, &target).map_err(|e| io_error(e, "delete_audio"))?;
+                freed += bytes;
+            }
+            Ok(freed)
         })
     }
 
@@ -1663,6 +1703,76 @@ mod tests {
         engine.restore_from_trash("2026-10-28_1430_复盘".to_string()).unwrap();
         assert!(dir.is_dir());
         assert!(engine.list_trash().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_audio_trashes_only_the_recording() {
+        let root = temp_root("delete-audio");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 4096]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let freed = engine
+            .delete_audio("2026-10-28_1430_复盘".to_string(), vec![])
+            .unwrap();
+
+        assert_eq!(freed, 4096, "腾出的字节数要按被移走的录音算");
+        assert!(!dir.join("录音.wav").exists(), "录音要离开会议目录");
+        assert!(dir.join("纪要.md").is_file(), "转写与纪要必须留在原位");
+        // 移到回收站而不是删掉：用户点错了还能找回来
+        assert!(root.join("meetings").join(TRASH_DIR).join("2026-10-28_1430_复盘").join("录音.wav").is_file());
+        // 会议本身还在库里（只是没有录音了）
+        assert_eq!(engine.scan_library().unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_audio_refuses_while_the_meeting_is_busy() {
+        let root = temp_root("delete-audio-busy");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 1024]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let result = engine.delete_audio(
+            "2026-10-28_1430_复盘".to_string(),
+            vec!["2026-10-28_1430_复盘".to_string()],
+        );
+
+        assert!(result.is_err(), "正在转写的会议不能删录音");
+        assert!(dir.join("录音.wav").is_file(), "拒绝之后录音必须还在");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_audio_without_a_recording_is_an_error() {
+        let root = temp_root("delete-audio-empty");
+        meeting(&root, "2026-10-28_1430_复盘");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        assert!(engine.delete_audio("2026-10-28_1430_复盘".to_string(), vec![]).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn batch_delete_audio_also_trashes_the_recording() {
+        let root = temp_root("batch-delete-audio");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 2048]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        engine
+            .batch(
+                vec!["2026-10-28_1430_复盘".to_string()],
+                "delete_audio".to_string(),
+                String::new(),
+            )
+            .unwrap();
+
+        assert!(!dir.join("录音.wav").exists());
+        assert!(dir.join("纪要.md").is_file());
+        // 批量也一样进回收站：界面上说"可从废纸篓恢复"就必须真能恢复
+        assert!(root.join("meetings").join(TRASH_DIR).join("2026-10-28_1430_复盘").join("录音.wav").is_file());
         let _ = std::fs::remove_dir_all(&root);
     }
 

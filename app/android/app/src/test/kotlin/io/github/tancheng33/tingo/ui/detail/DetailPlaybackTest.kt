@@ -116,6 +116,8 @@ class DetailPlaybackTest {
         override fun listTrash(): List<io.github.tancheng33.tingo.engine.TrashItem> = emptyList()
         override fun purgeTrash(id: String): ULong = 0uL
         override fun cleanupLeftovers(): ULong = 0uL
+        override fun deleteAudio(id: String, busyIds: List<String>): ULong = 0uL
+
         override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup =
             AudioCleanup(freedBytes = 0uL, meetings = 0u, failed = 0u)
         override fun speakers(id: String, language: String) =

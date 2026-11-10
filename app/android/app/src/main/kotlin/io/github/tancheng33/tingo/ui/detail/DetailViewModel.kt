@@ -63,6 +63,13 @@ data class DetailUiState(
     val minutesFailure: FailureKind? = null,
     val failure: FailureKind? = null,
     val playback: PlaybackState = PlaybackState(),
+    /**
+     * 录音文件是否还在。
+     *
+     * 「只删录音」之后必须变成 false：不然播放条还在，点下去什么也不响，
+     * 用户会以为是播放器坏了。
+     */
+    val hasAudio: Boolean = false,
 )
 
 class DetailViewModel(
@@ -70,8 +77,8 @@ class DetailViewModel(
     /** 猜说话人名字要问模型服务；null 表示当前没有可用的调用通道（测试或未配置） */
     private val chat: LlmChat? = null,
     private val meetingId: String,
-    /** 录音文件；不存在时播放相关操作全部是空操作 */
-    private val audioFile: File? = null,
+    /** 录音文件；不存在时播放相关操作全部是空操作（删掉录音后置空） */
+    audioFile: File? = null,
     private val playerFactory: () -> AudioPlayer = { MediaPlayerAudioPlayer() },
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
@@ -85,6 +92,10 @@ class DetailViewModel(
     /** 播放器在 IO 协程里创建、在主线程使用，跨线程读，必须可见 */
     @Volatile
     private var player: AudioPlayer? = null
+
+    /** 录音文件；「只删录音」之后置空，播放相关操作随之变成空操作 */
+    @Volatile
+    private var audioFile: File? = audioFile
 
     private val _state = MutableStateFlow(DetailUiState())
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
@@ -190,6 +201,36 @@ class DetailViewModel(
         } catch (e: TingoFailure) {
             _state.value = _state.value.copy(failure = e.kind)
             null
+        }
+    }
+
+    /** 录音文件真的在（空文件不算：头都没写成的录音播不了）。 */
+    private fun hasAudio(): Boolean =
+        audioFile?.let { it.isFile && it.length() > WavHeader.MIN_BYTES } == true
+
+    /**
+     * 只删这场会议的录音：移到回收站，转写与纪要留着。与桌面的「只删录音」同一个动作。
+     *
+     * @param busyIds 正在转写/写纪要的会议：删掉正在被读的录音会让那一场中途炸掉
+     * @param onFreed 腾出的字节数（界面用它说"腾出 xx MB"）
+     */
+    fun deleteRecording(busyIds: List<String>, onFreed: (ULong) -> Unit) {
+        viewModelScope.launch(io) {
+            val freed = try {
+                engine.deleteAudio(meetingId, busyIds)
+            } catch (e: TingoFailure) {
+                _state.value = _state.value.copy(failure = e.kind)
+                return@launch
+            }
+            // 先停播放再丢文件：反过来的话播放器会去读一个已经不在的文件
+            runCatching {
+                player?.pause()
+                player?.release()
+            }
+            player = null
+            audioFile = null
+            onFreed(freed)
+            load()
         }
     }
 
@@ -318,7 +359,7 @@ class DetailViewModel(
                 val speakers = runCatching { engine.speakers(meetingId, lang) }.getOrDefault(emptyList())
                 val minutesText = detail.minutesText
                 if (minutesText.isNullOrBlank()) {
-                    DetailUiState(loading = false, detail = detail, speakers = speakers)
+                    DetailUiState(loading = false, detail = detail, speakers = speakers, hasAudio = hasAudio())
                 } else {
                     try {
                         DetailUiState(
@@ -326,10 +367,17 @@ class DetailViewModel(
                             detail = detail,
                             speakers = speakers,
                             minutes = engine.parseMinutes(minutesText),
+                            hasAudio = hasAudio(),
                         )
                     } catch (e: TingoFailure) {
                         // 纪要坏了只降级这一栏，转写照常展示
-                        DetailUiState(loading = false, detail = detail, speakers = speakers, minutesFailure = e.kind)
+                        DetailUiState(
+                            loading = false,
+                            detail = detail,
+                            speakers = speakers,
+                            minutesFailure = e.kind,
+                            hasAudio = hasAudio(),
+                        )
                     }
                 }
             } catch (e: TingoFailure) {

@@ -186,6 +186,8 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
     override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): Nothing =
         fail()
 
+    override fun deleteAudio(id: String, busyIds: List<String>): Nothing = fail()
+
     override fun speakers(id: String, language: String): Nothing = fail()
 
     override fun setSpeakerNames(id: String, names: List<String>): Nothing = fail()

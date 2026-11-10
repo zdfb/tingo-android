@@ -94,6 +94,13 @@ interface TingoEnginePort {
      */
     fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup
 
+    /**
+     * 只删这场会议的录音（移到回收站，转写与纪要留着），返回腾出的字节数。
+     *
+     * @param busyIds 正在处理的会议：删掉正在被读的录音会让那一场转写中途炸掉
+     */
+    fun deleteAudio(id: String, busyIds: List<String>): ULong
+
     /** 说话人列表（按首次发言顺序），带 AI 建议的位置；名字按 `language` 渲染。 */
     fun speakers(id: String, language: String): List<SpeakerInfo>
 
@@ -201,6 +208,9 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
         archivedOnly: Boolean,
         busyIds: List<String>,
     ): AudioCleanup = mapEngineCall { engine.cleanupAudio(olderThanDays, archivedOnly, busyIds) }
+
+    override fun deleteAudio(id: String, busyIds: List<String>): ULong =
+        mapEngineCall { engine.deleteAudio(id, busyIds) }
 
     override fun speakers(id: String, language: String): List<SpeakerInfo> =
         mapEngineCall { engine.speakers(id, language) }

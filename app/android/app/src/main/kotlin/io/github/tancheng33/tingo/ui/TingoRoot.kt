@@ -1145,6 +1145,14 @@ private fun DetailRoute(
             guessFailure = state.guessFailure,
             guessNote = state.guessNote,
             onRenameSpeaker = viewModel::renameSpeaker,
+            onDeleteRecording = {
+                viewModel.deleteRecording(container.tasks.tasks.value.map { it.meetingId }) { freed ->
+                    container.toasts.show(
+                        context.getString(R.string.detail_audio_deleted, freed / 1_000_000uL),
+                    )
+                }
+            },
+            onRegenerateMinutes = minutesViewModel::start,
             onApplyGuess = viewModel::applyGuess,
             // 界面语言跟着系统走：提示词里的"说话人N"要和界面一致
             onGuessSpeakers = { viewModel.guessSpeakers(uiLang) },

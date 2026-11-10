@@ -111,6 +111,10 @@ fun DetailScreen(
     onRestoreVersion: (String) -> Unit = {},
     onDeleteVersion: (String) -> Unit = {},
     onRenameSpeaker: (Int, String) -> Unit = { _, _ -> },
+    /** 「只删录音」：录音移到回收站，转写与纪要留着（提示文案由外层给） */
+    onDeleteRecording: () -> Unit = {},
+    /** 改名后接着重新生成纪要（桌面的"保存并重新生成纪要"） */
+    onRegenerateMinutes: () -> Unit = {},
     onGuessSpeakers: () -> Unit = {},
     onApplyGuess: (Int) -> Unit = {},
     speakers: List<io.github.tancheng33.tingo.engine.SpeakerInfo> = emptyList(),
@@ -153,6 +157,7 @@ fun DetailScreen(
             var menuOpen by remember { mutableStateOf(false) }
             var editOpen by remember { mutableStateOf(false) }
             var historyOpen by remember { mutableStateOf(false) }
+            var deleteAudioOpen by remember { mutableStateOf(false) }
             Column(modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -252,6 +257,21 @@ fun DetailScreen(
                                     },
                                 )
                             }
+                            // 有录音才给「只删录音」：没有录音的会议点了只会报错
+                            if (state.hasAudio) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(R.string.detail_delete_audio),
+                                            color = TingoTheme.colors.text,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        deleteAudioOpen = true
+                                    },
+                                )
+                            }
                             if (detail?.fishbone != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.detail_export_excalidraw), color = TingoTheme.colors.text) },
@@ -290,6 +310,18 @@ fun DetailScreen(
                         onDismiss = { historyOpen = false },
                     )
                 }
+                if (deleteAudioOpen) {
+                    io.github.tancheng33.tingo.ui.components.TingoConfirmDialog(
+                        title = stringResource(R.string.detail_delete_audio_confirm_title),
+                        body = stringResource(R.string.detail_delete_audio_confirm_body),
+                        confirmLabel = stringResource(R.string.detail_delete_audio),
+                        onDismiss = { deleteAudioOpen = false },
+                        onConfirm = {
+                            deleteAudioOpen = false
+                            onDeleteRecording()
+                        },
+                    )
+                }
                 if (renameOpen) {
                     TextInputDialog(
                         title = stringResource(R.string.detail_rename),
@@ -324,6 +356,8 @@ fun DetailScreen(
                         onRename = onRenameSpeaker,
                         onGuess = onGuessSpeakers,
                         onApplyGuess = onApplyGuess,
+                        hasMinutes = detail?.minutesText.isNullOrBlank().not(),
+                        onRegenerate = onRegenerateMinutes,
                     )
                 }
                 if (playback.available) {
@@ -687,6 +721,9 @@ private fun SpeakerBar(
     onRename: (Int, String) -> Unit,
     onGuess: () -> Unit,
     onApplyGuess: (Int) -> Unit,
+    /** 有纪要时给"保存并重新生成"：改完名字旧纪要里的称呼就旧了 */
+    hasMinutes: Boolean = false,
+    onRegenerate: () -> Unit = {},
 ) {
     val colors = TingoTheme.colors
     var editing by remember { mutableStateOf<Int?>(null) }
@@ -702,6 +739,16 @@ private fun SpeakerBar(
             onConfirm = { name ->
                 editing = null
                 onRename(editingSpeaker.index.toInt(), name)
+            },
+            secondaryAction = if (hasMinutes) stringResource(R.string.detail_save_and_regenerate) else null,
+            onSecondary = if (hasMinutes) {
+                { name ->
+                    editing = null
+                    onRename(editingSpeaker.index.toInt(), name)
+                    onRegenerate()
+                }
+            } else {
+                null
             },
         )
     }

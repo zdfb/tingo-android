@@ -55,7 +55,7 @@ fun summary(
  * [onScan] 与 [onRead] 是可控行为：要测「扫描失败」就让它们抛异常，
  * 要测数据映射就让它们返回构造好的记录。
  */
-class FakeEnginePort(
+open class FakeEnginePort(
     private val onScan: () -> List<MeetingSummary> = { emptyList() },
     private val onRead: (String) -> MeetingDetail = { id -> throw TingoFailure(io.github.tancheng33.tingo.engine.FailureKind.MISSING, id) },
     private val onArchive: (String, Boolean) -> Unit = { _, _ -> },
@@ -197,6 +197,18 @@ class FakeEnginePort(
         audioCleanups += olderThanDays to archivedOnly
         lastBusyIds = busyIds
         return AudioCleanup(freedBytes = 1024uL, meetings = 1u, failed = 0u)
+    }
+
+    /** 只删录音的调用记录 */
+    val deletedAudio = mutableListOf<String>()
+
+    /** 最近一次"只删录音"传进来的忙碌会议 id */
+    var lastDeleteAudioBusyIds: List<String> = emptyList()
+
+    override fun deleteAudio(id: String, busyIds: List<String>): ULong {
+        deletedAudio += id
+        lastDeleteAudioBusyIds = busyIds
+        return 2_048uL
     }
 
     /** 导入过的录音（用例据此断言解码产物真的交到了引擎） */

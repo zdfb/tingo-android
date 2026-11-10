@@ -282,4 +282,9 @@
     <string name="detail_fishbone_no_evidence">无原文依据</string>
     <string name="detail_fishbone_weak">依据很少 · 引用 %1$d 段 · %2$d 字</string>
     <string name="detail_fishbone_quotes">引用 %1$d 段 · %2$d 字</string>
+    <string name="detail_delete_audio">只删录音</string>
+    <string name="detail_delete_audio_confirm_title">删除这场会议的录音？</string>
+    <string name="detail_delete_audio_confirm_body">录音会移到废纸篓，转写和纪要保留，以后就不能回听了。</string>
+    <string name="detail_save_and_regenerate">保存并重新生成纪要</string>
+    <string name="detail_audio_deleted">录音已移到废纸篓，腾出 %1$d MB</string>
 </resources>

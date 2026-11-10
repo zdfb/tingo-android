@@ -2,6 +2,8 @@ package io.github.tancheng33.tingo.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
@@ -44,6 +46,13 @@ fun TextInputDialog(
      * （用纪要标题、恢复"说话人N"），挡住了就等于删掉一个功能。
      */
     requireNonBlank: Boolean = false,
+    /**
+     * 第二个确认动作（次要按钮），例如桌面的"保存并重新生成纪要"。
+     *
+     * 传了才显示：给关闭型对话框加一个用不上的按钮，比没有按钮更让人犹豫。
+     */
+    secondaryAction: String? = null,
+    onSecondary: ((String) -> Unit)? = null,
 ) {
     val colors = TingoTheme.colors
     var text by remember { mutableStateOf(initial) }
@@ -78,8 +87,16 @@ fun TextInputDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { if (!blocked) onConfirm(text.trim()) }, enabled = !blocked) {
-                Text(stringResource(R.string.action_save), color = if (blocked) colors.muted else colors.blue)
+            // 三个按钮时（取消 / 仅保存 / 保存并重新生成）按桌面的顺序排：次要动作在左
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (secondaryAction != null && onSecondary != null) {
+                    TextButton(onClick = { if (!blocked) onSecondary(text.trim()) }, enabled = !blocked) {
+                        Text(secondaryAction, color = if (blocked) colors.muted else colors.blue)
+                    }
+                }
+                TextButton(onClick = { if (!blocked) onConfirm(text.trim()) }, enabled = !blocked) {
+                    Text(stringResource(R.string.action_save), color = if (blocked) colors.muted else colors.blue)
+                }
             }
         },
         dismissButton = {
