@@ -37,7 +37,12 @@ fun TextInputDialog(
     onConfirm: (String) -> Unit,
     initial: String = "",
     hint: String = "",
-    /** 空值没有意义的地方（标签、人名）设为 true：按钮按下去也不该悄悄存个空串 */
+    /**
+     * 空值没有意义的地方（批量加/移除标签）设为 true：按钮按下去也不该悄悄存个空串。
+     *
+     * 注意别顺手给"改标题""改人名"打开：那两处**留空是有意义的行为**
+     * （用纪要标题、恢复"说话人N"），挡住了就等于删掉一个功能。
+     */
     requireNonBlank: Boolean = false,
 ) {
     val colors = TingoTheme.colors
@@ -59,8 +64,9 @@ fun TextInputDialog(
                     .fillMaxWidth()
                     .background(colors.seg, TingoDimens.controlShape)
                     .padding(12.dp)
-                    // 真机 UI 测试按文字找不到输入框：给它一个无障碍名
-                    .semantics { contentDescription = title },
+                    // 真机 UI 测试按文字找不到输入框：给它一个无障碍名。
+                    // 用 hint 而不是 title，免得读屏把对话框标题再念一遍
+                    .semantics { contentDescription = hint.ifEmpty { title } },
                 decorationBox = { inner ->
                     Box {
                         if (text.isEmpty() && hint.isNotEmpty()) {
@@ -73,7 +79,7 @@ fun TextInputDialog(
         },
         confirmButton = {
             TextButton(onClick = { if (!blocked) onConfirm(text.trim()) }, enabled = !blocked) {
-                Text(stringResource(R.string.action_save), color = colors.blue)
+                Text(stringResource(R.string.action_save), color = if (blocked) colors.muted else colors.blue)
             }
         },
         dismissButton = {

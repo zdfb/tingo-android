@@ -73,9 +73,14 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 arm64）跑通 **37 个设备级用例**（引擎桥接、备份恢复、sherpa 运行时、中文识别、双人流水线、
 远端纪要端到端、设置页、会议库管理、音频导入、示例会议、长混音），其中转写相关用例在
 **飞行模式下**同样通过，证明语音链路离线可用。
-Compose UI 测试（16 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
+
+设备侧一共 52 个 `@Test`：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
+instrumentation 发起的 Activity 启动）；非 UI 41 个里有 3 个在本机跑不了——
+`LanguageSwitchTest`、`MainActivityEndToEndTest`（同一个 Activity 启动限制，会挂住）
+与 `ModelDownloadInstrumentedTest`（要联网下 700 MB 模型）。实跑的 37 个就是剩下的那批。
+Compose UI 测试（11 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
 系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
-完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除四个
+完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除三个
 依赖下载的测试类：
 
 ```bash
@@ -92,7 +97,7 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 模型（238 MB）+ CT-Transformer 标点 **int8**（76 MB）+ CAM++ 声纹（28 MB，fp32，桌面端同样是这一份）
 + Silero VAD（0.6 MB，fp32）。识别与标点都是 int8 量化版，声纹与 VAD 上游只提供 fp32，
 桌面端也用这两个，所以两边一致。
-打进 `assets/models/`，APK 约 **372 MB**。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
+打进 `assets/models/`，**debug 包实测 620 MB**（模型按不压缩方式存放；release 用签名压缩会更小）。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
 （幂等、带进度），**转写全程不需要网络**。（早期版本的端侧纪要 GGUF 与 llama.cpp 已整体移除。）
 
 模型不进仓库（300+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：

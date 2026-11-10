@@ -1,6 +1,5 @@
 package io.github.tancheng33.tingo.data
 
-import io.github.tancheng33.tingo.engine.BatchOutcome
 import io.github.tancheng33.tingo.engine.MeetingSummary
 import io.github.tancheng33.tingo.engine.SearchResults
 import io.github.tancheng33.tingo.engine.TrashItem

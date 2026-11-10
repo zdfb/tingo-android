@@ -292,7 +292,7 @@ fun DetailScreen(
                 if (renameOpen) {
                     TextInputDialog(
                         title = stringResource(R.string.detail_rename),
-                        requireNonBlank = true,
+                        // 留空是"用纪要标题或目录名"（提示里就是这么写的）：不能挡
                         initial = detail?.summary?.title.orEmpty(),
                         hint = stringResource(R.string.detail_rename_hint),
                         onDismiss = { renameOpen = false },
@@ -630,7 +630,7 @@ private fun SpeakerBar(
     if (editingSpeaker != null) {
         TextInputDialog(
             title = stringResource(R.string.detail_speaker_rename),
-            requireNonBlank = true,
+            // 留空是"恢复说话人N"：这里也不该挡
             initial = editingSpeaker.name,
             hint = stringResource(R.string.detail_speaker_rename_hint),
             onDismiss = { editing = null },
