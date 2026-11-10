@@ -69,7 +69,7 @@ class LibraryViewModel(
      *
      * 每次搜索时才读：用户在设置里改了语言，不必重建 ViewModel。
      */
-    private val language: () -> String = { "zh" },
+    private val language: () -> String,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)

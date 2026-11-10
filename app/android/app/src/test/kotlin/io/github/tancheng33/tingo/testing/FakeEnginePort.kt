@@ -87,7 +87,7 @@ class FakeEnginePort(
 
     override fun scanLibrary(): List<MeetingSummary> = onScan()
 
-    override fun readMeeting(id: String): MeetingDetail = onRead(id)
+    override fun readMeeting(id: String, language: String): MeetingDetail = onRead(id)
 
     override fun parseMinutes(text: String): MinutesDoc = MinutesDoc(title = "", sections = emptyList())
 
@@ -141,7 +141,7 @@ class FakeEnginePort(
         return 1uL
     }
 
-    override fun speakers(id: String): List<SpeakerInfo> = speakerList
+    override fun speakers(id: String, language: String): List<SpeakerInfo> = speakerList
 
     override fun setSpeakerNames(id: String, names: List<String>) {
         speakerNames += id to names

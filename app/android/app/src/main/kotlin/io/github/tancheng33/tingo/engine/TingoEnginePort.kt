@@ -40,7 +40,8 @@ interface TingoEnginePort {
 
     fun scanLibrary(): List<MeetingSummary>
 
-    fun readMeeting(id: String): MeetingDetail
+    /** 读整场会议；`language` 决定没改名的说话人怎么写（说话人1 / Speaker 1） */
+    fun readMeeting(id: String, language: String): MeetingDetail
 
     fun parseMinutes(text: String): MinutesDoc
 
@@ -93,8 +94,8 @@ interface TingoEnginePort {
      */
     fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup
 
-    /** 说话人列表（按首次发言顺序），带 AI 建议的位置。 */
-    fun speakers(id: String): List<SpeakerInfo>
+    /** 说话人列表（按首次发言顺序），带 AI 建议的位置；名字按 `language` 渲染。 */
+    fun speakers(id: String, language: String): List<SpeakerInfo>
 
     /** 批量设置说话人名字；空字符串表示不改。 */
     fun setSpeakerNames(id: String, names: List<String>)
@@ -159,7 +160,8 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
 
     override fun scanLibrary(): List<MeetingSummary> = mapEngineCall { engine.scanLibrary() }
 
-    override fun readMeeting(id: String): MeetingDetail = mapEngineCall { engine.readMeeting(id) }
+    override fun readMeeting(id: String, language: String): MeetingDetail =
+        mapEngineCall { engine.readMeeting(id, language) }
 
     override fun parseMinutes(text: String): MinutesDoc = mapEngineCall { engine.parseMinutes(text) }
 
@@ -200,7 +202,8 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
         busyIds: List<String>,
     ): AudioCleanup = mapEngineCall { engine.cleanupAudio(olderThanDays, archivedOnly, busyIds) }
 
-    override fun speakers(id: String): List<SpeakerInfo> = mapEngineCall { engine.speakers(id) }
+    override fun speakers(id: String, language: String): List<SpeakerInfo> =
+        mapEngineCall { engine.speakers(id, language) }
 
     override fun setSpeakerNames(id: String, names: List<String>) =
         mapEngineCall { engine.setSpeakerNames(id, names) }

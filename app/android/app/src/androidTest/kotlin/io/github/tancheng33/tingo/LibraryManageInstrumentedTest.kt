@@ -99,12 +99,12 @@ class LibraryManageInstrumentedTest {
             "# 周会\n\n```terms\n{\"terms\": [{\"term\": \"历史工单\", \"variants\": [\"历史中单\"]}]}\n```\n",
         )
 
-        val before = engine.speakers("2026-11-04_0900_周会")
+        val before = engine.speakers("2026-11-04_0900_周会", "zh")
         assertEquals(2, before.size)
         assertEquals("说话人1", before[0].name)
 
         engine.setSpeakerNames("2026-11-04_0900_周会", listOf("林舟", ""))
-        val after = engine.speakers("2026-11-04_0900_周会")
+        val after = engine.speakers("2026-11-04_0900_周会", "zh")
         assertEquals("林舟", after[0].name)
         assertEquals("空名字表示不改", "说话人2", after[1].name)
 

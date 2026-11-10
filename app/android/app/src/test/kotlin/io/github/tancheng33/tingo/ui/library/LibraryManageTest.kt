@@ -40,7 +40,7 @@ class LibraryManageTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(engine: FakeEnginePort) =
-        LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
 
     private fun content(vm: LibraryViewModel): LibraryUiState.Content =
         vm.state.value as LibraryUiState.Content
@@ -161,7 +161,7 @@ class LibraryManageTest {
             },
         ) {}
 
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
         vm.onQueryChange("好的")
         advanceTimeBy(300)
@@ -181,7 +181,7 @@ class LibraryManageTest {
             onScan = { listOf(summary("a"), summary("b")) },
             onBatch = { ids, _, _ -> ids.map { BatchOutcome(it, ok = false, error = "boom") } },
         )
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.toggleSelection("a")
@@ -199,7 +199,7 @@ class LibraryManageTest {
     @Test
     fun cleanupLeftoversGoesToEngine() = runTest(dispatcher) {
         val engine = FakeEnginePort(onScan = { listOf(summary("a")) })
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.cleanupLeftovers()

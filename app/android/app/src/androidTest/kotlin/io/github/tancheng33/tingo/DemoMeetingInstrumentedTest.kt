@@ -34,7 +34,7 @@ class DemoMeetingInstrumentedTest {
         val meetingId = id!!
         val summary = engine.scanLibrary().firstOrNull { it.id == meetingId }
         assertNotNull("扫库要能看见示例会议", summary)
-        val detail = engine.readMeeting(meetingId)
+        val detail = engine.readMeeting(meetingId, "zh")
         assertTrue("示例会议要有纪要正文", detail.minutesText?.contains("##") == true)
         // 引擎侧的 Transcript 以 turns（每段话+时间戳）为结构，不是界面那个同名类型
         assertTrue("示例会议要有转写（时间戳能跳转）", detail.transcript?.turns?.isNotEmpty() == true)
@@ -76,7 +76,7 @@ class DemoMeetingInstrumentedTest {
 
         val id = demo.install(english = true)!!
 
-        val detail = engine.readMeeting(id!!)
+        val detail = engine.readMeeting(id!!, "zh")
         val minutes = detail.minutesText.orEmpty()
         assertTrue("英文界面要装英文纪要：${minutes.take(40)}", minutes.contains("Summary"))
     }

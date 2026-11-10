@@ -60,7 +60,7 @@ class MeetingRepository(
 
     /** 跨会议搜索（纪要 + 转写正文，含模糊匹配）。 */
     /** 搜索；`language` 决定没改名的说话人怎么显示（说话人1 / Speaker 1） */
-    suspend fun search(query: String, language: String = "zh"): SearchResults =
+    suspend fun search(query: String, language: String): SearchResults =
         withContext(io) { engine.search(query, language) }
 
     /** 删除到回收站；返回释放的字节数。 */

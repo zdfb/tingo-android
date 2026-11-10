@@ -79,7 +79,7 @@ class DetailPlaybackTest {
         )
         override fun meetingsRoot(): String = "/tmp"
         override fun scanLibrary(): List<MeetingSummary> = emptyList()
-        override fun readMeeting(id: String) = MeetingDetail(
+        override fun readMeeting(id: String, language: String) = MeetingDetail(
             summary = MeetingSummary(
                 id = id,
                 title = "周会",
@@ -118,7 +118,8 @@ class DetailPlaybackTest {
         override fun cleanupLeftovers(): ULong = 0uL
         override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): AudioCleanup =
             AudioCleanup(freedBytes = 0uL, meetings = 0u, failed = 0u)
-        override fun speakers(id: String) = emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
+        override fun speakers(id: String, language: String) =
+            emptyList<io.github.tancheng33.tingo.engine.SpeakerInfo>()
         override fun setSpeakerNames(id: String, names: List<String>) = Unit
         override fun speakerPrompt(id: String, language: String) =
             io.github.tancheng33.tingo.engine.SpeakerPrompt("", "", 0u)
@@ -148,6 +149,7 @@ class DetailPlaybackTest {
         audioFile = File(dir, "录音.wav"),
         playerFactory = { player },
         io = dispatcher,
+        language = { "zh" },
     )
 
     @Test
@@ -186,6 +188,7 @@ class DetailPlaybackTest {
             audioFile = File(dir, "录音.wav"),
             playerFactory = { player },
             io = dispatcher,
+            language = { "zh" },
         )
         advanceUntilIdle()
 

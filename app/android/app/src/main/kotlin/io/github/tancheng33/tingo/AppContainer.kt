@@ -186,7 +186,7 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
     override fun cleanupAudio(olderThanDays: UInt, archivedOnly: Boolean, busyIds: List<String>): Nothing =
         fail()
 
-    override fun speakers(id: String): Nothing = fail()
+    override fun speakers(id: String, language: String): Nothing = fail()
 
     override fun setSpeakerNames(id: String, names: List<String>): Nothing = fail()
 
@@ -234,7 +234,7 @@ private class UnavailableEngine(private val cause: Throwable) : TingoEnginePort 
 
     override fun scanLibrary(): List<MeetingSummary> = fail()
 
-    override fun readMeeting(id: String): MeetingDetail = fail()
+    override fun readMeeting(id: String, language: String): MeetingDetail = fail()
 
     override fun parseMinutes(text: String): MinutesDoc = fail()
 

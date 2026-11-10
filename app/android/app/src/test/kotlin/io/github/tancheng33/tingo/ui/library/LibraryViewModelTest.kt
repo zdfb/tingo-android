@@ -151,7 +151,7 @@ class LibraryViewModelTest {
     fun archivingRefreshesTheList() = runTest(dispatcher) {
         var archived = false
         val engine = FakeEnginePort(onScan = { listOf(summary("m1", archived = archived)) })
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.setArchived("m1", true)
@@ -167,7 +167,7 @@ class LibraryViewModelTest {
     fun deletingRemovesTheMeetingFromTheList() = runTest(dispatcher) {
         var meetings = listOf(summary("m1"))
         val engine = FakeEnginePort(onScan = { meetings }, onDelete = { 1_024uL })
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.delete("m1")
@@ -184,7 +184,7 @@ class LibraryViewModelTest {
             onScan = { listOf(summary("m1")) },
             onArchive = { _, _ -> throw TingoFailure(FailureKind.PERMISSION_DENIED, "read-only") },
         )
-        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher)
+        val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.setArchived("m1", true)

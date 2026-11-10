@@ -948,6 +948,8 @@ private fun DetailRoute(
                     meetingId = meetingId,
                     audioFile = io.github.tancheng33.tingo.recording.RecordingTracks
                         .find(container.meetingDir(meetingId)),
+                    // 详情页的说话人标签跟界面语言走（搜索页已经是这样，两处必须一致）
+                    language = { container.uiLanguage() },
                 )
             }
         },

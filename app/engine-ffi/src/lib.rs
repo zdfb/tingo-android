@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tingo_engine::fishbone as engine_fishbone;
+use tingo_engine::i18n as engine_i18n;
 use tingo_engine::meetings;
 use tingo_engine::minutes as engine_minutes;
 use tingo_engine::minutes_history;
@@ -367,6 +368,12 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
 }
 
 /// 把引擎的搜索结果 JSON 转成 typed Record；字段缺了就跳过那一条，不让整个搜索失败。
+/// 界面语言的统一解析：认 "zh"/"en"/"zh-CN" 这类写法，认不出按中文
+/// （界面语言只有两种，缺省必须落在"能看"的那边）。
+fn lang_of(code: &str) -> engine_i18n::Lang {
+    engine_i18n::Lang::parse(code).unwrap_or(engine_i18n::Lang::Zh)
+}
+
 fn parse_search(query: &str, value: &serde_json::Value) -> SearchResults {
     let expanded: Vec<String> = value
         .get("expanded")
@@ -508,9 +515,15 @@ impl TingoEngine {
     }
 
     /// 读取单个会议。`id` 必须是会议库根目录下的单层目录名。
-    pub fn read_meeting(&self, id: String) -> Result<MeetingDetail, EngineError> {
+    /// 读一场会议的全部内容。
+    ///
+    /// `language` 决定没改过名的说话人怎么显示（"说话人1" / "Speaker 1"）——与 [Self::search]
+    /// 同一套规则，否则搜索页写"Speaker 1"、详情页写"说话人1"，看起来像两份数据。
+    pub fn read_meeting(&self, id: String, language: String) -> Result<MeetingDetail, EngineError> {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
-        guard("read_meeting", move || read_meeting_in(&dir))
+        guard("read_meeting", move || {
+            read_meeting_in(&dir, lang_of(&language))
+        })
     }
 
     /// 解析纪要 Markdown 为章节。章节解析只在引擎侧实现一次，界面拿到的是结构化结果。
@@ -599,7 +612,7 @@ impl TingoEngine {
         let root = self.paths.meetings_root.clone();
         guard("search", move || {
             // 认不出就当中文：界面语言只有这两种，缺省值必须是"能看"的那个
-            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let lang = lang_of(&language);
             let value = tingo_engine::terms::search(&root, &query, lang);
             Ok(parse_search(&query, &value))
         })
@@ -933,7 +946,7 @@ impl TingoEngine {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
         guard("export_srt", move || {
             let tr = load_transcript(&dir)?;
-            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let lang = lang_of(&language);
             let stem = meetings::export_stem(&dir, &id);
             let out = dir.join(format!("{stem}.srt"));
             std::fs::write(&out, tr.to_srt(lang)).map_err(|e| io_error(e, "export_srt"))?;
@@ -942,11 +955,11 @@ impl TingoEngine {
     }
 
     /// 当前会议的说话人列表：编号、显示名、AI 建议（没猜过时为空）。
-    pub fn speakers(&self, id: String) -> Result<Vec<SpeakerInfo>, EngineError> {
+    pub fn speakers(&self, id: String, language: String) -> Result<Vec<SpeakerInfo>, EngineError> {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
         guard("speakers", move || {
             let tr = load_transcript(&dir)?;
-            Ok(speaker_infos(&tr))
+            Ok(speaker_infos(&tr.localized(lang_of(&language))))
         })
     }
 
@@ -973,7 +986,7 @@ impl TingoEngine {
         let dir = meeting_dir(&self.paths.meetings_root, &id)?;
         guard("speaker_prompt", move || {
             let tr = load_transcript(&dir)?;
-            let lang = tingo_engine::i18n::Lang::parse(&language).unwrap_or(tingo_engine::i18n::Lang::Zh);
+            let lang = lang_of(&language);
             let (system, prompt) = tingo_engine::speakers::prompt(&tr, lang);
             Ok(SpeakerPrompt {
                 system: system.to_string(),
@@ -1174,10 +1187,10 @@ fn io_error(err: std::io::Error, what: &str) -> EngineError {
     }
 }
 
-fn read_meeting_in(dir: &Path) -> Result<MeetingDetail, EngineError> {
+fn read_meeting_in(dir: &Path, lang: engine_i18n::Lang) -> Result<MeetingDetail, EngineError> {
     let summary = to_summary(meetings::summary(dir));
     let transcript = match engine_transcript::Transcript::load(&dir.join("transcript.json")) {
-        Ok(tr) => Some(to_transcript(tr)),
+        Ok(tr) => Some(to_transcript(tr.localized(lang))),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => return Err(io_error(err, "transcript.json")),
     };
@@ -1402,7 +1415,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let engine = TingoEngine::new(dir.path().display().to_string());
         for bad in ["", "..", "../etc", "a/b"] {
-            match engine.read_meeting(bad.to_string()) {
+            match engine.read_meeting(bad.to_string(), "zh".to_string()) {
                 Err(EngineError::InvalidInput { .. }) => {}
                 other => panic!("expected InvalidInput for {bad:?}, got {other:?}"),
             }
@@ -1437,7 +1450,7 @@ mod tests {
     #[test]
     fn transcript_roundtrip_keeps_chinese_alias_and_ms() {
         let (_dir, engine) = engine_with_meeting("2026-03-05_1000_上线协调会", &[("transcript.json", TRANSCRIPT_ZH)]);
-        let detail = engine.read_meeting("2026-03-05_1000_上线协调会".to_string()).unwrap();
+        let detail = engine.read_meeting("2026-03-05_1000_上线协调会".to_string(), "zh".to_string()).unwrap();
         let tr = detail.transcript.expect("transcript parsed");
 
         assert_eq!(tr.duration_ms, 3_725_000);
@@ -1462,7 +1475,7 @@ mod tests {
             "2026-03-05_1000_上线协调会",
             &[("transcript.json", TRANSCRIPT_ZH), ("纪要.md", MINUTES_ZH)],
         );
-        let detail = engine.read_meeting("2026-03-05_1000_上线协调会".to_string()).unwrap();
+        let detail = engine.read_meeting("2026-03-05_1000_上线协调会".to_string(), "zh".to_string()).unwrap();
         assert_eq!(detail.minutes_text.as_deref(), Some(MINUTES_ZH));
 
         let fishbone = detail.fishbone.expect("fishbone parsed");
@@ -1474,7 +1487,7 @@ mod tests {
     #[test]
     fn missing_minutes_is_not_an_error() {
         let (_dir, engine) = engine_with_meeting("2026-03-05_1000_无纪要", &[("transcript.json", TRANSCRIPT_ZH)]);
-        let detail = engine.read_meeting("2026-03-05_1000_无纪要".to_string()).unwrap();
+        let detail = engine.read_meeting("2026-03-05_1000_无纪要".to_string(), "zh".to_string()).unwrap();
         assert!(detail.minutes_text.is_none());
         assert!(detail.fishbone.is_none());
     }
@@ -1482,7 +1495,7 @@ mod tests {
     #[test]
     fn corrupted_transcript_is_malformed() {
         let (_dir, engine) = engine_with_meeting("2026-03-05_1000_损坏", &[("transcript.json", "{not json")]);
-        match engine.read_meeting("2026-03-05_1000_损坏".to_string()) {
+        match engine.read_meeting("2026-03-05_1000_损坏".to_string(), "zh".to_string()) {
             Err(EngineError::Malformed { .. }) => {}
             other => panic!("expected Malformed, got {other:?}"),
         }
@@ -1708,6 +1721,44 @@ mod tests {
     }
 
     #[test]
+    fn renamed_speakers_keep_their_names_in_both_languages() {
+        let root = temp_root("search-named");
+        let dir = meeting(&root, "2026-10-28_1430_周会");
+        std::fs::write(
+            dir.join("transcript.json"),
+            r#"{"source":"录音.wav","duration_ms":6000,"speaker_names":{"0":"林舟"},"sentences":[{"speaker":0,"start_ms":500,"end_ms":1500,"text":"注册页改完了"}]}"#,
+        )
+        .unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        // 改过名的说话人在两种界面语言下都得写"林舟"：不能被本地化覆盖
+        for language in ["zh", "en", "en-US", ""] {
+            let hits = engine.search("注册页".to_string(), language.to_string()).unwrap().hits;
+            assert_eq!(hits.first().map(|h| h.speaker.clone()), Some("林舟".to_string()), "language={language}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn read_meeting_uses_the_ui_language_for_speaker_names() {
+        let root = temp_root("read-lang");
+        meeting_with_transcript(&root, "2026-11-02_1000_周会");
+        let engine = TingoEngine::new(root.display().to_string());
+
+        let zh = engine.read_meeting("2026-11-02_1000_周会".to_string(), "zh".to_string()).unwrap();
+        let en = engine.read_meeting("2026-11-02_1000_周会".to_string(), "en".to_string()).unwrap();
+        let zh_names: Vec<&str> = zh.transcript.as_ref().unwrap().turns.iter().map(|t| t.speaker_name.as_str()).collect();
+        let en_names: Vec<&str> = en.transcript.as_ref().unwrap().turns.iter().map(|t| t.speaker_name.as_str()).collect();
+
+        assert_eq!(zh_names, vec!["说话人1", "说话人2", "说话人1"]);
+        assert_eq!(en_names, vec!["Speaker 1", "Speaker 2", "Speaker 1"]);
+        // 说话人列表（重命名界面）也要跟着走，否则详情页写"说话人1"、改名弹窗写"Speaker 1"
+        let en_speakers = engine.speakers("2026-11-02_1000_周会".to_string(), "en".to_string()).unwrap();
+        assert_eq!(en_speakers.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), vec!["Speaker 1", "Speaker 2"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn search_renders_speaker_names_in_the_ui_language() {
         let root = temp_root("search-lang");
         let dir = meeting(&root, "2026-10-28_1430_周会");
@@ -1919,7 +1970,7 @@ mod tests {
         meeting_with_transcript(&root, "2026-11-02_1000_周会");
         let engine = TingoEngine::new(root.display().to_string());
 
-        let speakers = engine.speakers("2026-11-02_1000_周会".to_string()).unwrap();
+        let speakers = engine.speakers("2026-11-02_1000_周会".to_string(), "zh".to_string()).unwrap();
 
         assert_eq!(speakers.len(), 2);
         assert_eq!(speakers[0].index, 0);
@@ -1937,7 +1988,7 @@ mod tests {
             .set_speaker_names("2026-11-02_1000_周会".to_string(), vec!["  林舟 ".to_string(), String::new()])
             .unwrap();
 
-        let speakers = engine.speakers("2026-11-02_1000_周会".to_string()).unwrap();
+        let speakers = engine.speakers("2026-11-02_1000_周会".to_string(), "zh".to_string()).unwrap();
         assert_eq!(speakers[0].name, "林舟");
         assert_eq!(speakers[1].name, "说话人2", "空名字表示不改");
         // 真的落到 transcript.json 里了

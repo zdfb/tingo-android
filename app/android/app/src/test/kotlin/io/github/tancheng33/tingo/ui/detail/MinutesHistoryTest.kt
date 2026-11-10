@@ -93,7 +93,7 @@ class MinutesHistoryTest {
     @Test
     fun openingAVersionLoadsItsFullText() = runTest(dispatcher) {
         val engine = engine(listOf(version))
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.openVersion("1-2")
@@ -106,7 +106,7 @@ class MinutesHistoryTest {
     @Test
     fun restoringClosesThePreviewAndArchivesTheCurrentOne() = runTest(dispatcher) {
         val engine = engine(listOf(version))
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
         vm.openVersion("1-2")
         advanceUntilIdle()
@@ -122,7 +122,7 @@ class MinutesHistoryTest {
     @Test
     fun deletingAVersionAsksTheEngine() = runTest(dispatcher) {
         val engine = engine(listOf(version))
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.deleteVersion("1-2")
@@ -134,7 +134,7 @@ class MinutesHistoryTest {
     @Test
     fun savingEditedMinutesGoesThroughTheEngine() = runTest(dispatcher) {
         val engine = engine()
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.saveMinutes("# 周会\n\n改过的一版")
@@ -187,7 +187,7 @@ class MinutesHistoryTest {
     @Test
     fun exportSrtReturnsTheEnginePath() = runTest(dispatcher) {
         val engine = engine()
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         val path = vm.exportSrt("zh")

@@ -86,8 +86,13 @@ class SpeakerGuessTest {
     ) {
         var written: List<String>? = null
         var parsed: String? = null
+        /** 最近一次加载/列说话人时传进来的界面语言 */
+        var lastLanguage: String? = null
 
-        override fun speakers(id: String): List<SpeakerInfo> = speakers
+        override fun speakers(id: String, language: String): List<SpeakerInfo> {
+            lastLanguage = language
+            return speakers
+        }
 
         override fun setSpeakerNames(id: String, names: List<String>) {
             written = names
@@ -114,7 +119,7 @@ class SpeakerGuessTest {
                 SpeakerInfo(1u, "李四", "", ""),
             ),
         )
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.renameSpeaker(0, "林舟")
@@ -127,7 +132,7 @@ class SpeakerGuessTest {
     @Test
     fun renamingDoesNotPersistDefaultAliases() = runTest(dispatcher) {
         val engine = engine(listOf(SpeakerInfo(0u, "说话人1", "", ""), SpeakerInfo(1u, "说话人2", "", "")))
-        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(engine = engine, meetingId = "m", io = dispatcher, language = { "zh" })
         advanceUntilIdle()
 
         vm.renameSpeaker(0, "林舟")
@@ -151,6 +156,7 @@ class SpeakerGuessTest {
             meetingId = "m",
             chat = LlmChat({ config }, FakeClient { """{"choices":[{"message":{"content":"{}"}}]}""" }),
             io = dispatcher,
+            language = { "zh" },
         )
         advanceUntilIdle()
 
@@ -175,6 +181,7 @@ class SpeakerGuessTest {
             meetingId = "m",
             chat = LlmChat({ config }, FakeClient { """{"choices":[{"message":{"content":"抱歉"}}]}""" }),
             io = dispatcher,
+            language = { "zh" },
         )
         advanceUntilIdle()
 
@@ -197,6 +204,7 @@ class SpeakerGuessTest {
             meetingId = "m",
             chat = LlmChat({ config }, client),
             io = dispatcher,
+            language = { "zh" },
         )
         advanceUntilIdle()
 
@@ -217,6 +225,7 @@ class SpeakerGuessTest {
             meetingId = "m",
             chat = LlmChat({ config }, FakeClient { """{"choices":[{"message":{"content":"{}"}}]}""" }),
             io = dispatcher,
+            language = { "zh" },
         )
         advanceUntilIdle()
         vm.guessSpeakers("zh")
@@ -230,7 +239,12 @@ class SpeakerGuessTest {
 
     @Test
     fun withoutConfiguredServiceGuessExplainsWhy() = runTest(dispatcher) {
-        val vm = DetailViewModel(engine = engine(listOf(SpeakerInfo(0u, "说话人1", "", ""))), meetingId = "m", io = dispatcher)
+        val vm = DetailViewModel(
+            engine = engine(listOf(SpeakerInfo(0u, "说话人1", "", ""))),
+            meetingId = "m",
+            io = dispatcher,
+            language = { "zh" },
+        )
         advanceUntilIdle()
 
         vm.guessSpeakers("zh")
@@ -238,5 +252,20 @@ class SpeakerGuessTest {
 
         val failure = vm.state.value.guessFailure
         assertEquals(io.github.tancheng33.tingo.R.string.err_llm_not_configured, failure?.reasonRes)
+    }
+
+    @Test
+    fun loadingUsesTheUiLanguageForSpeakerNames() = runTest(dispatcher) {
+        val engine = engine(emptyList())
+        val vm = DetailViewModel(
+            engine = engine,
+            meetingId = "m",
+            io = dispatcher,
+            language = { "en" },
+        )
+        advanceUntilIdle()
+
+        // 搜索页已经按界面语言渲染说话人；详情页漏了就会出现两种标签并存
+        assertEquals("en", engine.lastLanguage)
     }
 }

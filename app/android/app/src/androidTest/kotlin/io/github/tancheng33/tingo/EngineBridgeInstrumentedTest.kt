@@ -58,7 +58,7 @@ class EngineBridgeInstrumentedTest {
 
     @Test
     fun readsChineseMeetingWithAliasesAndMinutes() {
-        val detail = engine.readMeeting("2026-10-28_1430_官网注册转化复盘")
+        val detail = engine.readMeeting("2026-10-28_1430_官网注册转化复盘", "zh")
 
         assertNotNull(detail.transcript)
         val transcript = detail.transcript!!
@@ -83,7 +83,7 @@ class EngineBridgeInstrumentedTest {
 
     @Test
     fun readsEnglishMeetingWithoutAudio() {
-        val detail = engine.readMeeting("2026-10-27_0930_Website_registration_post-mortem")
+        val detail = engine.readMeeting("2026-10-27_0930_Website_registration_post-mortem", "zh")
         assertTrue(!detail.summary.hasAudio)
         val doc = engine.parseMinutes(detail.minutesText!!)
         assertTrue(doc.sections.any { it.kind == SectionKind.ONE_LINER })
@@ -99,7 +99,7 @@ class EngineBridgeInstrumentedTest {
         val entry = engine.scanLibrary().single { it.id == "2026-11-01_0900_Broken" }
         assertTrue(entry.unreadable)
 
-        val failure = runCatching { engine.readMeeting("2026-11-01_0900_Broken") }.exceptionOrNull()
+        val failure = runCatching { engine.readMeeting("2026-11-01_0900_Broken", "zh") }.exceptionOrNull()
         assertTrue(failure is TingoFailure)
         assertEquals(FailureKind.MALFORMED, (failure as TingoFailure).kind)
     }
@@ -120,7 +120,7 @@ class EngineBridgeInstrumentedTest {
 
     @Test
     fun unknownMeetingIdIsReportedAsMissing() {
-        val failure = runCatching { engine.readMeeting("2020-01-01_0000_不存在") }.exceptionOrNull()
+        val failure = runCatching { engine.readMeeting("2020-01-01_0000_不存在", "zh") }.exceptionOrNull()
         assertEquals(FailureKind.MISSING, (failure as TingoFailure).kind)
     }
 

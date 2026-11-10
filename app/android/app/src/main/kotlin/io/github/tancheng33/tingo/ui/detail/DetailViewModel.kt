@@ -74,6 +74,12 @@ class DetailViewModel(
     private val audioFile: File? = null,
     private val playerFactory: () -> AudioPlayer = { MediaPlayerAudioPlayer() },
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * 界面语言（"zh"/"en"）：没改过名的说话人叫"说话人1"还是"Speaker 1"由它决定。
+     *
+     * 每次加载时读，与搜索一致：改完语言不必重建 ViewModel。
+     */
+    private val language: () -> String,
 ) : ViewModel() {
 
     /** 播放器在 IO 协程里创建、在主线程使用，跨线程读，必须可见 */
@@ -307,8 +313,9 @@ class DetailViewModel(
         _state.value = _state.value.copy(loading = true, failure = null)
         viewModelScope.launch(io) {
             val next = try {
-                val detail = engine.readMeeting(meetingId)
-                val speakers = runCatching { engine.speakers(meetingId) }.getOrDefault(emptyList())
+                val lang = language()
+                val detail = engine.readMeeting(meetingId, lang)
+                val speakers = runCatching { engine.speakers(meetingId, lang) }.getOrDefault(emptyList())
                 val minutesText = detail.minutesText
                 if (minutesText.isNullOrBlank()) {
                     DetailUiState(loading = false, detail = detail, speakers = speakers)

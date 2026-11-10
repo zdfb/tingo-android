@@ -170,8 +170,8 @@ fn lower_chars(s: &str) -> Vec<char> {
         .collect()
 }
 
-/// 在 text 里找命中：包含 queries 任一项（忽略大小写），或者（fuzzy 至少 3 个字时）有和 fuzzy 等长、
-/// 只差一个字符的片段。返回原文里命中的那段。
+/// 在 text 里找命中：包含 queries 任一项（忽略大小写），或者（fuzzy 至少 4 个字符时，见下）有和
+/// fuzzy 等长、只差一个字符的片段。返回原文里命中的那段。
 pub fn find_match(text: &str, queries: &[String], fuzzy: &str) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     let low = lower_chars(text);
