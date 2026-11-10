@@ -211,6 +211,7 @@ fun TingoRoot(
                         transcriber = TranscriptionPipeline(container.models, container.catalog),
                         cacheDir = File(recordContext.cacheDir, "imports").apply { mkdirs() },
                     ),
+                    tasks = container.tasks,
                 )
             }
         },

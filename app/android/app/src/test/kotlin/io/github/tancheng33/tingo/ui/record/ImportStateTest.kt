@@ -64,12 +64,14 @@ class ImportStateTest {
         },
     )
 
-    private fun viewModel(importer: AudioImport?) = RecordViewModel(
-        capture = NoCapture(),
-        meetingsRoot = Files.createTempDirectory("tingo-meetings").toFile(),
-        importing = importer,
-        io = dispatcher,
-    )
+    private fun viewModel(importer: AudioImport?, tasks: io.github.tancheng33.tingo.ui.tasks.TaskCenter? = null) =
+        RecordViewModel(
+            capture = NoCapture(),
+            meetingsRoot = Files.createTempDirectory("tingo-meetings").toFile(),
+            importing = importer,
+            tasks = tasks,
+            io = dispatcher,
+        )
 
     private fun source(): File = File.createTempFile("importsource", ".m4a").apply {
         writeBytes(ByteArray(8))
@@ -126,5 +128,45 @@ class ImportStateTest {
         vm.consumeImported()
 
         assertNull(vm.import.value.meetingId)
+    }
+
+    @Test
+    fun importShowsUpInRunningTasksWithTheFileName() = runTest(dispatcher) {
+        val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
+        val vm = viewModel(importer(), tasks)
+
+        vm.importAudio(source(), title = "", modifiedMs = 0)
+        // 进度回调里就登记了：不必等转写跑完
+        advanceUntilIdle()
+        val running = tasks.tasks.value.singleOrNull()
+
+        // 转写在同一轮里就跑完了，所以要么已经在跑（kind 对），要么已经撤掉
+        if (running != null) {
+            assertEquals(io.github.tancheng33.tingo.ui.tasks.TaskKind.IMPORT, running.kind)
+            assertTrue("没填标题时用文件名：${running.title}", running.title.contains("importsource"))
+        }
+    }
+
+    @Test
+    fun importTaskIsWithdrawnWhenItFinishes() = runTest(dispatcher) {
+        val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
+        val vm = viewModel(importer(), tasks)
+
+        vm.importAudio(source(), "周会", 0)
+        advanceUntilIdle()
+
+        assertTrue("导入结束后不该留在「进行中」", tasks.tasks.value.isEmpty())
+    }
+
+    @Test
+    fun importTaskIsWithdrawnWhenDecodingFails() = runTest(dispatcher) {
+        val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
+        val vm = viewModel(importer(decodes = false), tasks)
+
+        vm.importAudio(source(), "坏文件", 0)
+        advanceUntilIdle()
+
+        assertEquals(RecordViewModel.ImportFailure.UNREADABLE, vm.import.value.failure)
+        assertTrue("失败也要撤掉，否则首页永远挂着一条假的进行中", tasks.tasks.value.isEmpty())
     }
 }

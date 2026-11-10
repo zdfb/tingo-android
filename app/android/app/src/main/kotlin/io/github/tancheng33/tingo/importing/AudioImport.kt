@@ -31,13 +31,15 @@ class AudioImport(
      * @param source 用户选中的原始文件（可能在任何位置）
      * @param title 会议标题；空则用文件名
      * @param modifiedMs 文件修改时间，用来决定会议时间；0 表示用现在
-     * @param onProgress 0..1：解码占前 15%，转写占其余
+     * @param onCreated 会议目录建好时回调它的 id：这时才可能"点进去看"
+     * @param onProgress 0..1：解码占前 15%，转写占其余（留在最后，尾随 lambda 才是它）
      * @return 新会议 id
      */
     suspend fun run(
         source: File,
         title: String,
         modifiedMs: Long,
+        onCreated: (String) -> Unit = {},
         onProgress: (Float) -> Unit = {},
     ): String {
         val wav = File(cacheDir, "import-${System.nanoTime()}.wav")
@@ -48,6 +50,7 @@ class AudioImport(
             val name = title.ifBlank { AudioDecoder.titleOf(source.name) }
             // 先落成会议：引擎按同一套规则起名、建目录、写 `录音.wav`
             val imported = engine.importAudio(wav.absolutePath, name, modifiedMs)
+            onCreated(imported.id)
             // 目录由引擎给出：会议库布局只该有一个地方知道
             transcriber.transcribe(wav, File(imported.dir)) { fraction ->
                 onProgress(DECODE_SHARE + fraction * (1f - DECODE_SHARE))

@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.update
 enum class TaskKind {
     TRANSCRIBE,
     MINUTES,
+
+    /** 导入：解码 + 落库 + 转写整条链路，几分钟起步，必须能离开页面还看得见 */
+    IMPORT,
 }
 
 /**

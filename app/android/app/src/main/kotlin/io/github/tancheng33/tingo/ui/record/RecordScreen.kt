@@ -602,4 +602,5 @@ private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
 private fun TaskKind.labelRes(): Int = when (this) {
     TaskKind.TRANSCRIBE -> R.string.task_transcribe
     TaskKind.MINUTES -> R.string.task_minutes
+    TaskKind.IMPORT -> R.string.task_import
 }

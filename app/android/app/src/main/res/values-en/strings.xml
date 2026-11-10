@@ -246,4 +246,5 @@
     <string name="home_models_missing">Transcription model missing</string>
     <string name="home_llm_missing">Minutes service not configured</string>
     <string name="settings_llm_protocol_openai">OpenAI-compatible</string>
+    <string name="task_import">Importing</string>
 </resources>

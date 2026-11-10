@@ -12,6 +12,8 @@ import io.github.tancheng33.tingo.recording.WavTrim
 import io.github.tancheng33.tingo.recording.RecordingKeepAlive
 import io.github.tancheng33.tingo.recording.SystemAudioTrack
 import io.github.tancheng33.tingo.recording.TrackMerger
+import io.github.tancheng33.tingo.ui.tasks.TaskCenter
+import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.recording.WavWriter
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -60,6 +62,8 @@ class RecordViewModel(
     private val autoStopSilenceMin: () -> Int = { SilenceWatcher.DEFAULT_MINUTES },
     /** 导入已有录音；null 表示这个构建不支持（测试里多数用例不关心） */
     private val importing: AudioImport? = null,
+    /** 进行中任务登记表：导入要跑几分钟，离开录制页也得看得见 */
+    private val tasks: TaskCenter? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
      * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
@@ -117,17 +121,34 @@ class RecordViewModel(
         if (_import.value.progress != null) return // 已经在导入：不叠第二个
         // 标记要在启动协程之前就打上：连点两次时协程还没跑起来，检查会漏
         _import.value = ImportState(progress = 0f)
+        // 一次导入一个 key：会议目录建好之前还没有 id，只能用序号占位
+        val taskKey = "${TaskKind.IMPORT.name}:import-${System.nanoTime()}"
+        val shownTitle = title.ifBlank { source.name }
+        tasks?.start(taskKey, meetingId = "", title = shownTitle, kind = TaskKind.IMPORT, fraction = 0f)
         viewModelScope.launch(io) {
             try {
-                val id = importer.run(source, title, modifiedMs) { fraction ->
-                    _import.value = ImportState(progress = fraction)
-                }
+                val id = importer.run(
+                    source = source,
+                    title = title,
+                    modifiedMs = modifiedMs,
+                    onCreated = { created ->
+                        // 目录建好后换成真实 id：首页那一行才能点进会议
+                        tasks?.start(taskKey, created, shownTitle, TaskKind.IMPORT, fraction = null)
+                    },
+                    onProgress = { fraction ->
+                        _import.value = ImportState(progress = fraction)
+                        tasks?.progress(taskKey, fraction)
+                    },
+                )
                 _import.value = ImportState(progress = null, meetingId = id)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _import.value = ImportState()
                 throw e
             } catch (e: Exception) {
                 _import.value = ImportState(failure = ImportFailure.UNREADABLE)
+            } finally {
+                // 成功、失败、取消都一样：从"进行中"撤掉
+                tasks?.finish(taskKey)
             }
         }
     }
