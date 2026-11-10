@@ -251,6 +251,7 @@
     <string name="onboard_test_running">Testing…</string>
     <string name="onboard_test_heard">Heard you (%1$ds) — the microphone works</string>
     <string name="onboard_test_silent">No sound in %1$ds. Check mute or another app using the mic, then try again.</string>
-    <string name="onboard_test_failed">Cannot open the microphone: make sure permission is granted, then retry.</string>
+    <string name="onboard_test_failed">The microphone could not start: check that permission is granted and no other app is using it, then try again.</string>
     <string name="onboard_test_system_note">Recording the other side (system audio) needs the system screen-capture permission; Tingo asks for it on your first recording, not here.</string>
+    <string name="onboard_perm_request">Allow microphone</string>
 </resources>

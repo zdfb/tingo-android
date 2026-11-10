@@ -66,7 +66,8 @@ class OnboardingViewModel(
         val probe = probe ?: return
         if (_state.value.testing) return
         _state.value = _state.value.copy(testing = true, probe = null)
-        viewModelScope.launch {
+        // MicRecorder.start/stop 是阻塞的 IO：放在默认线程会卡住主线程的动画
+        viewModelScope.launch(io) {
             val result = probe()
             _state.value = _state.value.copy(testing = false, probe = result)
         }

@@ -15,15 +15,17 @@ data class CaptureProbeResult(
     val failure: Throwable? = null,
 ) {
     /** 没出错、而且电平高于底噪：说明麦克风确实在工作。 */
-    val heardSomething: Boolean = failure == null && (peak ?: 0f) > VOICE_LEVEL
+    val heardSomething: Boolean = failure == null && (peak ?: 0f) >= VOICE_LEVEL
 
     companion object {
         /**
-         * "有声音"的门限，与 [SilenceWatcher] 判定"有人说话"同一条刻度（峰值）。
+         * "有声音"的门限：与桌面 `/api/record/test` 用的是同一个数（0.01）。
          *
-         * 两个地方用同一个门槛才不会出现"试录说有声音、真录却被判静音自动结束"。
+         * **不要**复用 [SilenceWatcher.VOICE_LEVEL]（0.05）：那边判的是"这段会议里有人在说话"，
+         * 门槛高得多才不会把空调声当人声；试录只回答"麦克风有没有真的收到东西"，
+         * 门槛高了会把正常的安静房间判成"没声音"，与桌面结论相反。
          */
-        const val VOICE_LEVEL = SilenceWatcher.VOICE_LEVEL
+        const val VOICE_LEVEL = 0.01f
     }
 }
 
@@ -43,6 +45,7 @@ suspend fun probeCapture(
     tickMs: Long = 50L,
 ): CaptureProbeResult {
     val span = seconds.coerceIn(1, MAX_SECONDS)
+    val step = tickMs.coerceAtLeast(1L)
     var peak = 0f
     try {
         capture.start(scratch)
@@ -50,19 +53,24 @@ suspend fun probeCapture(
         scratch.delete()
         return CaptureProbeResult(span, peak = null, failure = e)
     }
+    var samplingFailure: Exception? = null
     try {
-        val ticks = (span * 1000L / tickMs).toInt()
+        val ticks = (span * 1000L / step).toInt()
         repeat(ticks) {
             peak = maxOf(peak, capture.level())
-            delay(tickMs)
+            delay(step)
         }
-        val failure = capture.lastFailure()
-        return CaptureProbeResult(span, peak = peak, failure = failure)
-    } finally {
-        // 收尾一定要走到：探针文件留着只会让人在缓存目录里看到一堆 3 秒的空录音
-        runCatching { capture.stop() }
-        scratch.delete()
+    } catch (e: Exception) {
+        // 取样中途炸了：如实回报，别继续当成"在跑"
+        samplingFailure = e
     }
+    // 先停再读失败原因：停止本身也可能失败（wav 头写不进去），
+    // 那时候用户看到的是"没声音"而不是真实原因
+    val stopFailure = runCatching { capture.stop() }.exceptionOrNull()
+    // 探针文件留着只会让人在缓存目录里看到一堆 3 秒的空录音
+    scratch.delete()
+    val failure = samplingFailure ?: capture.lastFailure() ?: stopFailure
+    return CaptureProbeResult(span, peak = peak, failure = failure)
 }
 
 /** 试录时长：与桌面按钮上的"试录 3 秒"一致。 */

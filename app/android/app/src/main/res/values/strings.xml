@@ -251,6 +251,7 @@
     <string name="onboard_test_running">试录中…</string>
     <string name="onboard_test_heard">听到了声音（%1$d 秒）：麦克风工作正常</string>
     <string name="onboard_test_silent">这 %1$d 秒里没听到声音。检查是否静音、或被别的应用占用，再试一次。</string>
-    <string name="onboard_test_failed">麦克风打不开：请确认已授予权限，或稍后再试。</string>
+    <string name="onboard_test_failed">麦克风没能录起来：请确认已授予权限、没被别的应用占用，或稍后再试。</string>
     <string name="onboard_test_system_note">系统内录（会议软件里对方的声音）需要系统"录屏"授权，会在你第一次录音时才问，这里不测。</string>
+    <string name="onboard_perm_request">授权麦克风</string>
 </resources>

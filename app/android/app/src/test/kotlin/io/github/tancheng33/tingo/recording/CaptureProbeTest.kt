@@ -59,8 +59,8 @@ class CaptureProbeTest {
     }
 
     @Test
-    fun silenceIsReportedAsSilence() = runTest {
-        val quiet = FakeCapture(listOf(0.001f, 0.002f))
+    fun nearSilentLevelIsReportedAsQuiet() = runTest {
+        val quiet = FakeCapture(listOf(0.001f, 0.008f))
 
         val result = probeCapture(quiet, scratch(), seconds = 1, tickMs = 10)
 
@@ -86,6 +86,42 @@ class CaptureProbeTest {
 
         assertNotNull(result.failure)
         assertFalse("出错时不能报「听到了声音」", result.heardSomething)
+    }
+
+    @Test
+    fun thresholdIsTheDesktopsOneHundredth() = runTest {
+        // 与桌面 /api/record/test 的 `l >= 0.01` 对齐：阈值高了会把安静但正常的房间判成没声音
+        assertEquals(0.01f, CaptureProbeResult.VOICE_LEVEL, 0.0001f)
+
+        val justSilent = FakeCapture(listOf(0.009f))
+        val justAudible = FakeCapture(listOf(0.01f))
+
+        assertFalse(probeCapture(justSilent, scratch(), seconds = 1, tickMs = 10).heardSomething)
+        assertTrue("正好到门限就算听到（与桌面的 >= 一致）", probeCapture(justAudible, scratch(), seconds = 1, tickMs = 10).heardSomething)
+    }
+
+    @Test
+    fun failingStopSurfacesInsteadOfLookingSilent() = runTest {
+        val capture = object : AudioCapture {
+            override fun start(file: File) = Unit
+            override fun pause() = Unit
+            override fun resume() = Unit
+            override fun stop(): Long = throw IllegalStateException("wav 头写不进去")
+            override fun level(): Float = 0f
+        }
+
+        val result = probeCapture(capture, scratch(), seconds = 1, tickMs = 10)
+
+        assertNotNull("停止时的错误不能被吞成「没声音」", result.failure)
+    }
+
+    @Test
+    fun zeroTickDoesNotCrashWhileTheMicIsOpen() = runTest {
+        val capture = FakeCapture(listOf(0.2f))
+
+        val result = probeCapture(capture, scratch(), seconds = 1, tickMs = 0)
+
+        assertEquals(0.2f, result.peak ?: 0f, 0.0001f)
     }
 
     @Test

@@ -280,9 +280,14 @@ fun TingoRoot(
     }
     // 录音权限原来是在录音页里申请的。现在状态机在外壳层，权限也得跟着上来，
     // 否则切页之后点"开始录音"会直接撞上没授权（采集抛异常，用户只看到"麦克风不可用"）
+    // 权限状态在读的那一刻才准：用户可能刚从系统设置里授权回来（出去的这段时间界面不重组）
+    var micGranted by remember { mutableStateOf(false) }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { /* 授权结果不在这里处理：startRecording 会重新判定一次权限 */ }
+    ) { granted ->
+        // startRecording 会重新判定一次权限；这里同步一下，引导页那两行状态才立刻变
+        micGranted = granted || micGranted
+    }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
     ) { /* 没有通知权限也能录音，只是状态栏看不到：界面自己会提示 */ }
@@ -332,6 +337,24 @@ fun TingoRoot(
         },
     )
     val onboardState by onboardViewModel.state.collectAsStateWithLifecycle()
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, recordContext) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                    recordContext,
+                    android.Manifest.permission.RECORD_AUDIO,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        // 立刻算一次，别等第一次 ON_RESUME
+        micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            recordContext,
+            android.Manifest.permission.RECORD_AUDIO,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var showOnboarding by rememberSaveable { mutableStateOf(false) }
     val hasMeetings = (libraryState as? LibraryUiState.Content)?.items?.isNotEmpty() == true
     // 第一次打开、而且库里还没有会议时才拦人：老用户升级上来不该被引导一次
@@ -361,14 +384,12 @@ fun TingoRoot(
             state = onboardState,
             steps = onboardViewModel.steps,
             llmConfigured = container.settings.llm.isConfigured,
-            micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-                recordContext,
-                android.Manifest.permission.RECORD_AUDIO,
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            micGranted = micGranted,
             systemAudioSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
             testing = onboardState.testing,
             probe = onboardState.probe,
             onTest = onboardViewModel::testCapture,
+            onRequestPermission = { micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO) },
             onNext = onboardViewModel::next,
             onBack = onboardViewModel::back,
             onSkip = onboardViewModel::skip,

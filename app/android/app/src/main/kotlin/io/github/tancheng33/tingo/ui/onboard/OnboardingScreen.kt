@@ -39,9 +39,10 @@ fun OnboardingScreen(
     llmConfigured: Boolean,
     micGranted: Boolean,
     systemAudioSupported: Boolean,
-    testing: Boolean = false,
-    probe: CaptureProbeResult? = null,
-    onTest: () -> Unit = {},
+    testing: Boolean,
+    probe: CaptureProbeResult?,
+    onTest: () -> Unit,
+    onRequestPermission: () -> Unit,
     onNext: () -> Unit,
     onBack: () -> Unit,
     onSkip: () -> Unit,
@@ -75,6 +76,7 @@ fun OnboardingScreen(
                     testing = testing,
                     probe = probe,
                     onTest = onTest,
+                    onRequestPermission = onRequestPermission,
                 )
                 OnboardingViewModel.Step.LLM -> LlmStep(configured = llmConfigured, onOpenSettings = onOpenSettings)
                 OnboardingViewModel.Step.DEMO -> DemoStep(
@@ -193,6 +195,7 @@ private fun PermissionStep(
     testing: Boolean,
     probe: CaptureProbeResult?,
     onTest: () -> Unit,
+    onRequestPermission: () -> Unit,
 ) {
     val colors = TingoTheme.colors
     Text(
@@ -221,12 +224,22 @@ private fun PermissionStep(
     )
     // 桌面这一步是真的录 3 秒看有没有声音；只写"已授权"骗不过设备被占用、
     // 或系统输入被静音这类常见故障
-    PillButton(
-        label = stringResource(if (testing) R.string.onboard_test_running else R.string.onboard_test_mic),
-        onClick = onTest,
-        kind = PillKind.Ghost,
-        enabled = !testing,
-    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PillButton(
+            label = stringResource(if (testing) R.string.onboard_test_running else R.string.onboard_test_mic),
+            onClick = onTest,
+            kind = PillKind.Ghost,
+            enabled = !testing,
+        )
+        // 没授权时试录必然失败：直接给授权入口，别让人去猜"该去哪开"
+        if (!micGranted) {
+            PillButton(
+                label = stringResource(R.string.onboard_perm_request),
+                onClick = onRequestPermission,
+                kind = PillKind.Ghost,
+            )
+        }
+    }
     probe?.let { result ->
         val text = when {
             result.failure != null -> stringResource(R.string.onboard_test_failed)
@@ -236,7 +249,13 @@ private fun PermissionStep(
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall,
-            color = if (result.failure == null && result.heardSomething) colors.green else colors.amber,
+            // 三态三色：正常绿、没声音琥珀、出错红——前两种颜色一样时，
+            // "麦克风坏了"会被当成"房间太安静"
+            color = when {
+                result.failure != null -> colors.red
+                result.heardSomething -> colors.green
+                else -> colors.amber
+            },
         )
     }
     // 系统内录要过一次系统"录屏"授权，引导里弹它只会让人困惑：直说在录音页才问
