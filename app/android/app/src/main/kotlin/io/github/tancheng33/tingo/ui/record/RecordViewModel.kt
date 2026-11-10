@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.importing.AudioDecoder
 import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.recording.AudioCapture
+import io.github.tancheng33.tingo.recording.LiveTranscriber
+import io.github.tancheng33.tingo.recording.MicRecorder
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
 import io.github.tancheng33.tingo.recording.SilenceWatcher
@@ -66,6 +68,13 @@ class RecordViewModel(
     private val importing: AudioImport? = null,
     /** 进行中任务登记表：导入要跑几分钟，离开录制页也得看得见 */
     private val tasks: TaskCenter? = null,
+    /**
+     * 边录边转的工厂：每句识别结果回调一次。
+     *
+     * null 表示这个构建不做实时文字（测试、模型没就绪）。传工厂而不是实例，
+     * 是因为每次录音都要新建一份——上一次的 VAD 状态不能带进下一场会。
+     */
+    private val liveTranscriber: ((onSentence: (String) -> Unit) -> LiveTranscriber)? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
      * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
@@ -91,6 +100,17 @@ class RecordViewModel(
 
     private val _systemAudioStatus = MutableStateFlow(SystemAudioStatus.NOT_ATTEMPTED)
     val systemAudioStatus: StateFlow<SystemAudioStatus> = _systemAudioStatus.asStateFlow()
+
+    /**
+     * 边录边转的实时句子（只有麦克风那一路）。
+     *
+     * 只留最近几条：这是"看得见还在干活"的反馈，不是最终转写；详细内容录完写进
+     * `transcript.json`。留着全部会让界面越来越卡，也会让人误以为可以直接编辑。
+     */
+    private val _liveLines = MutableStateFlow<List<String>>(emptyList())
+    val liveLines: StateFlow<List<String>> = _liveLines.asStateFlow()
+
+    private var live: LiveTranscriber? = null
 
 
 
@@ -208,6 +228,7 @@ class RecordViewModel(
             _state.value = RecordUiState.Failed(R.string.err_mic_unavailable, e.message)
             return
         }
+        startLiveTranscription()
         currentDir = dir
         silence.reset()
         silence.silenceMinutes = autoStopSilenceMin()
@@ -216,6 +237,29 @@ class RecordViewModel(
         session.start(clock())
         _state.value = RecordUiState.Recording(0, 0f)
         startTicker()
+    }
+
+    /** 开一场录音就换一份实时转写：VAD 与识别流的状态不能跨场复用。 */
+    private fun startLiveTranscription() {
+        val factory = liveTranscriber ?: return
+        if (capture !is MicRecorder) return // 只有真实麦克风有样本回调
+        _liveLines.value = emptyList()
+        val transcriber = runCatching {
+            factory { sentence ->
+                // 回调在推理线程上：状态流更新是线程安全的，界面自己 collect
+                _liveLines.value = (_liveLines.value + sentence).takeLast(LIVE_LINES_SHOWN)
+            }
+        }.getOrNull() ?: return
+        transcriber.start()
+        live = transcriber
+        (capture as? MicRecorder)?.onSamples = { samples -> transcriber.offer(samples) }
+    }
+
+    /** 停止录音时先关实时转写：识别线程不该比录音活得久。 */
+    private fun stopLiveTranscription() {
+        (capture as? MicRecorder)?.onSamples = null
+        live?.close()
+        live = null
     }
 
     /**
@@ -278,6 +322,7 @@ class RecordViewModel(
      */
     fun stop(keepMs: Long? = null) {
         val dir = currentDir ?: return
+        stopLiveTranscription()
         ticker?.cancel()
         ticker = null
         val duration = try {
@@ -439,6 +484,9 @@ class RecordViewModel(
         const val SYSTEM_TRACK = TrackMerger.SYSTEM_TRACK
         const val TICK_MS = 200L
         /** 开始录音前至少要有这么多空间（约 20 分钟双轨录音）。 */
+        /** 界面上留几条实时句子 */
+        const val LIVE_LINES_SHOWN = 3
+
         const val MIN_FREE_BYTES = 500L * 1024 * 1024
         /** 录这么久之后检查系统音轨有没有内容。 */
         const val SILENCE_CHECK_MS = 5_000L

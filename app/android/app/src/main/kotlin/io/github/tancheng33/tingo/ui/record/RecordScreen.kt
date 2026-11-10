@@ -103,6 +103,8 @@ fun RecordScreen(
     systemAudioMissing: Boolean = false,
     /** 用户拒绝了屏幕录制授权 */
     systemAudioDenied: Boolean = false,
+    /** 边录边转的最近几句（只有麦克风那一路）；空表示没有实时文字 */
+    liveLines: List<String> = emptyList(),
     /** 最近几场会议：桌面端侧栏的"最近"在手机上落在录制页下方 */
     recent: List<MeetingCard> = emptyList(),
     onOpenRecent: (String) -> Unit = {},
@@ -200,6 +202,11 @@ fun RecordScreen(
                 ) {
                     TimerText(clockOf(state.elapsedMs.toULong()))
                     LevelBar(level = state.level)
+                    // 边录边转：显示最近几句，让"在录、也在识别"看得见。
+                    // 只显示不编辑：最终以录完后写进 transcript.json 的转写为准
+                    if (liveLines.isNotEmpty()) {
+                        LiveLinesPanel(liveLines = liveLines)
+                    }
                     WarningLine(
                         text = stringResource(R.string.record_system_audio_missing),
                         visible = systemAudioMissing,
@@ -420,6 +427,36 @@ private fun DiscardLink(onClick: () -> Unit) {
         color = colors.faint,
         modifier = Modifier.clickable(onClick = onClick).padding(8.dp),
     )
+}
+
+/**
+ * 录音中的实时文字。
+ *
+ * 只放最近几条、并且标明"还在识别"：这不是最终转写（说话人要等录完聚类），
+ * 让人误以为可以在这里改字是最容易踩的坑。
+ */
+@Composable
+private fun LiveLinesPanel(liveLines: List<String>) {
+    val colors = TingoTheme.colors
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        liveLines.forEach { line ->
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.text2,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = stringResource(R.string.record_live_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.muted,
+        )
+    }
 }
 
 /** 计时：大号、字距收紧、等宽数字，读秒不跳。 */

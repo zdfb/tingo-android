@@ -166,99 +166,14 @@ class TranscriptionPipeline(
     }
 
     /** 四个模型都就绪后才建对象；缺任何一个都直接报错，不做半残障运行。 */
-    private fun requireModel(): Model {
-        val missing = catalog.files.filterNot { store.isReady(it) }
-        check(missing.isEmpty()) { "模型未就绪：${missing.joinToString { it.id }}" }
-        fun path(id: String): String = store.fileFor(catalog.byId(id)!!).absolutePath
+    private fun requireModel(): AsrModels = AsrModels.open(store, catalog)
 
-        val vadConfig = VadModelConfig(
-            SileroVadModelConfig(
-                model = path("vad"),
-                threshold = 0.5f,
-                minSilenceDuration = 0.25f,
-                minSpeechDuration = 0.25f,
-                windowSize = 512,
-                maxSpeechDuration = 30f,
-            ),
-            TenVadModelConfig(),
-            sampleRate = 16_000,
-            numThreads = 1,
-            provider = "cpu",
-            debug = false,
-        )
-
-        val recognizer = OfflineRecognizer(
-            assetManager = null,
-            config = OfflineRecognizerConfig(
-                modelConfig = OfflineModelConfig(
-                    paraformer = OfflineParaformerModelConfig(model = path("paraformer")),
-                    tokens = path("tokens"),
-                    numThreads = 2,
-                    debug = false,
-                    provider = "cpu",
-                ),
-            ),
-        )
-
-        val punctuation = OfflinePunctuation(
-            assetManager = null,
-            config = OfflinePunctuationConfig(
-                model = OfflinePunctuationModelConfig(ctTransformer = path("punct"), numThreads = 1),
-            ),
-        )
-
-        val extractor = SpeakerEmbeddingExtractor(
-            assetManager = null,
-            config = SpeakerEmbeddingExtractorConfig(model = path("campplus"), numThreads = 1),
-        )
-
-        // 模型在文件系统上：assetManager 必须传 null，否则 sherpa 会当成 asset 去读并直接 abort
-        return Model(Vad(assetManager = null, config = vadConfig), recognizer, punctuation, extractor)
-    }
-
-    /** 一次性持有四个推理对象，用完释放。 */
-    private class Model(
-        val vad: Vad,
-        private val recognizer: OfflineRecognizer,
-        private val punctuation: OfflinePunctuation,
-        private val extractor: SpeakerEmbeddingExtractor,
-    ) : AutoCloseable {
-
-        fun recognize(samples: FloatArray, sampleRate: Int): String {
-            val stream = recognizer.createStream()
-            try {
-                stream.acceptWaveform(samples, sampleRate)
-                recognizer.decode(stream)
-                return recognizer.getResult(stream).text
-            } finally {
-                stream.release()
-            }
-        }
-
-        fun punctuate(text: String): String =
-            if (text.isBlank()) text else punctuation.addPunctuation(text)
-
-        fun embed(samples: FloatArray, sampleRate: Int): FloatArray {
-            val stream = extractor.createStream()
-            try {
-                stream.acceptWaveform(samples, sampleRate)
-                if (!extractor.isReady(stream)) return FloatArray(0)
-                return extractor.compute(stream)
-            } finally {
-                stream.release()
-            }
-        }
-
-        override fun close() {
-            runCatching { vad.release() }
-            runCatching { recognizer.release() }
-            runCatching { punctuation.release() }
-            runCatching { extractor.release() }
-        }
-    }
-
-    private companion object {
+    companion object {
         /** 短于 200 ms 的段基本是噪声 */
-        const val MIN_SEGMENT_MS = 200L
+        private const val MIN_SEGMENT_MS = 200L
+
+        /** 给"边录边转"用：模型没就绪时会抛，调用方自己决定降级。 */
+        fun openAsrModels(store: ModelStore, catalog: ModelCatalog): AsrModels =
+            AsrModels.open(store, catalog)
     }
 }

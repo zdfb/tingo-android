@@ -225,11 +225,23 @@ fun TingoRoot(
                         cacheDir = File(recordContext.cacheDir, "imports").apply { mkdirs() },
                     ),
                     tasks = container.tasks,
+                    // 边录边转：模型没就绪时给 null，录音照旧、只是不显示实时文字
+                    liveTranscriber = if (container.catalog.files.all { file -> container.models.isReady(file) }) {
+                        { onSentence: (String) -> Unit ->
+                            io.github.tancheng33.tingo.recording.LiveTranscriber(
+                                asr = TranscriptionPipeline.openAsrModels(container.models, container.catalog),
+                                onSentence = onSentence,
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
         },
     )
     val recordState by recordViewModel.state.collectAsStateWithLifecycle()
+    val liveLines by recordViewModel.liveLines.collectAsStateWithLifecycle()
     val importState by recordViewModel.import.collectAsStateWithLifecycle()
     val autoStoppedAfter by recordViewModel.autoStoppedAfter.collectAsStateWithLifecycle()
     val runningTasks by container.tasks.tasks.collectAsStateWithLifecycle()
@@ -504,6 +516,7 @@ fun TingoRoot(
                     },
                     importProgress = importState.progress,
                     importFailure = importState.failure,
+                    liveLines = liveLines,
                     onPickAudio = {
                         val error = runCatching {
                             pickAudio.launch(
@@ -844,6 +857,8 @@ private fun RecordRoute(
     onOpenTask: (String) -> Unit,
     importProgress: Float?,
     importFailure: RecordViewModel.ImportFailure?,
+    /** 边录边转的最近几句 */
+    liveLines: List<String>,
     onPickAudio: () -> Unit,
     systemAudioStatus: RecordViewModel.SystemAudioStatus,
     systemAudioEnabled: Boolean,
@@ -857,6 +872,7 @@ private fun RecordRoute(
 ) {
     RecordScreen(
         state = state,
+        liveLines = liveLines,
         recent = recent,
         statusRows = statusRows,
         onOpenRecent = onOpenMeeting,

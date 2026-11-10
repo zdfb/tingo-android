@@ -32,6 +32,15 @@ class MicRecorder : AudioCapture {
 
     private var currentLevel = 0f
 
+    /**
+     * 实时样本回调（16 bit 单声道 → [-1,1]）。边录边转用它。
+     *
+     * 在采集线程上调用：实现必须立刻返回，不许在这里做推理。
+     * 默认 null，录音本身不依赖它。
+     */
+    @Volatile
+    var onSamples: ((FloatArray) -> Unit)? = null
+
     override fun start(file: File) {
         check(record == null) { "已经在录音" }
         // 上一次的错误不能带到这一次：否则一次写盘失败之后，每次结束录音都报"中断"
@@ -74,6 +83,9 @@ class MicRecorder : AudioCapture {
                 currentLevel = peakLevel(buffer, read)
                 // read 一定是 2 的整数倍（16 bit 单声道），WavWriter 里有断言兜底
                 wav.append(buffer, read)
+                onSamples?.let { listener ->
+                    runCatching { listener(toFloats(buffer, read)) }
+                }
             }
             } catch (e: Exception) {
                 // 写不下去就停：已写入的部分仍然是一份可修复的 wav（启动时会补头）
@@ -93,6 +105,19 @@ class MicRecorder : AudioCapture {
         AudioFormat.ENCODING_PCM_16BIT,
         bufferBytes,
     )
+
+    /** 16 bit 小端 PCM → 归一化浮点（sherpa 要的输入）。 */
+    private fun toFloats(buffer: ByteArray, length: Int): FloatArray {
+        val count = length / 2
+        val out = FloatArray(count)
+        for (i in 0 until count) {
+            val lo = buffer[2 * i].toInt() and 0xFF
+            val hi = buffer[2 * i + 1].toInt()
+            val sample = (hi shl 8) or lo
+            out[i] = sample.toShort().toFloat() / 32_768f
+        }
+        return out
+    }
 
     override fun pause() {
         paused = true
