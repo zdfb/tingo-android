@@ -12,43 +12,72 @@ class SpeakerClusteringTest {
         return FloatArray(values.size) { values[it] / norm }
     }
 
+    /** 造 n 段声纹：前一半靠近 [a]，后一半靠近 [b]，各自带一点抖动（可复现）。 */
+    private fun twoGroups(n: Int, a: FloatArray, b: FloatArray, jitter: Float = 0.02f): List<FloatArray> {
+        var seed = 42L
+        fun next(): Float {
+            seed = seed * 6364136223846793005L + 1442695040888963407L
+            return ((seed ushr 33).toFloat() / (1 shl 31).toFloat()) * 2f - 1f
+        }
+        return (0 until n).map { i ->
+            val base = if (i % 2 == 0) a else b
+            FloatArray(base.size) { base[it] + next() * jitter }
+        }
+    }
+
+    @Test
+    fun fewerThanTwentySegmentsIsAlwaysOneSpeaker() {
+        // 与桌面同一条规则：段太少时聚类只会瞎分，宁可不分
+        val many = twoGroups(19, unit(1f, 0f, 0f, 0f), unit(0f, 1f, 0f, 0f))
+        assertEquals(List(19) { 0 }, SpeakerClustering().cluster(many))
+    }
+
     @Test
     fun twoClearlyDifferentVoicesBecomeTwoSpeakers() {
-        val a1 = unit(1f, 0.1f, 0f, 0.2f)
-        val a2 = unit(0.9f, 0.15f, 0.05f, 0.2f)
-        val b1 = unit(0f, 0.1f, 1f, 0.2f)
-        val b2 = unit(0.05f, 0.1f, 0.95f, 0.15f)
+        val embeddings = twoGroups(40, unit(1f, 0f, 0f, 0f), unit(0f, 1f, 0f, 0f))
+        val speakers = SpeakerClustering().cluster(embeddings)
 
-        val speakers = SpeakerClustering().cluster(listOf(a1, b1, a2, b2))
-
-        assertEquals(2, speakers.toSet().size)
-        // 首次发言顺序：0 号其实是被第一个出现的人占用
-        assertEquals(speakers[0], speakers[2])
-        assertEquals(speakers[1], speakers[3])
-        assertTrue(speakers[0] != speakers[1])
+        assertEquals("两个人应该分成两簇：$speakers", 2, speakers.toSet().size)
+        // 偶数下标同一个人、奇数下标同一个人
+        assertEquals(1, speakers.filterIndexed { i, s -> i % 2 == 0 }.toSet().size)
+        assertEquals(1, speakers.filterIndexed { i, s -> i % 2 == 1 }.toSet().size)
     }
 
     @Test
-    fun singleSpeakerStaysOne() {
-        val s = listOf(unit(1f, 0f, 0f), unit(0.95f, 0.1f, 0f), unit(0.9f, 0.2f, 0f))
-        assertEquals(listOf(0, 0, 0), SpeakerClustering().cluster(s))
-    }
+    fun oneSpeakerStaysOneEvenWithManySegments() {
+        val embeddings = twoGroups(40, unit(1f, 0f, 0f, 0f), unit(1f, 0f, 0f, 0f), jitter = 0.01f)
+        val speakers = SpeakerClustering().cluster(embeddings)
 
-    @Test
-    fun dissimilarVectorsAllStayApart() {
-        val s = listOf(unit(1f, 0f, 0f, 0f), unit(0f, 1f, 0f, 0f), unit(0f, 0f, 1f, 0f))
-        val speakers = SpeakerClustering(threshold = 0.99f).cluster(s)
-        assertEquals(listOf(0, 1, 2), speakers)
+        assertEquals("同一个人的抖动不该被拆成两个：$speakers", 1, speakers.toSet().size)
     }
 
     @Test
     fun numberingFollowsFirstSpokenOrder() {
-        val b = unit(0f, 1f, 0f)
-        val a = unit(1f, 0f, 0f)
-        val speakers = SpeakerClustering().cluster(listOf(b, a, b, a))
-        // 第一个开口的人编号 0，哪怕它和第 0 个向量并不相同
-        assertEquals(0, speakers[0])
-        assertEquals(1, speakers[1])
+        val a = unit(1f, 0f, 0f, 0f)
+        val b = unit(0f, 1f, 0f, 0f)
+        // 让 b 先开口：把第一段换成 b
+        val embeddings = listOf(b) + twoGroups(40, a, b).drop(1)
+        val speakers = SpeakerClustering().cluster(embeddings)
+
+        assertEquals("第一个开口的人编号 0", 0, speakers.first())
+    }
+
+    @Test
+    fun theSameInputAlwaysGivesTheSameSpeakers() {
+        val embeddings = twoGroups(60, unit(1f, 0.2f, 0f, 0f), unit(0f, 0f, 1f, 0.2f))
+        val first = SpeakerClustering().cluster(embeddings)
+        val second = SpeakerClustering().cluster(embeddings)
+
+        assertEquals("k-means 固定种子：同一份声纹必须得到同样的编号", first, second)
+    }
+
+    @Test
+    fun moreThanTheSpectralLimitIsStillClustered() {
+        // 超过 256 段会先子采样做谱聚类，其余按余弦归档
+        val embeddings = twoGroups(300, unit(1f, 0f, 0f, 0f), unit(0f, 1f, 0f, 0f))
+        val speakers = SpeakerClustering().cluster(embeddings)
+
+        assertEquals(2, speakers.toSet().size)
     }
 
     @Test
@@ -58,8 +87,10 @@ class SpeakerClusteringTest {
 
     @Test
     fun zeroVectorIsTolerated() {
-        val speakers = SpeakerClustering().cluster(listOf(FloatArray(3), unit(1f, 0f, 0f)))
-        assertEquals(2, speakers.size)
+        val embeddings = List(20) { FloatArray(4) } + listOf(unit(1f, 0f, 0f, 0f))
+        val speakers = SpeakerClustering().cluster(embeddings)
+
+        assertEquals(21, speakers.size)
     }
 }
 
