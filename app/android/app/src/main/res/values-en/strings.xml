@@ -254,4 +254,5 @@
     <string name="onboard_test_failed">The microphone could not start: check that permission is granted and no other app is using it, then try again.</string>
     <string name="onboard_test_system_note">Recording the other side (system audio) needs the system screen-capture permission; Tingo asks for it on your first recording, not here.</string>
     <string name="onboard_perm_request">Allow microphone</string>
+    <string name="settings_resume_onboarding">Continue the tour</string>
 </resources>

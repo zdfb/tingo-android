@@ -254,4 +254,5 @@
     <string name="onboard_test_failed">麦克风没能录起来：请确认已授予权限、没被别的应用占用，或稍后再试。</string>
     <string name="onboard_test_system_note">系统内录（会议软件里对方的声音）需要系统"录屏"授权，会在你第一次录音时才问，这里不测。</string>
     <string name="onboard_perm_request">授权麦克风</string>
+    <string name="settings_resume_onboarding">继续新手引导</string>
 </resources>

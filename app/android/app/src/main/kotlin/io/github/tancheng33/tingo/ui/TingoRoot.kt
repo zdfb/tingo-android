@@ -360,7 +360,8 @@ fun TingoRoot(
     // 第一次打开、而且库里还没有会议时才拦人：老用户升级上来不该被引导一次
     androidx.compose.runtime.LaunchedEffect(hasMeetings) {
         if (libraryState is LibraryUiState.Content && onboardViewModel.shouldOnboard(hasMeetings)) {
-            onboardViewModel.refreshModel()
+            // 上次没走完（例如中途被杀掉）：接着走，不要把人按回第一步
+            onboardViewModel.resume()
             showOnboarding = true
         }
     }
@@ -395,6 +396,8 @@ fun TingoRoot(
             onSkip = onboardViewModel::skip,
             onInstallDemo = { onboardViewModel.installDemo(container.uiLanguage() == "en") },
             onOpenSettings = {
+                // 记住走到哪一步：去设置填完 Key 回来能接着走，而不是从第一步重看
+                onboardViewModel.rememberStep()
                 onboardViewModel.skip()
                 navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true }
             },
@@ -672,6 +675,15 @@ fun TingoRoot(
                         onboardViewModel.restart()
                         showOnboarding = true
                         navController.popBackStack()
+                    },
+                    onResumeOnboarding = if (!container.settings.onboarded) {
+                        {
+                            onboardViewModel.resume()
+                            showOnboarding = true
+                            navController.popBackStack()
+                        }
+                    } else {
+                        null
                     },
                     onCleanupLeftovers = if ((models.storage?.let { it.leftoverBytes } ?: 0uL) > 0uL) {
                         {

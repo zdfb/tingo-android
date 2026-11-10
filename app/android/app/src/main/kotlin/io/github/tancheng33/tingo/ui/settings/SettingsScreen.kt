@@ -68,6 +68,8 @@ fun SettingsScreen(
     onSaveHotwords: (List<String>) -> Unit = {},
     onAddHotword: (String) -> Unit = {},
     onReplayOnboarding: () -> Unit = {},
+    /** 没走完的引导：回到上次那一步接着走（桌面对应设置页的"回到新手引导"） */
+    onResumeOnboarding: (() -> Unit)? = null,
     onSaveAutoStopSilence: (Int) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
     onCleanupLeftovers: (() -> Unit)? = null,
@@ -151,6 +153,15 @@ fun SettingsScreen(
                 onClick = onReplayOnboarding,
                 kind = PillKind.Ghost,
             )
+            // 还没走完的人（去填 Key 时把引导关掉了）需要一条"接着走"的路，
+            // 否则只能从第一步重看四屏——桌面端这种情况直接跳回大模型那一步
+            if (onResumeOnboarding != null) {
+                PillButton(
+                    label = stringResource(R.string.settings_resume_onboarding),
+                    onClick = onResumeOnboarding,
+                    kind = PillKind.Primary,
+                )
+            }
         }
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)

@@ -80,8 +80,7 @@ class OnboardingViewModel(
     fun next() {
         val index = steps.indexOf(_state.value.step)
         if (index < steps.lastIndex) {
-            _state.value = _state.value.copy(step = steps[index + 1])
-            if (_state.value.step == Step.MODEL) refreshModel()
+            goTo(steps[index + 1])
         } else {
             skip()
         }
@@ -89,7 +88,24 @@ class OnboardingViewModel(
 
     fun back() {
         val index = steps.indexOf(_state.value.step)
-        if (index > 0) _state.value = _state.value.copy(step = steps[index - 1])
+        if (index > 0) goTo(steps[index - 1])
+    }
+
+    private fun goTo(step: Step) {
+        settings.onboardStep = steps.indexOf(step)
+        _state.value = _state.value.copy(step = step)
+        if (step == Step.MODEL) refreshModel()
+    }
+
+    /**
+     * 从上次离开的那一步接着走（桌面"回到新手引导"跳 `#/welcome/llm` 的等价物）。
+     *
+     * 只在没走完时用：走完的人点"重玩"应该从头看，那是 [restart]。
+     */
+    fun resume() {
+        val index = settings.onboardStep.coerceIn(0, steps.lastIndex)
+        _state.value = _state.value.copy(step = steps[index], finished = false)
+        if (_state.value.step == Step.MODEL) refreshModel()
     }
 
     /** 走完最后一步：装示例会议并交回会议 id。 */
@@ -114,14 +130,20 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(finished = true)
     }
 
+    /** 用户从"大模型"那一步跑去设置填 Key：把当前步记住，回来接着走。 */
+    fun rememberStep() {
+        settings.onboardStep = steps.indexOf(_state.value.step)
+    }
+
     /** 界面拿走跳转信号后清掉，避免重复跳。 */
     fun consumeDemo() {
         _state.value = _state.value.copy(demoMeetingId = null)
     }
 
-    /** 设置页里"重新看一遍引导"用。 */
+    /** 设置页里"重新看一遍引导"用：从头开始（与 [resume] 相反）。 */
     fun restart() {
         settings.onboarded = false
+        settings.onboardStep = 0
         _state.value = UiState()
         refreshModel()
     }

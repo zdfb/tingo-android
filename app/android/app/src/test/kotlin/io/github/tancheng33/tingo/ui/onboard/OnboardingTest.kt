@@ -212,4 +212,56 @@ class OnboardingTest {
         assertFalse(vm.state.value.testing)
         assertNull(vm.state.value.probe)
     }
+
+    @Test
+    fun stepIsRememberedSoReturningFromSettingsContinues() = runTest(dispatcher) {
+        val settings = AppSettings(Store())
+        val vm = viewModel(settings)
+
+        vm.next() // hello → model
+        vm.next() // model → perm
+        vm.next() // perm → llm
+        assertEquals(OnboardingViewModel.Step.LLM, vm.state.value.step)
+        assertEquals("离开时的那一步要落盘", 3, settings.onboardStep)
+
+        // 模拟"去设置里填 Key"：关掉引导后重新进来
+        val fresh = viewModel(settings)
+        fresh.resume()
+        assertEquals("该回到大模型那一步", OnboardingViewModel.Step.LLM, fresh.state.value.step)
+    }
+
+    @Test
+    fun backAlsoMovesTheRememberedStep() = runTest(dispatcher) {
+        val settings = AppSettings(Store())
+        val vm = viewModel(settings)
+
+        vm.next()
+        vm.next()
+        vm.back()
+
+        assertEquals(1, settings.onboardStep)
+        assertEquals(OnboardingViewModel.Step.MODEL, vm.state.value.step)
+    }
+
+    @Test
+    fun replayStartsFromTheBeginning() = runTest(dispatcher) {
+        val settings = AppSettings(Store()).apply { onboardStep = 4 }
+        val vm = viewModel(settings)
+
+        vm.restart()
+
+        assertEquals("重玩要从头看，不能接着上次", OnboardingViewModel.Step.HELLO, vm.state.value.step)
+        assertEquals(0, settings.onboardStep)
+        assertFalse(settings.onboarded)
+    }
+
+    @Test
+    fun aCorruptStepValueDoesNotCrashTheTour() = runTest(dispatcher) {
+        val settings = AppSettings(Store()).apply { onboardStep = 99 }
+
+        assertEquals("越界值要夹回最后一步", 4, settings.onboardStep)
+        val vm = viewModel(settings)
+        vm.resume()
+        assertEquals(OnboardingViewModel.Step.DEMO, vm.state.value.step)
+    }
 }
