@@ -72,9 +72,10 @@ class LiveTranscriberTest {
         live.offer(samples(512 * 2 + 100))
         val deadline = System.currentTimeMillis() + 2_000
         while (asr.windows.size < 2 && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        // 运行中只喂整窗口（不足一窗的留着等下一批），停止时才补零收尾
+        assertEquals("运行中只喂整窗口", 2, asr.windows.size)
         live.close()
-
-        assertEquals("只喂整窗口：不足一窗的样本留着等下一批", 2, asr.windows.size)
+        assertTrue("收尾时不足一窗的样本补零后喂进去", asr.windows.size >= 3)
     }
 
     @Test
@@ -85,7 +86,7 @@ class LiveTranscriberTest {
             override fun hasSegment(): Boolean = !popped
             override fun popSegment(): FloatArray {
                 popped = true
-                return FloatArray(16_000 / 4) // 250 ms：噪声级别
+                return FloatArray(16_000 / 10) // 100 ms：噪声级别（门限 200ms）
             }
             override fun flush() = Unit
             override fun recognize(samples: FloatArray): String = "噪声"
@@ -98,7 +99,30 @@ class LiveTranscriberTest {
         Thread.sleep(300)
         live.close()
 
-        assertEquals("半秒以下的人声不该出现在实时文字里", emptyList<String>(), lines.toList())
+        assertEquals("短于 200ms 的人声不该出现在实时文字里", emptyList<String>(), lines.toList())
+    }
+
+    @Test
+    fun aTailShorterThanOneWindowIsStillFed() {
+        // 停止时缓冲里常剩下几百个样本：不补零喂给 VAD，最后半句话就永远不会出现
+        val asr = FakeAsr(windowsPerSegment = 1_000)
+        val live = LiveTranscriber(asr = asr, onSentence = {})
+        live.start()
+        live.offer(samples(512 * 2 + 200))
+        live.stop()
+
+        assertEquals("不足一窗的尾巴补零后要喂进去", 3, asr.windows.size)
+        assertTrue("补零也要保持窗口长度", asr.windows.all { it.size == 512 })
+    }
+
+    @Test
+    fun closingReleasesTheModels() {
+        var released = 0
+        val live = LiveTranscriber(asr = FakeAsr(), releaseModels = { released++ }, onSentence = {})
+        live.start()
+        live.close()
+
+        assertEquals("每场会议都会新建一份模型：关掉必须释放，否则一场漏一份", 1, released)
     }
 
     @Test

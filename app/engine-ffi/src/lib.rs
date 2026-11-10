@@ -303,6 +303,13 @@ const MAX_CLEANUP_DAYS: u32 = 3650;
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
 
+/// 只删掉的录音放在回收站下的这个子目录里（名字带点号：不进回收站列表）。
+///
+/// 不能直接放进 `.trash/<id>`：那样回收站里会出现一个"和库里同名"的目录，
+/// 之后这场会议既没法整体删进回收站（同名冲突），也没法从回收站恢复（库里已有同 id）。
+/// 录音单独一层、目录名带时间戳，就不会和"整场会议的回收站目录"抢同一个名字。
+const AUDIO_TRASH_DIR: &str = ".audio";
+
 /// 导入结果：会议 id 与它的目录。
 ///
 /// 连目录一起返回，宿主就不必知道"会议库布局是 <root>/meetings/<id>"——
@@ -347,13 +354,7 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
         "delete_audio" => {
             // 与桌面 batch 同一条路径：录音移到回收站，转写与纪要留下。直接 remove_file 会
             // 让"批量只删录音"变成不可恢复，和界面上说的"可从废纸篓恢复"对不上。
-            let trash = root.join(TRASH_DIR).join(id);
-            std::fs::create_dir_all(&trash).map_err(|e| io_error(e, "batch"))?;
-            for file in meetings::audio_files(&dir) {
-                let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
-                std::fs::rename(&file, trash.join(&name)).map_err(|e| io_error(e, "batch"))?;
-            }
-            Ok(())
+            trash_audio(&root, id, &meetings::audio_files(&dir), "batch").map(|_| ())
         }
         "delete" => {
             // 与单条删除同一语义：先进回收站，用户能反悔
@@ -370,6 +371,24 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
             detail: format!("不认识的批量操作：{other}"),
         }),
     }
+}
+
+/// 把"只删掉的录音"移进回收站的独立子目录，返回腾出的字节数。
+fn trash_audio(root: &std::path::Path, id: &str, files: &[std::path::PathBuf], op: &str) -> Result<u64, EngineError> {
+    if files.is_empty() {
+        return Ok(0);
+    }
+    // 目录名带毫秒：同一场会议删两次录音也不会互相覆盖
+    let stamp = chrono::Local::now().timestamp_millis();
+    let trash = root.join(TRASH_DIR).join(AUDIO_TRASH_DIR).join(format!("{id}-{stamp}"));
+    std::fs::create_dir_all(&trash).map_err(|e| io_error(e, op))?;
+    let mut freed = 0u64;
+    for file in files {
+        freed += meetings::size_of(file);
+        let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
+        std::fs::rename(file, trash.join(&name)).map_err(|e| io_error(e, op))?;
+    }
+    Ok(freed)
 }
 
 /// 把引擎的搜索结果 JSON 转成 typed Record；字段缺了就跳过那一条，不让整个搜索失败。
@@ -709,17 +728,7 @@ impl TingoEngine {
                     detail: "这场会议没有录音文件".to_string(),
                 });
             }
-            let trash = root.join(TRASH_DIR).join(&id);
-            std::fs::create_dir_all(&trash).map_err(|e| io_error(e, "delete_audio"))?;
-            let mut freed = 0u64;
-            for file in files {
-                let bytes = meetings::size_of(&file);
-                let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
-                let target = trash.join(&name);
-                std::fs::rename(&file, &target).map_err(|e| io_error(e, "delete_audio"))?;
-                freed += bytes;
-            }
-            Ok(freed)
+            trash_audio(&root, &id, &files, "delete_audio")
         })
     }
 
@@ -777,6 +786,8 @@ impl TingoEngine {
                 .filter_map(|p| {
                     p.file_name()
                         .and_then(|n| n.to_str())
+                        // 点号目录是内部用的（只删掉的录音）：不该以"一场会议"的身份出现在回收站里
+                        .filter(|n| !n.starts_with('.'))
                         .map(|n| TrashItem { id: n.to_string(), bytes: meetings::size_of(&p) })
                 })
                 .collect();
@@ -1720,8 +1731,11 @@ mod tests {
         assert_eq!(freed, 4096, "腾出的字节数要按被移走的录音算");
         assert!(!dir.join("录音.wav").exists(), "录音要离开会议目录");
         assert!(dir.join("纪要.md").is_file(), "转写与纪要必须留在原位");
-        // 移到回收站而不是删掉：用户点错了还能找回来
-        assert!(root.join("meetings").join(TRASH_DIR).join("2026-10-28_1430_复盘").join("录音.wav").is_file());
+        // 移到回收站而不是删掉：用户点错了还能找回来（独立子目录，不和整场会议的回收站目录抢名字）
+        let audio_trash = root.join("meetings").join(TRASH_DIR).join(AUDIO_TRASH_DIR);
+        let moved = std::fs::read_dir(&audio_trash).unwrap().flatten().map(|e| e.path()).collect::<Vec<_>>();
+        assert_eq!(moved.len(), 1);
+        assert!(moved[0].join("录音.wav").is_file());
         // 会议本身还在库里（只是没有录音了）
         assert_eq!(engine.scan_library().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&root);
@@ -1741,6 +1755,24 @@ mod tests {
 
         assert!(result.is_err(), "正在转写的会议不能删录音");
         assert!(dir.join("录音.wav").is_file(), "拒绝之后录音必须还在");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_meeting_that_lost_its_audio_can_still_be_deleted_and_restored() {
+        // 回归：把录音直接放进 `.trash/<id>` 会让这场会议再也删不掉（同名冲突）、
+        // 也恢复不了（库里已有同 id）。录音必须放在独立子目录里。
+        let root = temp_root("delete-audio-then-trash");
+        let dir = meeting(&root, "2026-10-28_1430_复盘");
+        std::fs::write(dir.join("录音.wav"), vec![0u8; 1024]).unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_audio("2026-10-28_1430_复盘".to_string(), vec![]).unwrap();
+
+        engine.delete_to_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+        assert_eq!(engine.list_trash().unwrap().len(), 1, "回收站里只该有一场会议，不该多出录音目录");
+
+        engine.restore_from_trash("2026-10-28_1430_复盘".to_string()).unwrap();
+        assert!(dir.join("纪要.md").is_file(), "恢复之后纪要还在");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1771,8 +1803,8 @@ mod tests {
 
         assert!(!dir.join("录音.wav").exists());
         assert!(dir.join("纪要.md").is_file());
-        // 批量也一样进回收站：界面上说"可从废纸篓恢复"就必须真能恢复
-        assert!(root.join("meetings").join(TRASH_DIR).join("2026-10-28_1430_复盘").join("录音.wav").is_file());
+        // 批量也一样进回收站（独立子目录）
+        assert!(root.join("meetings").join(TRASH_DIR).join(AUDIO_TRASH_DIR).is_dir());
         let _ = std::fs::remove_dir_all(&root);
     }
 

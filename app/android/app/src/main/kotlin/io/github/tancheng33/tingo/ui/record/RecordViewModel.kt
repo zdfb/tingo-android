@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -242,24 +243,31 @@ class RecordViewModel(
     /** 开一场录音就换一份实时转写：VAD 与识别流的状态不能跨场复用。 */
     private fun startLiveTranscription() {
         val factory = liveTranscriber ?: return
-        if (capture !is MicRecorder) return // 只有真实麦克风有样本回调
+        val mic = capture as? MicRecorder ?: return // 只有真实麦克风有样本回调
         _liveLines.value = emptyList()
         val transcriber = runCatching {
             factory { sentence ->
-                // 回调在推理线程上：状态流更新是线程安全的，界面自己 collect
-                _liveLines.value = (_liveLines.value + sentence).takeLast(LIVE_LINES_SHOWN)
+                // 回调在推理线程上：`update` 是原子的读改写；手写
+                // "value = value + s" 会让并发回调互相覆盖（丢句、顺序乱）
+                _liveLines.update { lines -> (lines + sentence).takeLast(LIVE_LINES_SHOWN) }
             }
         }.getOrNull() ?: return
         transcriber.start()
         live = transcriber
-        (capture as? MicRecorder)?.onSamples = { samples -> transcriber.offer(samples) }
+        mic.onSamples = { samples -> transcriber.offer(samples) }
     }
 
-    /** 停止录音时先关实时转写：识别线程不该比录音活得久。 */
+    /**
+     * 停止录音时关掉实时转写：识别线程不该比录音活得久。
+     *
+     * `close()` 会 join 推理线程（最多 3 秒）并释放四个原生模型，放到 IO 上跑，
+     * 否则收尾这几秒会卡住界面。
+     */
     private fun stopLiveTranscription() {
         (capture as? MicRecorder)?.onSamples = null
-        live?.close()
+        val transcriber = live ?: return
         live = null
+        viewModelScope.launch(io) { transcriber.close() }
     }
 
     /**
@@ -322,11 +330,13 @@ class RecordViewModel(
      */
     fun stop(keepMs: Long? = null) {
         val dir = currentDir ?: return
-        stopLiveTranscription()
         ticker?.cancel()
         ticker = null
         val duration = try {
+            // 先让采集线程收尾（它会再交最后一批样本），再关实时转写：
+            // 顺序反了最后几百毫秒的话就永远进不了实时文字
             val micDuration = capture.stop()
+            stopLiveTranscription()
             systemAudio?.let { runCatching { it.stop() } }
             systemAudio = null
             _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
@@ -484,10 +494,9 @@ class RecordViewModel(
         const val SYSTEM_TRACK = TrackMerger.SYSTEM_TRACK
         const val TICK_MS = 200L
         /** 开始录音前至少要有这么多空间（约 20 分钟双轨录音）。 */
+        const val MIN_FREE_BYTES = 500L * 1024 * 1024
         /** 界面上留几条实时句子 */
         const val LIVE_LINES_SHOWN = 3
-
-        const val MIN_FREE_BYTES = 500L * 1024 * 1024
         /** 录这么久之后检查系统音轨有没有内容。 */
         const val SILENCE_CHECK_MS = 5_000L
         /** 低于这个振幅就当没抓到（16 bit 满量程 1.0）。 */

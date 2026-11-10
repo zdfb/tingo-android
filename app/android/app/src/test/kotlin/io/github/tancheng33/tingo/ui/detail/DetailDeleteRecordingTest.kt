@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -85,7 +86,7 @@ class DetailDeleteRecordingTest {
         assertTrue("有录音时播放条要在", vm.state.value.hasAudio)
 
         var freed = 0uL
-        vm.deleteRecording(busyIds = listOf("别的会议")) { freed = it }
+        vm.deleteRecording(busyIds = listOf("别的会议"), onFreed = { freed = it })
         advanceUntilIdle()
 
         assertEquals(listOf("2026-11-01_0900_周会"), engine.deletedAudio)
@@ -107,13 +108,17 @@ class DetailDeleteRecordingTest {
         val vm = viewModel(meetingDir(withAudio = true), engine)
         advanceUntilIdle()
 
-        vm.deleteRecording(emptyList()) { error("失败时不该报腾出空间") }
+        var explained: String? = null
+        vm.deleteRecording(
+            busyIds = emptyList(),
+            onFreed = { error("失败时不该报腾出空间") },
+            onFailed = { explained = it },
+        )
         advanceUntilIdle()
 
-        assertEquals(
-            io.github.tancheng33.tingo.engine.FailureKind.INVALID_INPUT,
-            vm.state.value.failure,
-        )
+        assertEquals("引擎给的说明要原样透给用户", "这场会议还在处理中", explained)
+        // 删录音失败不能把整页换成错误页：转写和纪要都还好好的
+        assertNull(vm.state.value.failure)
         assertTrue("失败之后录音还在，播放条不该消失", vm.state.value.hasAudio)
     }
 }

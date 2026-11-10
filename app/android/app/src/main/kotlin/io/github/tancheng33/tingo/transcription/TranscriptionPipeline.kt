@@ -169,11 +169,7 @@ class TranscriptionPipeline(
     private fun requireModel(): AsrModels = AsrModels.open(store, catalog)
 
     companion object {
-        /** 短于 200 ms 的段基本是噪声 */
+        /** 短于 200 ms 的段基本是噪声（边录边转用同一个门限，见 `LiveTranscriber.MIN_SPEECH_MS`） */
         private const val MIN_SEGMENT_MS = 200L
-
-        /** 给"边录边转"用：模型没就绪时会抛，调用方自己决定降级。 */
-        fun openAsrModels(store: ModelStore, catalog: ModelCatalog): AsrModels =
-            AsrModels.open(store, catalog)
     }
 }

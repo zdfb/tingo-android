@@ -17,6 +17,8 @@ import kotlin.math.max
  */
 class LiveTranscriber(
     private val asr: LiveAsr,
+    /** 关掉时释放模型（四个原生对象）；不传就只管线程，不管模型 */
+    private val releaseModels: () -> Unit = {},
     private val sampleRate: Int = AsrModels.SAMPLE_RATE,
     /** 识别出一段话时回调（已加标点）。回调在推理线程上，界面要自己切主线程。 */
     private val onSentence: (String) -> Unit,
@@ -52,10 +54,16 @@ class LiveTranscriber(
         runCatching { worker.join(STOP_TIMEOUT_MS) }
     }
 
-    /** 标记关闭，后续 [offer] 直接丢弃（录音结束后的尾巴不该再进来）。 */
+    /**
+     * 标记关闭、停止线程、释放模型。
+     *
+     * 每场录音都会新建一份 [AsrModels]（VAD/识别/标点/声纹四个原生对象），这里不释放就会
+     * 一场会议漏一份，几次录音之后内存里挂着一堆没人用的模型。
+     */
     fun close() {
         synchronized(lock) { closed = true }
         stop()
+        runCatching { releaseModels() }
     }
 
     private fun loop() {
@@ -83,7 +91,11 @@ class LiveTranscriber(
             pending = FloatArray(0)
             rest
         }
-        if (tail.isNotEmpty()) feedVad(tail)
+        // 尾巴不足一个窗口也要喂完：补零到一个整窗再给 VAD，否则最后一两句话会静默丢掉
+        if (tail.isNotEmpty()) {
+            val padded = tail + FloatArray(window - tail.size)
+            feedVad(padded)
+        }
         runCatching { asr.flush() }
         drainSegments()
     }
@@ -109,8 +121,12 @@ class LiveTranscriber(
     }
 
     companion object {
-        /** 与转写管线同一个最短段门限 */
-        const val MIN_SPEECH_MS = 800L
+        /**
+         * 与转写管线同一个最短段门限（`TranscriptionPipeline.MIN_SEGMENT_MS`）。
+         *
+         * 曾自己定成 800ms，结果是"实时看到的句子比最终转写少"——同一个门限只该有一处定义。
+         */
+        const val MIN_SPEECH_MS = 200L
 
         /** 缓冲上限：约 30 秒的样本；超过就丢新来的，保住录音线程 */
         const val MAX_PENDING_SAMPLES = 16_000 * 30

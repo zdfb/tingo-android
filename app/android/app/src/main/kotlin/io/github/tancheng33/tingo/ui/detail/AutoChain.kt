@@ -6,6 +6,16 @@ package io.github.tancheng33.tingo.ui.detail
  * 抽成纯函数是为了能测：写在这里的条件只要错一个字，用户就会在录完一场会后
  * 白白等一轮、或者干脆被覆盖掉旧纪要。
  */
+/** 录制结束后那条自动链在界面层的状态：是不是这一场、启动过没有。 */
+data class AutoChainFlags(
+    /** 这一场是刚录完的：进页面就自动转写 */
+    val transcribe: Boolean = false,
+    val onTranscribeStarted: () -> Unit = {},
+    /** 转写完接着写纪要（同一条链，只跑一次） */
+    val minutes: Boolean = false,
+    val onMinutesStarted: () -> Unit = {},
+)
+
 object AutoChain {
 
     /**

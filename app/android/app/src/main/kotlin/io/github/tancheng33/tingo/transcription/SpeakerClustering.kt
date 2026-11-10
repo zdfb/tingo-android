@@ -17,10 +17,7 @@ import kotlin.math.sqrt
  * 直接分解 1500×1500，Android 没有等价库，纯 Kotlin 的 Jacobi 分解在 256 维时已是秒级，
  * 再大就明显拖慢转写收尾。子采样后的其余片段按余弦归到最近的中心，流程与桌面一致。
  */
-class SpeakerClustering(
-    private val maxSpeakers: Int = MAX_SPEAKERS,
-    private val limit: Int = SPECTRAL_LIMIT,
-) {
+class SpeakerClustering {
 
     /**
      * @param embeddings 每段一个声纹向量，长度必须一致
@@ -34,11 +31,13 @@ class SpeakerClustering(
         if (n < MIN_SEGMENTS_FOR_CLUSTERING) return List(n) { 0 }
 
         val unit = embeddings.map { normalize(it) }
-        val labels = if (n <= limit) {
+        val labels = if (n <= SPECTRAL_LIMIT) {
             spectral(unit)
         } else {
             // 均匀抽 limit 个做谱聚类，其余按余弦归到最近的中心
-            val picked = (0 until limit).map { i -> (i * (n - 1) + (limit - 1) / 2) / (limit - 1) }
+            val picked = (0 until SPECTRAL_LIMIT).map { i ->
+                (i * (n - 1) + (SPECTRAL_LIMIT - 1) / 2) / (SPECTRAL_LIMIT - 1)
+            }
             val subLabels = spectral(picked.map { unit[it] })
             val k = (subLabels.maxOrNull() ?: 0) + 1
             val centers = (0 until k).map { c ->
@@ -74,10 +73,10 @@ class SpeakerClustering(
 
         val (values, vectors) = jacobiEigen(laplacian)
         // 特征值升序：看前 maxSpeakers+1 个之间的间隔，最大间隔处就是说话人数
-        val top = (maxSpeakers + 1).coerceAtMost(n)
+        val top = (MAX_SPEAKERS + 1).coerceAtMost(n)
         val lambdas = values.take(top)
         val gaps = lambdas.zipWithNext { a, b -> b - a }
-        val k = if (gaps.isEmpty()) 1 else argMax(gaps) + 1
+        val k = if (gaps.isEmpty()) 1 else argMaxDouble(gaps) + 1
         val features = (0 until n).map { i -> DoubleArray(k) { c -> vectors[i][c] } }
         return kMeans(features, k)
     }
@@ -106,7 +105,7 @@ class SpeakerClustering(
                 centers += x[pick].copyOf()
             }
             val labels = IntArray(x.size)
-            repeat(100) {
+            for (round in 0 until MAX_KMEANS_ROUNDS) {
                 var changed = false
                 for (i in x.indices) {
                     val l = argMin(centers.map { squaredDistance(x[i], it) })
@@ -121,7 +120,8 @@ class SpeakerClustering(
                         }
                     }
                 }
-                if (!changed) return@repeat
+                // 一整轮没有任何点换簇 = 收敛，再迭代也不动（`return@repeat` 是跳过本轮，不是退出）
+                if (!changed) break
             }
             val inertia = x.indices.sumOf { squaredDistance(x[it], centers[labels[it]]) }
             if (inertia < best) {
@@ -184,10 +184,11 @@ class SpeakerClustering(
         val n = matrix.size
         val a = Array(n) { matrix[it].copyOf() }
         val v = Array(n) { i -> DoubleArray(n) { j -> if (i == j) 1.0 else 0.0 } }
-        repeat(MAX_SWEEPS) {
+        for (sweep in 0 until MAX_SWEEPS) {
             var off = 0.0
             for (i in 0 until n) for (j in i + 1 until n) off += a[i][j] * a[i][j]
-            if (off < EPSILON) return@repeat
+            // 非对角元都小到可以忽略：已经对角化了，再扫也不会更准（不加这个退出就永远跑满 30 轮）
+            if (off < EPSILON) break
             for (p in 0 until n - 1) {
                 for (q in p + 1 until n) {
                     if (abs(a[p][q]) < EPSILON) continue
@@ -254,7 +255,7 @@ class SpeakerClustering(
 
     private fun argMaxFloat(values: List<Float>): Int = values.indices.maxBy { values[it] }
 
-    private fun argMax(values: List<Double>): Int = values.indices.maxBy { values[it] }
+    private fun argMaxDouble(values: List<Double>): Int = values.indices.maxBy { values[it] }
 
     private fun argMin(values: List<Double>): Int = values.indices.minBy { values[it] }
 
@@ -289,5 +290,6 @@ class SpeakerClustering(
         private const val SEED = -7046029254386353131L // 0x9E3779B97F4A7C15
         private const val EPSILON = 1e-12
         private const val MAX_SWEEPS = 30
+        private const val MAX_KMEANS_ROUNDS = 100
     }
 }

@@ -261,7 +261,7 @@ uv run pytest -m "not slow"          # 不下载模型的单元测试
 # Android（Kotlin + Compose，引擎复用同一份 Rust 核心）
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
-cd app/android && ./gradlew :app:testDebugUnitTest     # 366 个 JVM 单测
+cd app/android && ./gradlew :app:testDebugUnitTest     # 428 个 JVM 单测
 ./gradlew :app:assembleDebug -PtingoSkipBundledModels=true   # 不带 327 MB 语音模型出包
 # 设备级测试需要先接一台设备（或模拟器）：
 ./gradlew :app:connectedDebugAndroidTest

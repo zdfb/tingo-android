@@ -71,6 +71,8 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tancheng33.tingo.ui.detail.AutoChain
+import io.github.tancheng33.tingo.ui.detail.AutoChainFlags
 import io.github.tancheng33.tingo.ui.detail.MinutesUiState
 import io.github.tancheng33.tingo.ui.detail.TranscriptionUiState
 import io.github.tancheng33.tingo.data.MeetingExporter
@@ -94,6 +96,8 @@ import io.github.tancheng33.tingo.minutes.remote.LlmChat
 import io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator
 import io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient
 import io.github.tancheng33.tingo.minutes.MinutesService
+import io.github.tancheng33.tingo.recording.LiveTranscriber
+import io.github.tancheng33.tingo.transcription.AsrModels
 import io.github.tancheng33.tingo.transcription.TranscriptionPipeline
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
 import io.github.tancheng33.tingo.ui.detail.MinutesViewModel
@@ -228,8 +232,10 @@ fun TingoRoot(
                     // 边录边转：模型没就绪时给 null，录音照旧、只是不显示实时文字
                     liveTranscriber = if (container.catalog.files.all { file -> container.models.isReady(file) }) {
                         { onSentence: (String) -> Unit ->
-                            io.github.tancheng33.tingo.recording.LiveTranscriber(
-                                asr = TranscriptionPipeline.openAsrModels(container.models, container.catalog),
+                            val models = AsrModels.open(container.models, container.catalog)
+                            LiveTranscriber(
+                                asr = models,
+                                releaseModels = models::close,
                                 onSentence = onSentence,
                             )
                         }
@@ -253,6 +259,19 @@ fun TingoRoot(
     // 转写完了接着写纪要的那一场；只在"刚录完"这条链上设，手动转写不会触发
     var pendingAutoMinutes by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    // 两个 id 合成一份"这一场要不要自动跑"的说明：详情页只接一个参数，
+    // 两处 DetailRoute 调用点也不必各抄一遍四个回调
+    val autoChainFor: (String) -> AutoChainFlags = { id ->
+        AutoChainFlags(
+            transcribe = pendingAutoTranscribe == id,
+            onTranscribeStarted = {
+                pendingAutoTranscribe = null
+                pendingAutoMinutes = id
+            },
+            minutes = pendingAutoMinutes == id,
+            onMinutesStarted = { pendingAutoMinutes = null },
+        )
     }
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
@@ -607,13 +626,7 @@ fun TingoRoot(
                             runCatching { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } }
                         },
                         onChanged = libraryViewModel::refresh,
-                        autoTranscribe = pendingAutoTranscribe == id,
-                        onAutoTranscribeStarted = {
-                            pendingAutoTranscribe = null
-                            pendingAutoMinutes = id
-                        },
-                        autoMinutes = pendingAutoMinutes == id,
-                        onAutoMinutesStarted = { pendingAutoMinutes = null },
+                        autoChain = autoChainFor(id),
                     )
                             } ?: EmptyDetailHint()
                         }
@@ -638,13 +651,7 @@ fun TingoRoot(
                     onOpenSettings = { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } },
                     seekMs = seek,
                     onChanged = libraryViewModel::refresh,
-                    autoTranscribe = pendingAutoTranscribe == id,
-                    onAutoTranscribeStarted = {
-                        pendingAutoTranscribe = null
-                        pendingAutoMinutes = id
-                    },
-                    autoMinutes = pendingAutoMinutes == id,
-                    onAutoMinutesStarted = { pendingAutoMinutes = null },
+                    autoChain = autoChainFor(id),
                 )
                 // 跳一次就够：返回后再进来不该又跳回同一句
                 androidx.compose.runtime.LaunchedEffect(seek) { pendingSeekMs = null }
@@ -964,13 +971,8 @@ private fun DetailRoute(
     seekMs: Long? = null,
     /** 改名/标签等写操作后通知调用方刷新列表 */
     onChanged: () -> Unit = {},
-    /** 刚录完的这一场：进页面就自动开始转写（桌面按"结束即转写"走同一条路） */
-    autoTranscribe: Boolean = false,
-    /** 自动转写启动过就撤掉，避免返回本页又跑一遍 */
-    onAutoTranscribeStarted: () -> Unit = {},
-    /** 自动转写之后接着写纪要（桌面"结束即转写、转写完就写纪要"同一条链） */
-    autoMinutes: Boolean = false,
-    onAutoMinutesStarted: () -> Unit = {},
+    /** 刚录完的这一场：自动转写、转写完接着写纪要（桌面"结束即写完"同一条链） */
+    autoChain: AutoChainFlags = AutoChainFlags(),
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1053,10 +1055,10 @@ private fun DetailRoute(
     val transcription by transcriptionViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { transcriptionViewModel.prepare() }
     // 录完自动转写：等 prepare 把音轨备好（Idle）再开跑，否则 start 会因为"没有录音"直接失败
-    androidx.compose.runtime.LaunchedEffect(meetingId, autoTranscribe, transcription) {
-        if (!autoTranscribe || transcription !is TranscriptionUiState.Idle) return@LaunchedEffect
+    androidx.compose.runtime.LaunchedEffect(meetingId, autoChain.transcribe, transcription) {
+        if (!autoChain.transcribe || transcription !is TranscriptionUiState.Idle) return@LaunchedEffect
         transcriptionViewModel.start()
-        onAutoTranscribeStarted()
+        autoChain.onTranscribeStarted()
     }
 
     val minutesViewModel: MinutesViewModel = viewModel(
@@ -1090,16 +1092,16 @@ private fun DetailRoute(
     androidx.compose.runtime.LaunchedEffect(meetingId) { minutesViewModel.prepare() }
     // 转写一完成就接着写纪要：没配模型服务时 prepare 会把状态置成 NotConfigured，
     // 那就不要自动开（那条路是"去设置"，不是"重试一次就会好"）
-    androidx.compose.runtime.LaunchedEffect(meetingId, autoMinutes, transcription, minutesState, state.detail) {
-        if (!autoMinutes) return@LaunchedEffect
-        val shouldStart = io.github.tancheng33.tingo.ui.detail.AutoChain.shouldAutoStartMinutes(
-            armed = autoMinutes,
+    androidx.compose.runtime.LaunchedEffect(meetingId, autoChain.minutes, transcription, minutesState, state.detail) {
+        if (!autoChain.minutes) return@LaunchedEffect
+        val shouldStart = AutoChain.shouldAutoStartMinutes(
+            armed = autoChain.minutes,
             transcription = transcription,
             hasMinutes = !state.detail?.minutesText.isNullOrBlank(),
             minutes = minutesState,
         )
         // 条件不满足也把标记撤掉：留着它下次进页面又试一遍
-        onAutoMinutesStarted()
+        autoChain.onMinutesStarted()
         if (shouldStart) minutesViewModel.start()
     }
 
@@ -1144,13 +1146,18 @@ private fun DetailRoute(
             guessing = state.guessing,
             guessFailure = state.guessFailure,
             guessNote = state.guessNote,
-            onRenameSpeaker = viewModel::renameSpeaker,
+            onRenameSpeaker = { index, name, afterSave -> viewModel.renameSpeaker(index, name, afterSave) },
             onDeleteRecording = {
-                viewModel.deleteRecording(container.tasks.tasks.value.map { it.meetingId }) { freed ->
-                    container.toasts.show(
-                        context.getString(R.string.detail_audio_deleted, freed / 1_000_000uL),
-                    )
-                }
+                val busyIds = container.tasks.tasks.value.map { it.meetingId }
+                viewModel.deleteRecording(
+                    busyIds = busyIds,
+                    onFreed = { freed ->
+                        container.toasts.show(
+                            context.getString(R.string.detail_audio_deleted, freed / 1_000_000uL),
+                        )
+                    },
+                    onFailed = { detail -> container.toasts.show(detail, error = true) },
+                )
             },
             onRegenerateMinutes = minutesViewModel::start,
             onApplyGuess = viewModel::applyGuess,

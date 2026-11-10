@@ -214,12 +214,18 @@ class DetailViewModel(
      * @param busyIds 正在转写/写纪要的会议：删掉正在被读的录音会让那一场中途炸掉
      * @param onFreed 腾出的字节数（界面用它说"腾出 xx MB"）
      */
-    fun deleteRecording(busyIds: List<String>, onFreed: (ULong) -> Unit) {
+    fun deleteRecording(
+        busyIds: List<String>,
+        onFreed: (ULong) -> Unit,
+        onFailed: (String) -> Unit = {},
+    ) {
         viewModelScope.launch(io) {
             val freed = try {
                 engine.deleteAudio(meetingId, busyIds)
             } catch (e: TingoFailure) {
-                _state.value = _state.value.copy(failure = e.kind)
+                // 删录音失败不能把整页换成错误页（转写和纪要都还好好的）：交给外层弹提示，
+                // 并如实带上引擎的说明（"这场会议还在处理中"比"输入不合法"有用）
+                onFailed(e.detail)
                 return@launch
             }
             // 先停播放再丢文件：反过来的话播放器会去读一个已经不在的文件
@@ -239,7 +245,7 @@ class DetailViewModel(
      *
      * 引擎接口是整表覆盖，所以要把其他人的名字原样带上，否则会被清空。
      */
-    fun renameSpeaker(index: Int, name: String) {
+    fun renameSpeaker(index: Int, name: String, onSaved: () -> Unit = {}) {
         val current = _state.value.speakers
         if (current.isEmpty()) return
         // 引擎是整表覆盖：没动过的说话人要发空串（引擎跳过空值）。
@@ -260,6 +266,8 @@ class DetailViewModel(
                 return@launch
             }
             load()
+            // 名字写进转写之后才轮到"重新生成纪要"：两者并发会让纪要用的还是旧名字
+            onSaved()
         }
     }
 

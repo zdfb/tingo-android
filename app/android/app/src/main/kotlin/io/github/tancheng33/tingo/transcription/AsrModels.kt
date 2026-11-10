@@ -62,7 +62,11 @@ class AsrModels internal constructor(
 
     override fun hasSegment(): Boolean = !vad.empty()
 
-    override fun popSegment(): FloatArray = vad.front().samples
+    override fun popSegment(): FloatArray {
+        val samples = vad.front().samples
+        vad.pop()
+        return samples
+    }
 
     override fun flush() {
         vad.flush()

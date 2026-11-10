@@ -60,6 +60,22 @@ class FishboneGroundingTest {
     }
 
     @Test
+    fun aZeroLengthRecordingHasNoEvidence() {
+        // 桌面无条件比较时长：录音长度未知（0）时任何时间戳都不该算依据
+        val empty = transcript(Triple(0L, "说话人1", "有内容"), durationMs = 0)
+
+        assertNull(FishboneGrounding.resolve("00:05", empty))
+    }
+
+    @Test
+    fun onlyMmSsShapedRefsCount() {
+        // 桌面的正则是 ^\d{1,2}:\d{2}(:\d{2})?$："12点""稍后""1:2" 都不算依据
+        assertNull(FishboneGrounding.resolve("12点", meeting))
+        assertNull(FishboneGrounding.resolve("1:2", meeting))
+        assertNull(FishboneGrounding.resolve("123:45", meeting))
+    }
+
+    @Test
     fun bracketsInRefsAreTolerated() {
         assertEquals(12_000L, FishboneGrounding.resolve("[00:12]", meeting)?.ms)
     }

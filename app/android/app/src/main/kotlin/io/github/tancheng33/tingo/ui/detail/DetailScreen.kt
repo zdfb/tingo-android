@@ -110,7 +110,8 @@ fun DetailScreen(
     onOpenVersion: (String) -> Unit = {},
     onRestoreVersion: (String) -> Unit = {},
     onDeleteVersion: (String) -> Unit = {},
-    onRenameSpeaker: (Int, String) -> Unit = { _, _ -> },
+    /** 给某位说话人改名；第三个参数在名字落盘后执行（"保存并重新生成纪要"用） */
+    onRenameSpeaker: (Int, String, () -> Unit) -> Unit = { _, _, _ -> },
     /** 「只删录音」：录音移到回收站，转写与纪要留着（提示文案由外层给） */
     onDeleteRecording: () -> Unit = {},
     /** 改名后接着重新生成纪要（桌面的"保存并重新生成纪要"） */
@@ -501,7 +502,7 @@ private fun FishboneCard(
                 stringResource(R.string.detail_fishbone_summary, summary.branches, summary.quotes)
             },
             style = MaterialTheme.typography.bodySmall,
-            color = if (summary.withoutEvidence > 0) colors.amber else colors.muted,
+            color = if (summary.withoutEvidence > 0) colors.red else colors.muted,
         )
         fishbone.branches.filter { it.title.isNotBlank() }.forEach { branch ->
             val grounding = FishboneGrounding.ground(branch.refs, transcript)
@@ -540,27 +541,30 @@ private fun FishboneCard(
                         )
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (grounding.level == FishboneGrounding.Level.OK) colors.muted else colors.amber,
+                    // 桌面配色：对不上原话是"红色"（问题），依据很少是"橙色"（提醒），够了才是灰
+                    color = when (grounding.level) {
+                        FishboneGrounding.Level.NONE -> colors.red
+                        FishboneGrounding.Level.WEAK -> colors.amber
+                        FishboneGrounding.Level.OK -> colors.muted
+                    },
                 )
-                if (expandable) {
-                    if (expandedNow) {
-                        grounding.quotes.forEach { quote ->
-                            FishboneQuoteRow(quote = quote, onPlayFrom = onPlayFrom)
-                        }
-                    } else {
-                        androidx.compose.foundation.layout.FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            grounding.quotes.forEach { quote ->
-                                AssistChip(
-                                    onClick = { onPlayFrom(quote.ms.toULong()) },
-                                    label = {
-                                        Text(
-                                            io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms),
-                                        )
-                                    },
-                                )
-                            }
+                if (expandable && expandedNow) {
+                    grounding.quotes.forEach { quote ->
+                        FishboneQuoteRow(quote = quote, onPlayFrom = onPlayFrom)
+                    }
+                } else if (branch.refs.isNotEmpty()) {
+                    // 折叠时照原样显示模型给的时间戳：对不上原话的 ref 也要看得见，
+                    // 否则"这条分支引用了什么"就被界面悄悄删掉了
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        branch.refs.forEach { ref ->
+                            val resolved = FishboneGrounding.quoteOf(ref, transcript)
+                            AssistChip(
+                                onClick = { resolved?.let { onPlayFrom(it.ms.toULong()) } },
+                                enabled = resolved != null,
+                                label = { Text(ref) },
+                            )
                         }
                     }
                 }
@@ -770,7 +774,8 @@ private fun SpeakerBar(
     guessing: Boolean,
     failure: GuessFailure?,
     note: GuessNote?,
-    onRename: (Int, String) -> Unit,
+    /** 改名；第二个回调在名字落盘之后才执行（"保存并重新生成"要用它） */
+    onRename: (Int, String, () -> Unit) -> Unit,
     onGuess: () -> Unit,
     onApplyGuess: (Int) -> Unit,
     /** 有纪要时给"保存并重新生成"：改完名字旧纪要里的称呼就旧了 */
@@ -790,14 +795,14 @@ private fun SpeakerBar(
             onDismiss = { editing = null },
             onConfirm = { name ->
                 editing = null
-                onRename(editingSpeaker.index.toInt(), name)
+                onRename(editingSpeaker.index.toInt(), name, {})
             },
             secondaryAction = if (hasMinutes) stringResource(R.string.detail_save_and_regenerate) else null,
             onSecondary = if (hasMinutes) {
                 { name ->
                     editing = null
-                    onRename(editingSpeaker.index.toInt(), name)
-                    onRegenerate()
+                    // 重新生成要等名字写完：传成回调，名字落盘之后才触发
+                    onRename(editingSpeaker.index.toInt(), name, onRegenerate)
                 }
             } else {
                 null
