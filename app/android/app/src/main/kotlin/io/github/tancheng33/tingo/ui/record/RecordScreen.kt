@@ -64,7 +64,26 @@ import io.github.tancheng33.tingo.ui.clockOf
  *
  * @param level 决定圆点颜色；[StatusLevel.None] 表示正常
  */
-data class HomeStatus(val label: String, val level: StatusLevel = StatusLevel.None)
+data class HomeStatus(val text: HomeStatusText, val level: StatusLevel = StatusLevel.None)
+
+/**
+ * 首页状态行的文案来源。
+ *
+ * 原来这里是拼好的中文字符串，切到英文界面后首页仍是中文（设置页与别处都翻了）。
+ * 改成"先给出是什么状态"，文案由界面按当前语言取。
+ */
+sealed interface HomeStatusText {
+    data object ModelsReady : HomeStatusText
+
+    data object ModelsMissing : HomeStatusText
+
+    /** 已配置纪要服务：显示模型名（用户自己填的，不翻译） */
+    data class ModelName(val name: String) : HomeStatusText
+
+    data object LlmMissing : HomeStatusText
+
+    data class Version(val name: String) : HomeStatusText
+}
 
 enum class StatusLevel { None, Warn, Bad }
 
@@ -509,7 +528,17 @@ private fun RecentAndStatus(
                                 },
                             ),
                     )
-                    Text(row.label, style = MaterialTheme.typography.labelSmall, color = colors.muted)
+                    Text(
+                        text = when (val text = row.text) {
+                            HomeStatusText.ModelsReady -> stringResource(R.string.home_models_ready)
+                            HomeStatusText.ModelsMissing -> stringResource(R.string.home_models_missing)
+                            HomeStatusText.LlmMissing -> stringResource(R.string.home_llm_missing)
+                            is HomeStatusText.ModelName -> text.name
+                            is HomeStatusText.Version -> "v${text.name}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.muted,
+                    )
                 }
             }
         }

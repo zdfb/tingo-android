@@ -242,4 +242,8 @@
     <string name="settings_glossary_added">%1$s（已加）</string>
     <string name="settings_glossary_term_with_variants">%1$s（识别成 %2$s）</string>
     <string name="settings_glossary_more">还有 %1$d 个术语未显示</string>
+    <string name="home_models_ready">识别模型已就绪</string>
+    <string name="home_models_missing">识别模型未就位</string>
+    <string name="home_llm_missing">未配置纪要服务</string>
+    <string name="settings_llm_protocol_openai">OpenAI 兼容</string>
 </resources>

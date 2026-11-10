@@ -373,7 +373,7 @@ private fun LlmServiceSection(
             LlmProtocol.entries.forEach { option ->
                 PillFilter(
                     label = when (option) {
-                        LlmProtocol.OPENAI -> "OpenAI 兼容"
+                        LlmProtocol.OPENAI -> stringResource(R.string.settings_llm_protocol_openai)
                         LlmProtocol.ANTHROPIC -> "Anthropic"
                     },
                     selected = option == protocol,

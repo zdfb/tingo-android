@@ -242,4 +242,8 @@
     <string name="settings_glossary_added">%1$s (added)</string>
     <string name="settings_glossary_term_with_variants">%1$s (heard as %2$s)</string>
     <string name="settings_glossary_more">%1$d more terms not shown</string>
+    <string name="home_models_ready">Transcription model ready</string>
+    <string name="home_models_missing">Transcription model missing</string>
+    <string name="home_llm_missing">Minutes service not configured</string>
+    <string name="settings_llm_protocol_openai">OpenAI-compatible</string>
 </resources>

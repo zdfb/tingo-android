@@ -111,6 +111,7 @@ import io.github.tancheng33.tingo.recording.requiresForegroundService
 import io.github.tancheng33.tingo.ui.record.RecordScreen
 import io.github.tancheng33.tingo.ui.record.RecordViewModel
 import io.github.tancheng33.tingo.engine.GlossaryTerm
+import io.github.tancheng33.tingo.ui.record.HomeStatusText
 import io.github.tancheng33.tingo.ui.settings.SettingsScreen
 
 private const val DETAIL_ROUTE = "detail"
@@ -697,18 +698,14 @@ internal fun homeStatusRows(container: AppContainer): List<HomeStatus> {
     val llm = container.settings.llm
     return listOf(
         HomeStatus(
-            label = if (modelsReady) {
-                "识别模型已就绪"
-            } else {
-                "识别模型未就位"
-            },
+            text = if (modelsReady) HomeStatusText.ModelsReady else HomeStatusText.ModelsMissing,
             level = if (modelsReady) StatusLevel.None else StatusLevel.Warn,
         ),
         HomeStatus(
-            label = if (llm.isConfigured) llm.model else "未配置纪要服务",
+            text = if (llm.isConfigured) HomeStatusText.ModelName(llm.model) else HomeStatusText.LlmMissing,
             level = if (llm.isConfigured) StatusLevel.None else StatusLevel.Bad,
         ),
-        HomeStatus(label = "v${BuildConfig.VERSION_NAME}"),
+        HomeStatus(text = HomeStatusText.Version(BuildConfig.VERSION_NAME)),
     )
 }
 
