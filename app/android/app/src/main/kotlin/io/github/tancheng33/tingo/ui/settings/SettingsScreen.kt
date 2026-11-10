@@ -5,8 +5,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import io.github.tancheng33.tingo.minutes.remote.LlmPresets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -646,21 +644,21 @@ private fun AutoStopSection(minutes: Int, onSelect: (Int) -> Unit) {
 @Composable
 private fun PresetRow(current: String, english: Boolean, onPick: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(LlmPresets.all) { preset ->
+        // 用换行布局而不是横向滚动：滚动会把 Claude / Gemini / 自定义 藏到屏幕外，
+        // 用户看不到就不存在。五家一排挤两个，换行后全都露出来
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LlmPresets.all.forEach { preset ->
                 PillFilter(
                     label = preset.name(english),
                     selected = preset.id == current,
                     onClick = { onPick(preset.id) },
                 )
             }
-            item {
-                PillFilter(
-                    label = stringResource(R.string.settings_llm_preset_custom),
-                    selected = current == LlmPresets.CUSTOM_ID,
-                    onClick = { onPick(LlmPresets.CUSTOM_ID) },
-                )
-            }
+            PillFilter(
+                label = stringResource(R.string.settings_llm_preset_custom),
+                selected = current == LlmPresets.CUSTOM_ID,
+                onClick = { onPick(LlmPresets.CUSTOM_ID) },
+            )
         }
         Text(
             stringResource(R.string.settings_llm_preset_hint),
