@@ -80,3 +80,36 @@ class TaskCenterTest {
         assertEquals(0.1f, center.tasks.value.single().fraction)
     }
 }
+
+/**
+ * 目录名 → 标题。
+ *
+ * 用"取最后一个下划线之后"会在带下划线的标题上翻车：英文示例会议的名字里
+ * 就有好几个下划线，那样只会剩下最后一个词。
+ */
+class MeetingTitleTest {
+
+    @Test
+    fun stripsTheTimestampPrefix() {
+        assertEquals("项目A", meetingTitleOf("2026-10-27_0930_项目A"))
+    }
+
+    @Test
+    fun keepsUnderscoresInsideTheTitle() {
+        assertEquals(
+            "Sample__Signup_conversion_review",
+            meetingTitleOf("2026-10-28_1400_Sample__Signup_conversion_review"),
+        )
+    }
+
+    @Test
+    fun keepsTheDuplicateSuffix() {
+        // 同一分钟录两次时引擎会加 _2 后缀：那是会议名的一部分，不该被当成时间前缀吃掉
+        assertEquals("项目A_2", meetingTitleOf("2026-10-27_0930_项目A_2"))
+    }
+
+    @Test
+    fun fallsBackToTheRawNameWhenThereIsNoPrefix() {
+        assertEquals("随手录的一段", meetingTitleOf("随手录的一段"))
+    }
+}

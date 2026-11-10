@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
+import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 import io.github.tancheng33.tingo.data.BatchAction
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.SearchHit
@@ -56,6 +57,13 @@ sealed interface LibraryUiState {
 class LibraryViewModel(
     private val repository: MeetingRepository,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * 进行中任务登记表：会议删除/进回收站时把它的任务一起撤掉。
+     *
+     * 放在这里而不是外壳逐处调用——批量删除也是一条删除路径，漏掉就会出现
+     * "点进去是一场不存在的会议"。
+     */
+    private val tasks: TaskCenter? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)
@@ -166,6 +174,7 @@ class LibraryViewModel(
         viewModelScope.launch(io) {
             try {
                 repository.delete(id)
+                tasks?.forget(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
             }
@@ -178,6 +187,8 @@ class LibraryViewModel(
         viewModelScope.launch(io) {
             try {
                 repository.deleteToTrash(id)
+                // 进了回收站就点不开了：别让它还挂在"进行中"里
+                tasks?.forget(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
             }
@@ -290,7 +301,10 @@ class LibraryViewModel(
         _lastBatchFailures.value = 0
         viewModelScope.launch(io) {
             val failures = try {
-                repository.batch(ids, action, tag).count { !it.ok }
+                val outcomes = repository.batch(ids, action, tag)
+                // 批量删除也是一条删除路径：漏掉这里，首页会挂着一场删掉的会议
+                if (action == BatchAction.DELETE) outcomes.filter { it.ok }.forEach { tasks?.forget(it.id) }
+                outcomes.count { !it.ok }
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
                 ids.size

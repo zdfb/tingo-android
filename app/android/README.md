@@ -100,6 +100,11 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 打进 `assets/models/`，**debug 包实测 620 MB**（模型按不压缩方式存放；release 用签名压缩会更小）。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
 （幂等、带进度），**转写全程不需要网络**。（早期版本的端侧纪要 GGUF 与 llama.cpp 已整体移除。）
 
+**图标与品牌图是生成的，不要手改**：`res/mipmap-*/ic_launcher*.png` 与
+`res/drawable-nodpi/tingo_mark.png` 都由 `scripts/gen-brand-assets.py` 从
+`docs/assets/tingo-icon.png` 生成（需要 Pillow）。改了品牌图就重跑一遍脚本，
+否则下次有人重新生成时会出现"图库里两个版本"。
+
 模型不进仓库（300+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：
 
 ```bash

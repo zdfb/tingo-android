@@ -10,6 +10,7 @@ import io.github.tancheng33.tingo.transcription.Transcript
 import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 import io.github.tancheng33.tingo.ui.tasks.TaskKind
+import io.github.tancheng33.tingo.ui.tasks.meetingTitleOf
 import io.github.tancheng33.tingo.transcription.Transcriber
 import io.github.tancheng33.tingo.transcription.WavReader
 import java.io.File
@@ -180,11 +181,6 @@ class TranscriptionViewModel(
         tasks?.finish(RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name))
     }
 
-    /**
-     * 会议标题：取目录名去掉时间前缀。
-     *
-     * 目录名形如 `2026-10-27_0930_项目A`，首页那块"进行中"要显示的是用户认得的名字，
-     * 不是一串带时间戳的目录名。
-     */
-    private fun meetingTitle(): String = meetingDir.name.substringAfterLast('_', meetingDir.name)
+    /** 会议标题：去掉目录名的时间前缀（与首页"进行中"、会议库显示的是同一个名字）。 */
+    private fun meetingTitle(): String = meetingTitleOf(meetingDir.name)
 }

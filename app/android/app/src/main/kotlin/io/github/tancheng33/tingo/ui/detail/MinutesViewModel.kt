@@ -7,6 +7,7 @@ import io.github.tancheng33.tingo.minutes.MinutesService
 import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 import io.github.tancheng33.tingo.ui.tasks.TaskKind
+import io.github.tancheng33.tingo.ui.tasks.meetingTitleOf
 import io.github.tancheng33.tingo.minutes.remote.LlmRejected
 import io.github.tancheng33.tingo.minutes.remote.LlmUnavailable
 import io.github.tancheng33.tingo.transcription.TranscriptWriter
@@ -133,6 +134,6 @@ class MinutesViewModel(
         _state.value = MinutesUiState.Idle
     }
 
-    /** 会议标题：取目录名去掉时间前缀（与首页"进行中"显示的一致）。 */
-    private fun meetingTitle(): String = meetingDir.name.substringAfterLast('_', meetingDir.name)
+    /** 会议标题：去掉目录名的时间前缀（与首页"进行中"、会议库显示的是同一个名字）。 */
+    private fun meetingTitle(): String = meetingTitleOf(meetingDir.name)
 }

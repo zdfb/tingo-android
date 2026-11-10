@@ -3,12 +3,12 @@ package io.github.tancheng33.tingo.ui.tasks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /** 一件正在进行的长任务。 */
 enum class TaskKind {
     TRANSCRIBE,
     MINUTES,
-    IMPORT,
 }
 
 /**
@@ -35,6 +35,11 @@ data class RunningTask(
  * 显示留给首页那块"进行中"区域。
  *
  * 这里不持有 Job、不负责取消：任务的生命周期由它的 ViewModel 管，这里只做一张登记表。
+ *
+ * 所有改动都走 `update`（CAS 重试），因为这个表**会被多个线程同时改**：
+ * 转写进度来自 IO 协程，删会议的 `forget` 来自主线程。裸的
+ * `_tasks.value = _tasks.value.xxx` 是读-改-写，两边撞上会丢一次写——表现正好是本类
+ * 想避免的那种"一件活永远挂在首页上"。
  */
 class TaskCenter {
 
@@ -44,20 +49,20 @@ class TaskCenter {
     /** 登记一件活；同一个 key 再登记就是更新（例如从"准备中"变成带进度的运行中）。 */
     fun start(key: String, meetingId: String, title: String, kind: TaskKind, fraction: Float? = null) {
         val task = RunningTask(key, meetingId, title, kind, fraction)
-        _tasks.value = _tasks.value.filterNot { it.key == key } + task
+        _tasks.update { tasks -> tasks.filterNot { it.key == key } + task }
     }
 
     fun progress(key: String, fraction: Float?) {
-        _tasks.value = _tasks.value.map { if (it.key == key) it.copy(fraction = fraction) else it }
+        _tasks.update { tasks -> tasks.map { if (it.key == key) it.copy(fraction = fraction) else it } }
     }
 
     /** 活干完了（成功、失败、取消都一样）：从表里撤掉。 */
     fun finish(key: String) {
-        _tasks.value = _tasks.value.filterNot { it.key == key }
+        _tasks.update { tasks -> tasks.filterNot { it.key == key } }
     }
 
     /** 会议被删了：把它的活都撤掉，免得点进去是一场不存在的会议。 */
     fun forget(meetingId: String) {
-        _tasks.value = _tasks.value.filterNot { it.meetingId == meetingId }
+        _tasks.update { tasks -> tasks.filterNot { it.meetingId == meetingId } }
     }
 }

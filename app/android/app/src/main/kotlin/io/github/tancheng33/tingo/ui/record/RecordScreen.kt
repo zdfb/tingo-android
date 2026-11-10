@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -532,6 +533,8 @@ private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
             color = colors.text,
         )
         tasks.forEach { task ->
+            // 用 key 绑定行身份：任务完成时会从中间抽走一行，没有 key 会让进度条串到别的行上
+            key(task.key) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -561,6 +564,7 @@ private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
                     LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                 }
             }
+            }
         }
     }
 }
@@ -569,5 +573,4 @@ private fun RunningTasks(tasks: List<RunningTask>, onOpen: (String) -> Unit) {
 private fun TaskKind.labelRes(): Int = when (this) {
     TaskKind.TRANSCRIBE -> R.string.task_transcribe
     TaskKind.MINUTES -> R.string.task_minutes
-    TaskKind.IMPORT -> R.string.task_import
 }

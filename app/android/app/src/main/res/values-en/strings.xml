@@ -236,5 +236,4 @@
     <string name="record_running_tasks">In progress (%1$d)</string>
     <string name="task_transcribe">Transcribing</string>
     <string name="task_minutes">Writing minutes</string>
-    <string name="task_import">Importing</string>
 </resources>

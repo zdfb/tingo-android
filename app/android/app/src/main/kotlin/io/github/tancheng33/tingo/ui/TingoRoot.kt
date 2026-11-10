@@ -145,7 +145,7 @@ fun TingoRoot(
 
     val libraryViewModel: LibraryViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { LibraryViewModel(MeetingRepository(container.engine)) }
+            initializer { LibraryViewModel(MeetingRepository(container.engine), tasks = container.tasks) }
         },
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()
@@ -458,11 +458,7 @@ fun TingoRoot(
                             unreadablePath = container.meetingDir(card.id).absolutePath
                         },
                         onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
-                        onDelete = { card ->
-                            libraryViewModel.delete(card.id)
-                            // 会议没了，它挂着的"进行中"也得撤：点进去是一场不存在的会议
-                            container.tasks.forget(card.id)
-                        },
+                        onDelete = { card -> libraryViewModel.delete(card.id) },
                         onOpenAtHit = { id, ms ->
                             onOpenMeeting(id)
                             // 跳到命中位置由详情页的播放器接手：先记录待跳转毫秒
@@ -473,11 +469,7 @@ fun TingoRoot(
                             onSelectAll = libraryViewModel::selectAll,
                             onClearSelection = libraryViewModel::clearSelection,
                             onBatch = { action, tag -> libraryViewModel.runBatch(action, tag) },
-                            onDeleteToTrash = { id ->
-                                libraryViewModel.deleteToTrash(id)
-                                // 进回收站就点不开了：同样不该留在"进行中"里
-                                container.tasks.forget(id)
-                            },
+                            onDeleteToTrash = libraryViewModel::deleteToTrash,
                             onShowTrash = libraryViewModel::showTrash,
                             onShowMeetings = libraryViewModel::showMeetings,
                             onRestore = libraryViewModel::restoreFromTrash,

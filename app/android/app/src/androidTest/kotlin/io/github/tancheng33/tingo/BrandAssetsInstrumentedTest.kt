@@ -3,6 +3,7 @@ package io.github.tancheng33.tingo
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,10 +31,20 @@ class BrandAssetsInstrumentedTest {
     }
 
     @Test
-    fun launcherIconIsDeclaredAndResolvable() {
-        val resolved = context.packageManager.getApplicationIcon(context.packageName)
+    fun launcherIconIsOurOwnResource() {
+        // 只看"能不能拿到图标"没有意义：没有 android:icon 时系统也会给一个默认图标。
+        // 这里比的是资源 id —— 声明成 @mipmap/ic_launcher 才会等于我们这张
+        val declared = context.applicationInfo.icon
 
-        // 没有 android:icon 时系统会给一个默认图标；这里要求至少能解析出图标且不是空对象
-        assertNotNull("应用没有自己的图标", resolved)
+        assertEquals(
+            "应用图标不是我们声明的 @mipmap/ic_launcher（manifest 漏了 android:icon？）",
+            R.mipmap.ic_launcher,
+            declared,
+        )
+        // 图标资源本身必须能真的解出来（XML 引错时这里会抛 Resources.NotFoundException）
+        assertNotNull(
+            "@mipmap/ic_launcher 解不出来",
+            context.getDrawable(R.mipmap.ic_launcher),
+        )
     }
 }
