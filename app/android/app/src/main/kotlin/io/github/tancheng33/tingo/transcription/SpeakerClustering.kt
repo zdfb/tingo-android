@@ -105,8 +105,7 @@ class SpeakerClustering {
                 centers += x[pick].copyOf()
             }
             val labels = IntArray(x.size)
-            var rounds = 0
-            while (rounds++ < MAX_KMEANS_ROUNDS) {
+            for (round in 0 until MAX_KMEANS_ROUNDS) {
                 var changed = false
                 for (i in x.indices) {
                     val l = argMin(centers.map { squaredDistance(x[i], it) })
@@ -185,8 +184,7 @@ class SpeakerClustering {
         val n = matrix.size
         val a = Array(n) { matrix[it].copyOf() }
         val v = Array(n) { i -> DoubleArray(n) { j -> if (i == j) 1.0 else 0.0 } }
-        var sweeps = 0
-        while (sweeps++ < MAX_SWEEPS) {
+        for (sweep in 0 until MAX_SWEEPS) {
             var off = 0.0
             for (i in 0 until n) for (j in i + 1 until n) off += a[i][j] * a[i][j]
             // 非对角元都小到可以忽略：已经对角化了，再扫也不会更准（不加这个退出就永远跑满 30 轮）

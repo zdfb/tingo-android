@@ -145,7 +145,7 @@ class TranscriptionPipeline(
                 val startMs = startSample * 1000L / sampleRate
                 val endMs = endSample * 1000L / sampleRate
                 // 太短的段大概率是噪声或半个字，丢掉
-                if (endMs - startMs >= MIN_SEGMENT_MS) {
+                if (endMs - startMs >= AsrModels.MIN_SPEECH_MS) {
                     onSegment(Segment(startMs, endMs, endSample, speech.samples))
                 }
             }
@@ -169,7 +169,6 @@ class TranscriptionPipeline(
     private fun requireModel(): AsrModels = AsrModels.open(store, catalog)
 
     companion object {
-        /** 短于 200 ms 的段基本是噪声（与边录边转共用同一个门限） */
-        private const val MIN_SEGMENT_MS = AsrModels.MIN_SPEECH_MS
+
     }
 }

@@ -80,14 +80,14 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 提到 33 tok/s，但改不了"长上下文预填充动辄几十秒"这个量级。既然用户要的是点了就有结果，
 这一步改走远端 API；语音模型仍在本机，转写依旧离线可用。
 
-当前状态（2026-11-10 实机验收）：**JVM 单测 428 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
+当前状态（2026-11-10 实机验收）：**JVM 单测 429 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
 arm64）跑通 **35 个设备级用例**（引擎桥接、备份恢复、设置页、会议库管理、音频导入、示例会议、
 跨会议术语表、试录音频探针、品牌资源）。
 
 语音链路的离线可用性由 `RecognitionInstrumentedTest` / `PipelineInstrumentedTest` 证明；
 它们要下载约 750 MB 模型，**本轮没有跑**，所以这里不把"飞行模式可识别"写成结论。
 
-设备侧一共 57 个 `@Test`：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
+设备侧一共 63 个 `@Test`（24 个测试类）：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
 instrumentation 发起的 Activity 启动）；非 UI 46 个里有 3 个在本机跑不了——
 `LanguageSwitchTest`、`MainActivityEndToEndTest`（同一个 Activity 启动限制，会挂住）
 与 `ModelDownloadInstrumentedTest`（要联网下 700 MB 模型）；另有 4 个类依赖下载模型或重活

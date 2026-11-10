@@ -17,7 +17,14 @@ object FishboneGrounding {
     const val WEAK_CHARS = 20
 
     /** 一条引用对应的原话。 */
-    data class Quote(val ms: Long, val speaker: String, val text: String)
+    data class Quote(
+        /** 这句话在录音里的起点（点它从这里开始播） */
+        val ms: Long,
+        val speaker: String,
+        val text: String,
+        /** 纪要里写的时间戳原文（00:05 之类）：界面显示它，而不是被吸附到的句子起点 */
+        val ref: String = "",
+    )
 
     enum class Level { OK, WEAK, NONE }
 
@@ -50,16 +57,16 @@ object FishboneGrounding {
             if (turn.startMs.toLong() <= ms + 999) hit = index
         }
         val turn = turns.getOrNull(hit) ?: return null
-        return Quote(ms = turn.startMs.toLong(), speaker = turn.speakerName, text = turn.text)
+        return Quote(
+            ms = turn.startMs.toLong(),
+            speaker = turn.speakerName,
+            text = turn.text,
+            ref = cleanRef(ref),
+        )
     }
 
     fun ground(refs: List<String>, transcript: Transcript?): Grounding {
-        if (transcript == null) return Grounding(emptyList(), 0, Level.NONE)
-        val seen = HashSet<Long>()
-        val quotes = refs
-            .mapNotNull { resolve(it, transcript) }
-            .filter { seen.add(it.ms) }
-            .sortedBy { it.ms }
+        val quotes = split(refs, transcript).quotes
         // 按码点数：桌面用 `[...text].length`，代理对（表情、生僻字）两边要数成一个字
         val chars = quotes.sumOf { quote ->
             quote.text.codePointCount(0, quote.text.length)
@@ -81,11 +88,14 @@ object FishboneGrounding {
     data class RefChips(val quotes: List<Quote>, val unresolved: List<String>)
 
     fun split(refs: List<String>, transcript: Transcript?): RefChips {
-        val seen = HashSet<String>()
-        val unresolved = refs.filter { ref ->
-            transcript?.let { resolve(ref, it) } == null && seen.add(ref)
+        // 一次遍历：对得上的按毫秒去重（同一句话只说一次），对不上的按原文去重
+        val bySecond = LinkedHashMap<Long, Quote>()
+        val unresolved = LinkedHashSet<String>()
+        refs.forEach { ref ->
+            val quote = transcript?.let { resolve(ref, it) }
+            if (quote != null) bySecond.putIfAbsent(quote.ms, quote) else unresolved += ref
         }
-        return RefChips(quotes = ground(refs, transcript).quotes, unresolved = unresolved)
+        return RefChips(quotes = bySecond.values.sortedBy { it.ms }, unresolved = unresolved.toList())
     }
 
     fun summarize(fishbone: Fishbone, transcript: Transcript?): Summary {
@@ -98,9 +108,12 @@ object FishboneGrounding {
         )
     }
 
+    /** 去掉方括号与空白：`[00:12]` → `00:12`。 */
+    fun cleanRef(ref: String): String = ref.trim().removePrefix("[").removeSuffix("]")
+
     /** `mm:ss` / `h:mm:ss` → 毫秒；认不出返回 null（与桌面 `tsToMs` 同一套写法）。 */
     fun parseTimestamp(ref: String): Long? {
-        val clean = ref.trim().removePrefix("[").removeSuffix("]")
+        val clean = cleanRef(ref)
         // 桌面只认 `^\d{1,2}:\d{2}(:\d{2})?$`：别的写法（"稍后""12点"）一律不算依据
         if (!TIMESTAMP_PATTERN.matches(clean)) return null
         val parts = clean.split(':')

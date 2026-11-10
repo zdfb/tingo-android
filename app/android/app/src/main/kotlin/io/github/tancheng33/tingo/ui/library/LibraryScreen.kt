@@ -514,6 +514,8 @@ private fun BatchBar(
     val colors = TingoTheme.colors
     // 加标签与移除标签用的是同一个输入框，靠这个记住当前要执行哪个动作
     var tagDialog by remember { mutableStateOf<BatchAction?>(null) }
+    // 「只删录音」不可撤销：点按钮先弹确认
+    var confirmDeleteAudio by remember { mutableStateOf(false) }
     if (tagDialog != null) {
         TextInputDialog(
             title = stringResource(
@@ -543,6 +545,19 @@ private fun BatchBar(
             TextButton(onClick = onSelectAll) { Text(stringResource(R.string.library_select_all), color = colors.blue) }
             TextButton(onClick = onClear) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
         }
+        if (confirmDeleteAudio) {
+            TingoConfirmDialog(
+                title = stringResource(R.string.detail_delete_audio_confirm_title),
+                body = stringResource(R.string.library_batch_delete_audio_body),
+                confirmLabel = stringResource(R.string.detail_delete_audio),
+                destructive = true,
+                onConfirm = {
+                    confirmDeleteAudio = false
+                    onBatch(BatchAction.DELETE_AUDIO, "")
+                },
+                onDismiss = { confirmDeleteAudio = false },
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton(stringResource(R.string.library_archive), { onBatch(BatchAction.ARCHIVE, "") }, kind = PillKind.Soft)
             PillButton(
@@ -560,9 +575,10 @@ private fun BatchBar(
                 { tagDialog = BatchAction.TAG_REMOVE },
                 kind = PillKind.Soft,
             )
+            // 「只删录音」是真删（腾出空间、不能撤销）：必须先弹确认，和单场详情页同一个文案
             PillButton(
                 stringResource(R.string.library_batch_delete_audio),
-                { onBatch(BatchAction.DELETE_AUDIO, "") },
+                { confirmDeleteAudio = true },
                 kind = PillKind.Soft,
             )
             // 删除进回收站，可恢复；界面在动作前不来第二遍确认，因为回收站本身就是后悔药

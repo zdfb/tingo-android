@@ -174,7 +174,8 @@ class LibraryViewModelTest {
         meetings = emptyList()
         advanceUntilIdle()
 
-        assertEquals(listOf("m1"), engine.deleted)
+        // 单条删除与桌面一致：进回收站（可恢复），不是直删
+        assertEquals(listOf("m1"), engine.trashed)
         assertEquals(LibraryUiState.Empty, vm.state.value)
     }
 

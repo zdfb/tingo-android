@@ -73,7 +73,7 @@
     <string name="library_unarchive">取消归档</string>
     <string name="library_delete">删除会议</string>
     <string name="library_delete_title">删除这场会议？</string>
-    <string name="library_delete_body">录音、转写、纪要会一起删除，无法恢复。</string>
+    <string name="library_delete_body">录音、转写和纪要会一起移到废纸篓，需要的话可以恢复。</string>
     <string name="library_delete_confirm">删除</string>
     <string name="detail_export">导出并分享</string>
     <string name="err_no_recording">这场会议没有可转写的录音</string>
@@ -287,4 +287,5 @@
     <string name="detail_delete_audio_confirm_body">录音会被删除，无法恢复；转写和纪要保留，以后就不能回听了。</string>
     <string name="detail_save_and_regenerate">保存并重新生成纪要</string>
     <string name="detail_audio_deleted">录音已删除，腾出 %1$d MB</string>
+    <string name="library_batch_delete_audio_body">选中会议的录音会被删除，无法恢复；转写和纪要保留，但以后不能回听。</string>
 </resources>

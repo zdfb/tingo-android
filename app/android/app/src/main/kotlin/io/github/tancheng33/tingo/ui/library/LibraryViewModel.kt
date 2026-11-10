@@ -205,7 +205,9 @@ class LibraryViewModel(
         if (rejectIfBusy(id)) return
         viewModelScope.launch(io) {
             try {
-                repository.delete(id)
+                // 与桌面一致：单条删除也进回收站（批量删除本来就走回收站），
+                // 用户点错了能从"最近删除"里拿回来
+                repository.deleteToTrash(id)
                 tasks?.forget(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind

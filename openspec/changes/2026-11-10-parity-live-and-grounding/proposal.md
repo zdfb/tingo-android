@@ -22,8 +22,8 @@
   时间戳可点回听，分支可展开"谁说、什么时候、说了什么"。
 - **说话人聚类**：换成桌面 `cluster.rs` 的谱聚类（n<20 算一人、上限 15、合并 0.78、剪枝 0.022、
   k-means 固定种子）；纯 Kotlin 的 Jacobi 分解上限 256 段，其余按余弦归档。
-- **只删录音**：详情页溢出菜单新增「只删录音」（移到废纸篓，转写与纪要保留）；
-  同时修正 FFI `delete_audio` 原来直接 `remove_file` 的语义错（桌面是移到废纸篓）。
+- **只删录音**：详情页溢出菜单与批量条新增「只删录音」：真删录音文件以腾出空间，
+  转写与纪要保留；确认框明说无法恢复（桌面挪进系统废纸篓，Android 没有可浏览的回收站）。
 - **保存并重新生成纪要**：改完说话人名字可直接重新生成（`TextInputDialog` 支持次要动作）。
 
 ## Impact
@@ -32,7 +32,7 @@
   `recording/LiveTranscriber.kt`、`ui/detail/AutoChain.kt`、`ui/detail/FishboneGrounding.kt`
 - `SpeakerClustering.kt` 重写（公开 API 不变，构造参数从 `threshold` 改为 `maxSpeakers/limit`）
 - `MicRecorder.onSamples`、`RecordViewModel.liveLines`、`DetailViewModel.deleteRecording/hasAudio`
-- 引擎：`app/engine-ffi/src/lib.rs` 新增 `delete_audio`，批量 `delete_audio` 改为进回收站
+- 引擎：`app/engine-ffi/src/lib.rs` 新增 `delete_audio`（真删），批量 `delete_audio` 走同一条路径
 - 规格：`local-transcription` 增加"边录边出字"与"谱聚类"两条需求，
   `meeting-minutes` 增加"鱼骨图核对原文"一条需求，`meeting-library-read` 增加"只删录音"一条需求
 - 风险：边录边转与录音同进程抢 CPU（识别跟不上时丢样本，不阻塞录音）；

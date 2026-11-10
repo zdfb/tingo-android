@@ -73,7 +73,7 @@
     <string name="library_unarchive">Unarchive</string>
     <string name="library_delete">Delete meeting</string>
     <string name="library_delete_title">Delete this meeting?</string>
-    <string name="library_delete_body">Recording, transcript and minutes are deleted together. This cannot be undone.</string>
+    <string name="library_delete_body">The recording, transcript and minutes move to the Trash — you can restore them from there.</string>
     <string name="library_delete_confirm">Delete</string>
     <string name="detail_export">Export and share</string>
     <string name="err_no_recording">This meeting has no recording that can be transcribed</string>
@@ -287,4 +287,5 @@
     <string name="detail_delete_audio_confirm_body">The recording is deleted permanently; the transcript and minutes stay, but you can\'t play it back.</string>
     <string name="detail_save_and_regenerate">Save &amp; regenerate minutes</string>
     <string name="detail_audio_deleted">Recording deleted — freed %1$d MB</string>
+    <string name="library_batch_delete_audio_body">The recordings of the selected meetings are deleted permanently; transcripts and minutes stay, but they can no longer be played back.</string>
 </resources>

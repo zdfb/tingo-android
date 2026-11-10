@@ -111,7 +111,17 @@ class RecordViewModel(
     private val _liveLines = MutableStateFlow<List<String>>(emptyList())
     val liveLines: StateFlow<List<String>> = _liveLines.asStateFlow()
 
+    @Volatile
     private var live: LiveTranscriber? = null
+
+    /**
+     * 实时转写的"场次号"。
+     *
+     * 上一场的推理线程可能还在收尾（最长几秒），它的回调不该把句子灌进这一场。
+     * 用自增场次号判断，比拿对象自己引用自己清楚得多。
+     */
+    @Volatile
+    private var liveSession = 0
 
 
 
@@ -245,18 +255,19 @@ class RecordViewModel(
         val factory = liveTranscriber ?: return
         val mic = capture as? MicRecorder ?: return // 只有真实麦克风有样本回调
         _liveLines.value = emptyList()
-        lateinit var created: LiveTranscriber
-        created = runCatching {
+        val session = ++liveSession
+        val created = runCatching {
             factory { sentence ->
                 // 上一场的推理线程可能还在收尾：它的句子不该灌进这一场
-                if (live !== created) return@factory
+                if (liveSession != session) return@factory
                 // 回调在推理线程上：`update` 是原子的读改写；手写
                 // "value = value + s" 会让并发回调互相覆盖（丢句、顺序乱）
                 _liveLines.update { lines -> (lines + sentence).takeLast(LIVE_LINES_SHOWN) }
             }
         }.getOrNull() ?: return
-        created.start()
+        // 先挂上引用再启动：反过来的话第一句可能因为"还没挂上"被丢掉
         live = created
+        created.start()
         mic.onSamples = { samples -> created.offer(samples) }
     }
 
@@ -266,11 +277,23 @@ class RecordViewModel(
      * `close()` 会 join 推理线程（最多 3 秒）并释放四个原生模型，放到 IO 上跑，
      * 否则收尾这几秒会卡住界面。
      */
-    private fun stopLiveTranscription() {
+    private fun stopLiveTranscription(joinNow: Boolean = false) {
         (capture as? MicRecorder)?.onSamples = null
         val transcriber = live ?: return
-        live = null
-        viewModelScope.launch(io) { transcriber.close() }
+        if (joinNow) {
+            // onCleared 之后 viewModelScope 已经取消，launch 出去的协程不会执行：
+            // 这里必须同步收尾（join 上限 3 秒，且这是最后一次机会）
+            liveSession++
+            live = null
+            transcriber.close()
+            return
+        }
+        // 收尾放到 IO 上：join 最多 3 秒，不该卡界面。场次号在 close 之后才推进，
+        // 让推理线程把缓冲里最后那几句发完
+        viewModelScope.launch(io) {
+            transcriber.close()
+            if (live === transcriber) live = null
+        }
     }
 
     /**
@@ -394,6 +417,8 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
+        // 中断同样是"这一场到此为止"：实时转写的线程与模型要一起收掉
+        stopLiveTranscription(joinNow = true)
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
         // 中断也要把两路合起来，否则对方的声音就留在了没人看的 system.wav 里；
@@ -412,8 +437,9 @@ class RecordViewModel(
      * 但退出应用、或系统回收界面时会。
      */
     override fun onCleared() {
-        // 实时转写持有四个原生模型与一条线程：离开录音页不关就是永久泄漏
-        stopLiveTranscription()
+        // 实时转写持有四个原生模型与一条线程：离开录音页不关就是永久泄漏。
+        // 这里必须同步收尾——onCleared 时 viewModelScope 已经取消，异步的 close 不会执行
+        stopLiveTranscription(joinNow = true)
         if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) {
             runCatching { capture.stop() }
             currentDir?.let { mergeInBackground(it) }
@@ -428,7 +454,7 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
-        stopLiveTranscription()
+        stopLiveTranscription(joinNow = true)
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
         session.fail("用户取消")

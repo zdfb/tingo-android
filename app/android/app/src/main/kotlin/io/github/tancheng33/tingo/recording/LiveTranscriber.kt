@@ -27,7 +27,18 @@ class LiveTranscriber(
     private var pending = FloatArray(0)
     private var closed = false
     private val running = AtomicBoolean(false)
-    private val worker = Thread({ loop() }, "tingo-live-asr").apply { isDaemon = true }
+    private val worker = Thread(
+        {
+            // 释放放在线程自己的收尾里：既不和还在跑的 recognize() 抢对象（use-after-free），
+            // 也不会因为 join 超时把模型永远留在内存里
+            try {
+                loop()
+            } finally {
+                runCatching { releaseModels() }
+            }
+        },
+        "tingo-live-asr",
+    ).apply { isDaemon = true }
 
     /** 窗口大小：Silero VAD 要求固定 512 采样。 */
     private val window: Int = WINDOW_SAMPLES
@@ -55,18 +66,13 @@ class LiveTranscriber(
     }
 
     /**
-     * 标记关闭、停止线程、释放模型。
+     * 标记关闭并停止线程。模型由推理线程自己在退出时释放（见 [worker]）。
      *
-     * 每场录音都会新建一份 [AsrModels]（VAD/识别/标点/声纹四个原生对象），这里不释放就会
-     * 一场会议漏一份，几次录音之后内存里挂着一堆没人用的模型。
+     * 每场录音都会新建一份 [AsrModels]（VAD/识别/标点/声纹四个原生对象）：不释放就会一场漏一份。
      */
     fun close() {
         synchronized(lock) { closed = true }
         stop()
-        // 线程还活着说明它可能正卡在 flush()/recognize() 里（一段最长 30 秒）：这时候释放原生
-        // 对象就是 use-after-free。宁可漏掉这一份模型，也不能在别人脚下抽地毯。
-        if (worker.isAlive) return
-        runCatching { releaseModels() }
     }
 
     private fun loop() {
@@ -119,16 +125,13 @@ class LiveTranscriber(
             val speech = asr.popSegment()
             val durationMs = speech.size * 1000L / sampleRate
             // 太短的一段大概率是噪声：与转写管线同一个门限，实时文字不该比最终结果更花
-            if (durationMs < MIN_SPEECH_MS) continue
+            if (durationMs < AsrModels.MIN_SPEECH_MS) continue
             val text = runCatching { asr.recognize(speech) }.getOrDefault("").trim()
             if (text.isNotEmpty()) onSentence(text)
         }
     }
 
     companion object {
-        /** 与正式转写同一个门限（定义在 [AsrModels.MIN_SPEECH_MS]） */
-        const val MIN_SPEECH_MS = AsrModels.MIN_SPEECH_MS
-
         /** 缓冲上限：约 30 秒的样本；超过就丢新来的，保住录音线程 */
         const val MAX_PENDING_SAMPLES = 16_000 * 30
 

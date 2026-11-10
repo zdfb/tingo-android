@@ -259,8 +259,8 @@ fun DetailScreen(
                                 )
                             }
                             // 有录音才给「只删录音」：没有录音的会议点了只会报错
-                            // 能播就等于"有录音"：引擎的 hasAudio 只认混音后的"录音.*"，
-                            // 崩溃/未混音的会议只剩 mic/system 原始音轨（照样能播、也能删）
+                            // 能播就等于有录音：引擎的 hasAudio 只认混音后的"录音.*"，而崩溃/未混音的
+                            // 会议只剩 mic/system 原始音轨——照样能播、也能删
                             if (state.playback.available || detail?.summary?.hasAudio == true) {
                                 DropdownMenuItem(
                                     text = {
@@ -564,9 +564,8 @@ private fun FishboneCard(
                         refs.quotes.forEach { quote ->
                             AssistChip(
                                 onClick = { onPlayFrom(quote.ms.toULong()) },
-                                label = {
-                                    Text(io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms))
-                                },
+                                // 显示纪要里写的时间戳原文：换成句子起点会让人以为"时间戳被改了"
+                                label = { Text(quote.ref.ifBlank { Transcript.mmss(quote.ms) }) },
                             )
                         }
                         refs.unresolved.forEach { ref ->
@@ -596,7 +595,7 @@ private fun FishboneQuoteRow(quote: FishboneGrounding.Quote, onPlayFrom: (ULong)
     ) {
         AssistChip(
             onClick = { onPlayFrom(quote.ms.toULong()) },
-            label = { Text(io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms)) },
+            label = { Text(quote.ref.ifBlank { Transcript.mmss(quote.ms) }) },
         )
         Column(Modifier.weight(1f)) {
             if (quote.speaker.isNotBlank()) {

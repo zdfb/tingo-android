@@ -347,8 +347,8 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
             meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
         }
         "delete_audio" => {
-            // 与桌面 batch 同一条路径：录音移到回收站，转写与纪要留下。直接 remove_file 会
-            // 让"批量只删录音"变成不可恢复，和界面上说的"可从废纸篓恢复"对不上。
+            // 与单场同一条路径：真删录音文件、转写与纪要留下。桌面把它挪进系统废纸篓，
+            // Android 没有可浏览的回收站，所以确认框明说"无法恢复"，这里也真删。
             remove_audio(&meetings::audio_files(&dir), "batch").map(|_| ())
         }
         "delete" => {
@@ -778,7 +778,7 @@ impl TingoEngine {
                 .filter_map(|p| {
                     p.file_name()
                         .and_then(|n| n.to_str())
-                        // 点号目录是内部用的（只删掉的录音）：不该以"一场会议"的身份出现在回收站里
+                        // 点号开头的目录是内部用的，不该以"一场会议"的身份出现在回收站列表里
                         .filter(|n| !n.starts_with('.'))
                         .map(|n| TrashItem { id: n.to_string(), bytes: meetings::size_of(&p) })
                 })
