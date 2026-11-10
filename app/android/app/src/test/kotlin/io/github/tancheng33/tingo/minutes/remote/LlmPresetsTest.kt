@@ -29,24 +29,35 @@ class LlmPresetsTest {
     }
 
     @Test
-    fun applyingAPresetKeepsTheApiKey() {
-        val config = LlmConfig(apiKey = "sk-用户自己的")
+    fun switchingProviderClearsTheApiKey() {
+        // 上一家的 key 发到这一家只会 401，更糟的是等于把 A 家的密钥送给了 B 家
+        val config = LlmConfig(baseUrl = "https://api.deepseek.com", apiKey = "sk-DeepSeek的")
 
-        val filled = LlmPresets.find("deepseek")!!.applyTo(config)
+        val filled = LlmPresets.find("openai")!!.applyTo(config)
 
-        assertEquals("https://api.deepseek.com", filled.baseUrl)
-        assertEquals("deepseek-chat", filled.model)
-        assertEquals("密钥不该被预设覆盖", "sk-用户自己的", filled.apiKey)
+        assertEquals("https://api.openai.com/v1", filled.baseUrl)
+        assertEquals("gpt-4.1-mini", filled.model)
+        assertEquals("换服务商必须清掉密钥", "", filled.apiKey)
     }
 
     @Test
-    fun matchingIgnoresTrailingSlashCaseAndLocalhost() {
+    fun stayingWithTheSameProviderKeepsTheApiKey() {
+        // 同一家的另一个模型：密钥还是那把，没理由让用户再粘一次
+        val config = LlmConfig(baseUrl = "https://api.deepseek.com/", apiKey = "sk-DeepSeek的")
+
+        val filled = LlmPresets.find("deepseek")!!.applyTo(config)
+
+        assertEquals("sk-DeepSeek的", filled.apiKey)
+    }
+
+    @Test
+    fun matchingIgnoresCaseAndTrailingSlashes() {
         assertEquals("openai", LlmPresets.match(LlmConfig(baseUrl = "https://api.openai.com/v1/")))
-        assertEquals("deepseek", LlmPresets.match(LlmConfig(baseUrl = " HTTPS://API.DeepSeek.com ")))
+        assertEquals("deepseek", LlmPresets.match(LlmConfig(baseUrl = " HTTPS://API.DeepSeek.com// ")))
         // 归一化只用来判断"是不是同一个地址"，用户填的原文一个字都不改
-        val local = LlmConfig(baseUrl = "http://localhost:11434/v1")
-        assertEquals("http://localhost:11434/v1", local.baseUrl)
-        assertEquals("http://127.0.0.1:11434/v1", LlmPresets.normalize(local.baseUrl))
+        val typed = LlmConfig(baseUrl = "HTTPS://API.DeepSeek.com/")
+        assertEquals("HTTPS://API.DeepSeek.com/", typed.baseUrl)
+        assertEquals("https://api.deepseek.com", LlmPresets.normalize(typed.baseUrl))
     }
 
     @Test

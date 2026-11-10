@@ -324,12 +324,16 @@ private fun LlmServiceSection(
                     // 自定义：清空，免得留在上一家的地址上，看起来像已经填好了
                     baseUrl = ""
                     model = ""
+                    apiKey = ""
                     protocol = LlmProtocol.OPENAI
                 } else {
                     LlmPresets.find(id)?.let { preset ->
+                        // 换服务商连带清密钥：上一家的 key 发到这一家只会 401，
+                        // 更糟的是等于把 A 家的密钥送给了 B 家（桌面端同样会清）
                         val filled = preset.applyTo(draft)
                         baseUrl = filled.baseUrl
                         model = filled.model
+                        apiKey = filled.apiKey
                         protocol = filled.protocol
                     }
                 }
