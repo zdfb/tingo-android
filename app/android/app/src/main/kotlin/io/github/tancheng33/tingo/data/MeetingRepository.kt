@@ -1,10 +1,8 @@
 package io.github.tancheng33.tingo.data
 
 import io.github.tancheng33.tingo.engine.BatchOutcome
-import io.github.tancheng33.tingo.engine.MinutesVersionInfo
 import io.github.tancheng33.tingo.engine.MeetingSummary
 import io.github.tancheng33.tingo.engine.SearchResults
-import io.github.tancheng33.tingo.engine.StorageStats
 import io.github.tancheng33.tingo.engine.TrashItem
 import io.github.tancheng33.tingo.engine.TingoEnginePort
 import kotlinx.coroutines.CoroutineDispatcher
@@ -24,10 +22,13 @@ enum class BatchAction(val wire: String) {
 }
 
 /**
- * 会议库只读访问。
+ * 会议库的列表类操作（扫描、搜索、归档/删除/回收站、批量、清理残留）。
  *
  * 扫描与排序由引擎完成（它才知道目录命名规则），这里只做两件事：
  * 在工作线程上执行，以及把引擎模型投影成界面模型。
+ *
+ * 只放"会议库这一屏真正用到的东西"：详情页与纪要页的调用直接用引擎端口，
+ * 在这里再包一层只会让人以为"访问会议库都得绕道仓库"。
  */
 class MeetingRepository(
     private val engine: TingoEnginePort,
@@ -54,18 +55,12 @@ class MeetingRepository(
     /** 改标题。 */
     suspend fun rename(id: String, title: String) = withContext(io) { engine.renameMeeting(id, title) }
 
-    /** 整体替换标签，返回归一化后的结果。 */
-    suspend fun setTags(id: String, tags: List<String>): List<String> =
-        withContext(io) { engine.setTags(id, tags) }
-
     /** 批量操作；逐 id 返回结果，界面据此提示"哪几场失败"。 */
     suspend fun batch(ids: List<String>, action: BatchAction, tag: String = "") =
         withContext(io) { engine.batch(ids, action.wire, tag) }
 
     /** 跨会议搜索（纪要 + 转写正文，含模糊匹配）。 */
     suspend fun search(query: String): SearchResults = withContext(io) { engine.search(query) }
-
-    suspend fun storageStats(): StorageStats = withContext(io) { engine.storageStats() }
 
     /** 删除到回收站；返回释放的字节数。 */
     suspend fun deleteToTrash(id: String): ULong = withContext(io) { engine.deleteToTrash(id) }
@@ -75,22 +70,6 @@ class MeetingRepository(
     suspend fun listTrash(): List<TrashItem> = withContext(io) { engine.listTrash() }
 
     suspend fun purgeTrash(id: String): ULong = withContext(io) { engine.purgeTrash(id) }
-
-    suspend fun minutesHistory(id: String): List<MinutesVersionInfo> = withContext(io) { engine.minutesHistory(id) }
-
-    suspend fun minutesVersion(id: String, versionId: String): String =
-        withContext(io) { engine.minutesVersion(id, versionId) }
-
-    suspend fun restoreMinutesVersion(id: String, versionId: String) =
-        withContext(io) { engine.restoreMinutesVersion(id, versionId) }
-
-    suspend fun deleteMinutesVersion(id: String, versionId: String) =
-        withContext(io) { engine.deleteMinutesVersion(id, versionId) }
-
-    suspend fun saveMinutes(id: String, text: String) = withContext(io) { engine.saveMinutes(id, text) }
-
-    suspend fun exportSrt(id: String, language: String): String =
-        withContext(io) { engine.exportSrt(id, language) }
 
     /** 清理残留文件（合成后遗留的音轨、part 与 tmp）；返回释放的字节数。 */
     suspend fun cleanupLeftovers(): ULong = withContext(io) { engine.cleanupLeftovers() }

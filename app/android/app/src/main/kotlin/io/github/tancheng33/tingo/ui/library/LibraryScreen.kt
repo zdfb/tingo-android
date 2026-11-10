@@ -53,6 +53,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.ui.components.TextInputDialog
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.ui.detail.failureText
@@ -517,10 +518,11 @@ private fun BatchBar(
     // 加标签与移除标签用的是同一个输入框，靠这个记住当前要执行哪个动作
     var tagDialog by remember { mutableStateOf<BatchAction?>(null) }
     if (tagDialog != null) {
-        TagInputDialog(
+        TextInputDialog(
             title = stringResource(
                 if (tagDialog == BatchAction.TAG_REMOVE) R.string.library_batch_untag_title else R.string.library_batch_tag_title,
             ),
+            requireNonBlank = true,
             onDismiss = { tagDialog = null },
             onConfirm = { tag ->
                 val action = tagDialog
@@ -688,35 +690,4 @@ private fun TrashView(
             }
         }
     }
-}
-
-/** 一个标签输入框：批量加标签、详情页编辑标签都用它。 */
-@Composable
-private fun TagInputDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    val colors = TingoTheme.colors
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        title = { Text(title, color = colors.text) },
-        text = {
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
-                cursorBrush = SolidColor(colors.blue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.seg, TingoDimens.controlShape)
-                    .padding(12.dp),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) {
-                Text(stringResource(R.string.action_save), color = colors.blue)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) } },
-    )
 }

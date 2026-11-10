@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.R
+import io.github.tancheng33.tingo.ui.components.TextInputDialog
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.Fishbone
 import io.github.tancheng33.tingo.engine.MinutesDoc
@@ -291,6 +292,7 @@ fun DetailScreen(
                 if (renameOpen) {
                     TextInputDialog(
                         title = stringResource(R.string.detail_rename),
+                        requireNonBlank = true,
                         initial = detail?.summary?.title.orEmpty(),
                         hint = stringResource(R.string.detail_rename_hint),
                         onDismiss = { renameOpen = false },
@@ -605,53 +607,6 @@ internal fun failureText(kind: FailureKind): String = when (kind) {
 }
 
 /** 一个带初始值的输入对话框：改名与标签共用。 */
-@Composable
-private fun TextInputDialog(
-    title: String,
-    initial: String,
-    hint: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    val colors = TingoTheme.colors
-    var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        title = { Text(title, color = colors.text) },
-        text = {
-            androidx.compose.foundation.text.BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.text),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.blue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.seg, TingoDimens.controlShape)
-                    .padding(12.dp)
-                    .semantics { contentDescription = title },
-                decorationBox = { inner ->
-                    Box {
-                        if (text.isEmpty()) {
-                            Text(hint, style = MaterialTheme.typography.bodyMedium, color = colors.faint)
-                        }
-                        inner()
-                    }
-                },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(text.trim()) }) {
-                Text(stringResource(R.string.action_save), color = colors.blue)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = colors.muted) }
-        },
-    )
-}
-
 /**
  * 说话人一排：每人一个可点的 chip（点开改名），右边是"让 AI 猜名字"。
  *
@@ -675,6 +630,7 @@ private fun SpeakerBar(
     if (editingSpeaker != null) {
         TextInputDialog(
             title = stringResource(R.string.detail_speaker_rename),
+            requireNonBlank = true,
             initial = editingSpeaker.name,
             hint = stringResource(R.string.detail_speaker_rename_hint),
             onDismiss = { editing = null },

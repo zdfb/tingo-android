@@ -11,14 +11,12 @@
     <string name="action_refresh">刷新</string>
     <string name="action_back">返回</string>
     <string name="action_close">关闭</string>
-    <string name="unknown">未知</string>
 
     <!-- 详情 -->
     <string name="detail_tab_minutes">纪要</string>
     <string name="detail_tab_transcript">转写</string>
     <string name="detail_no_minutes">这场会议还没有纪要。</string>
     <string name="detail_no_transcript">这场会议没有转写内容。</string>
-    <string name="detail_speaker_default">说话人%1$d</string>
     <string name="detail_fishbone_invalid">鱼骨图解析失败，已按原文展示</string>
     <string name="detail_minutes_parse_failed">纪要解析失败：%1$s</string>
 
@@ -65,7 +63,6 @@
     <string name="record_finished">录音已保存</string>
     <string name="record_open_meeting">打开这场会议</string>
     <string name="transcribe_start">转写这场会议</string>
-    <string name="transcribe_download_and_start">下载模型并开始转写</string>
     <string name="transcribe_downloading">正在下载语音模型…</string>
     <string name="transcribe_running">正在本机转写，可以离开这一页…</string>
     <string name="action_cancel">取消</string>
@@ -79,7 +76,6 @@
     <string name="library_delete_body">录音、转写、纪要会一起删除，无法恢复。</string>
     <string name="library_delete_confirm">删除</string>
     <string name="detail_export">导出并分享</string>
-    <string name="detail_export_empty">这场会议还没有纪要或转写</string>
     <string name="err_no_recording">这场会议没有可转写的录音</string>
     <string name="err_model_download_failed">模型下载失败：%1$s</string>
     <string name="err_transcribe_failed">转写失败：%1$s</string>
@@ -160,7 +156,6 @@
     <string name="detail_more_actions">更多操作</string>
     <string name="settings_storage">存储空间</string>
     <string name="settings_storage_summary">共 %1$d 场，占用 %2$s；其中音频 %3$s，可清理的残留 %4$s</string>
-    <string name="settings_storage_purge">清空回收站</string>
     <string name="library_batch_untag">移除标签</string>
     <string name="library_batch_untag_title">要移除哪个标签</string>
     <string name="library_trash_entry">最近删除</string>

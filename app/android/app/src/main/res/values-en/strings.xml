@@ -11,14 +11,12 @@
     <string name="action_refresh">Refresh</string>
     <string name="action_back">Back</string>
     <string name="action_close">Close</string>
-    <string name="unknown">Unknown</string>
 
     <!-- Detail -->
     <string name="detail_tab_minutes">Minutes</string>
     <string name="detail_tab_transcript">Transcript</string>
     <string name="detail_no_minutes">No minutes for this meeting yet.</string>
     <string name="detail_no_transcript">This meeting has no transcript.</string>
-    <string name="detail_speaker_default">Speaker %1$d</string>
     <string name="detail_fishbone_invalid">Could not parse the fishbone diagram, showing raw text</string>
     <string name="detail_minutes_parse_failed">Could not parse minutes: %1$s</string>
 
@@ -65,7 +63,6 @@
     <string name="record_finished">Recording saved</string>
     <string name="record_open_meeting">Open this meeting</string>
     <string name="transcribe_start">Transcribe this meeting</string>
-    <string name="transcribe_download_and_start">Download models and start</string>
     <string name="transcribe_downloading">Downloading speech models…</string>
     <string name="transcribe_running">Transcribing on this device; you can leave this page…</string>
     <string name="action_cancel">Cancel</string>
@@ -79,7 +76,6 @@
     <string name="library_delete_body">Recording, transcript and minutes are deleted together. This cannot be undone.</string>
     <string name="library_delete_confirm">Delete</string>
     <string name="detail_export">Export and share</string>
-    <string name="detail_export_empty">This meeting has no minutes or transcript yet</string>
     <string name="err_no_recording">This meeting has no recording that can be transcribed</string>
     <string name="err_model_download_failed">Model download failed: %1$s</string>
     <string name="err_transcribe_failed">Transcription failed: %1$s</string>
@@ -160,7 +156,6 @@
     <string name="detail_more_actions">More actions</string>
     <string name="settings_storage">Storage</string>
     <string name="settings_storage_summary">%1$d meetings, %2$s total; audio %3$s, reclaimable leftovers %4$s</string>
-    <string name="settings_storage_purge">Empty trash</string>
     <string name="library_batch_untag">Remove tag</string>
     <string name="library_batch_untag_title">Which tag to remove</string>
     <string name="library_trash_entry">Recently deleted</string>

@@ -57,6 +57,8 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 
 ./gradlew :app:assembleDebug            # 产出 app/build/outputs/apk/debug/app-debug.apk
+# 没有内置模型（300+ MB，不进仓库）时加 -PtingoSkipBundledModels=true 才能出包
+./gradlew :app:assembleDebug -PtingoSkipBundledModels=true
 ./gradlew :app:testDebugUnitTest        # JVM 单测（仓库、ViewModel、工具函数、权限清单）
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
@@ -67,9 +69,10 @@ export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 提到 33 tok/s，但改不了"长上下文预填充动辄几十秒"这个量级。既然用户要的是点了就有结果，
 这一步改走远端 API；语音模型仍在本机，转写依旧离线可用。
 
-当前状态（2026-11-09 实机验收）：**JVM 单测 232 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
-arm64）跑通 19 个设备级用例（引擎桥接、备份恢复、sherpa 运行时、中文识别、双人流水线、
-远端纪要端到端、设置页），其中转写相关用例在**飞行模式下**同样通过，证明语音链路离线可用。
+当前状态（2026-11-10 实机验收）：**JVM 单测 326 个全绿**；REDMI Turbo 4（HyperOS / Android 16 /
+arm64）跑通 **37 个设备级用例**（引擎桥接、备份恢复、sherpa 运行时、中文识别、双人流水线、
+远端纪要端到端、设置页、会议库管理、音频导入、示例会议、长混音），其中转写相关用例在
+**飞行模式下**同样通过，证明语音链路离线可用。
 Compose UI 测试（16 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
 系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
 完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除四个
@@ -90,8 +93,7 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 + Silero VAD（0.6 MB，fp32）。识别与标点都是 int8 量化版，声纹与 VAD 上游只提供 fp32，
 桌面端也用这两个，所以两边一致。
 打进 `assets/models/`，APK 约 **372 MB**。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
-（幂等、带进度），**转写全程不需要网络**。（内置 GGUF 与 llama.cpp 已随本变更一并移除，
-APK 因此从 746 MB 降到 361 MB。）
+（幂等、带进度），**转写全程不需要网络**。（早期版本的端侧纪要 GGUF 与 llama.cpp 已整体移除。）
 
 模型不进仓库（300+ MB 二进制不适合进 git）。构建前先把它们取到 `app/android/models/`：
 

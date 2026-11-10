@@ -35,6 +35,12 @@
 
 [下载 v0.5.2](https://github.com/tancheng33/tingo/releases/tag/v0.5.2) · v0.5.1 及更早版本需要手动安装这次更新；装上 v0.5.2 后，后续版本可在应用内完成更新。支持 Apple 芯片 Mac。
 
+## Android 版
+
+手机端复刻了桌面版的录音、离线转写、说话人区分、远端纪要、回听、搜索/归档/删除/导出、
+设置与新手引导，界面按手机重排（底栏导航）。见 [app/android/README.md](app/android/README.md)：
+构建步骤、模型来源与许可、以及桌面→Android 的逐条对照表（`docs/android-parity.md`）。
+
 ## 功能
 
 ### 原因分析鱼骨图：一眼看出哪条是空话

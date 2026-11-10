@@ -140,7 +140,7 @@ class TranscriptionPipeline(
             while (!vad.empty()) {
                 val speech = vad.front()
                 vad.pop()
-                val startSample = speech.start.toLong()
+                val startSample = speech.start
                 val endSample = startSample + speech.samples.size
                 val startMs = startSample * 1000L / sampleRate
                 val endMs = endSample * 1000L / sampleRate
