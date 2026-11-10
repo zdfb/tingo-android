@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.importing.DemoInstaller
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.recording.CaptureProbeResult
 import io.github.tancheng33.tingo.settings.AppSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,8 @@ class OnboardingViewModel(
     private val store: ModelStore,
     private val catalog: ModelCatalog,
     private val demo: DemoInstaller?,
+    /** 试录探针：由外壳注入（要麦克风与缓存目录；ViewModel 不该自己拿 Context） */
+    private val probe: (suspend () -> CaptureProbeResult)? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -39,6 +42,10 @@ class OnboardingViewModel(
         val demoMeetingId: String? = null,
         /** 引导走完了（或跳过）：外面据此把引导收起来 */
         val finished: Boolean = false,
+        /** 正在试录（3 秒）：按钮置灰，避免连点 */
+        val testing: Boolean = false,
+        /** 上一次试录的结果；null 表示还没试过 */
+        val probe: CaptureProbeResult? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -48,6 +55,22 @@ class OnboardingViewModel(
 
     /** 第一次打开时才自动进引导：已经走过、或已经有会议，都不拦人。 */
     fun shouldOnboard(hasMeetings: Boolean): Boolean = !settings.onboarded && !hasMeetings
+
+    /**
+     * 引导第三步的"试录 3 秒"：真的打开麦克风录一段，回答"有没有声音"。
+     *
+     * 只测麦克风。系统内录在 Android 上每次都要过一遍系统"录屏"授权，
+     * 引导里弹这个授权框会让人莫名其妙——录音页会在真正需要时才问。
+     */
+    fun testCapture() {
+        val probe = probe ?: return
+        if (_state.value.testing) return
+        _state.value = _state.value.copy(testing = true, probe = null)
+        viewModelScope.launch {
+            val result = probe()
+            _state.value = _state.value.copy(testing = false, probe = result)
+        }
+    }
 
     fun refreshModel() {
         _state.value = _state.value.copy(modelReady = catalog.files.all { store.isReady(it) })

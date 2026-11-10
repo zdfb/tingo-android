@@ -320,6 +320,13 @@ fun TingoRoot(
                     store = container.models,
                     catalog = container.catalog,
                     demo = DemoMeeting(container.engine, recordContext),
+                    // 试录探针：临时文件放缓存，用完即删
+                    probe = {
+                        io.github.tancheng33.tingo.recording.probeCapture(
+                            capture = MicRecorder(),
+                            scratch = File(recordContext.cacheDir, "probe.wav"),
+                        )
+                    },
                 )
             }
         },
@@ -359,6 +366,9 @@ fun TingoRoot(
                 android.Manifest.permission.RECORD_AUDIO,
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
             systemAudioSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
+            testing = onboardState.testing,
+            probe = onboardState.probe,
+            onTest = onboardViewModel::testCapture,
             onNext = onboardViewModel::next,
             onBack = onboardViewModel::back,
             onSkip = onboardViewModel::skip,

@@ -48,6 +48,7 @@ class OnboardingTest {
     private fun viewModel(
         settings: AppSettings = AppSettings(Store()),
         engine: FakeEnginePort = FakeEnginePort(),
+        probe: (suspend () -> io.github.tancheng33.tingo.recording.CaptureProbeResult)? = null,
     ) = OnboardingViewModel(
         settings = settings,
         store = ModelStore(Files.createTempDirectory("onboard-models").toFile(), UrlFetcher()),
@@ -59,6 +60,7 @@ class OnboardingTest {
                 return "2026-10-28_1400_示例"
             }
         },
+        probe = probe,
         io = dispatcher,
     )
 
@@ -155,5 +157,59 @@ class OnboardingTest {
         assertFalse("重开要重新弹", settings.onboarded)
         assertEquals(OnboardingViewModel.Step.HELLO, vm.state.value.step)
         assertFalse(vm.state.value.finished)
+    }
+
+    @Test
+    fun testCaptureShowsTheResultAndStopsSpinning() = runTest(dispatcher) {
+        val vm = viewModel(
+            probe = { io.github.tancheng33.tingo.recording.CaptureProbeResult(3, peak = 0.4f) },
+        )
+
+        vm.testCapture()
+        assertTrue("试录期间按钮要置灰，防连点", vm.state.value.testing)
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.testing)
+        assertTrue("3 秒里听到声音要如实回报", vm.state.value.probe?.heardSomething == true)
+    }
+
+    @Test
+    fun silenceIsReportedInsteadOfPretendingItWorks() = runTest(dispatcher) {
+        val vm = viewModel(
+            probe = { io.github.tancheng33.tingo.recording.CaptureProbeResult(3, peak = 0.001f) },
+        )
+
+        vm.testCapture()
+        advanceUntilIdle()
+
+        assertFalse("底噪不能算听到", vm.state.value.probe?.heardSomething == true)
+    }
+
+    @Test
+    fun secondTapWhileTestingDoesNotStartAnotherProbe() = runTest(dispatcher) {
+        var runs = 0
+        val vm = viewModel(
+            probe = {
+                runs++
+                io.github.tancheng33.tingo.recording.CaptureProbeResult(3, peak = 0.2f)
+            },
+        )
+
+        vm.testCapture()
+        vm.testCapture()
+        advanceUntilIdle()
+
+        assertEquals("连点两次只该录一次", 1, runs)
+    }
+
+    @Test
+    fun withoutAProbeTheButtonDoesNothing() = runTest(dispatcher) {
+        val vm = viewModel(probe = null)
+
+        vm.testCapture()
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.testing)
+        assertNull(vm.state.value.probe)
     }
 }

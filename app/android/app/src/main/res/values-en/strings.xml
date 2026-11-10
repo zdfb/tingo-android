@@ -247,4 +247,10 @@
     <string name="home_llm_missing">Minutes service not configured</string>
     <string name="settings_llm_protocol_openai">OpenAI-compatible</string>
     <string name="task_import">Importing</string>
+    <string name="onboard_test_mic">Test for 3 seconds</string>
+    <string name="onboard_test_running">Testing…</string>
+    <string name="onboard_test_heard">Heard you (%1$ds) — the microphone works</string>
+    <string name="onboard_test_silent">No sound in %1$ds. Check mute or another app using the mic, then try again.</string>
+    <string name="onboard_test_failed">Cannot open the microphone: make sure permission is granted, then retry.</string>
+    <string name="onboard_test_system_note">Recording the other side (system audio) needs the system screen-capture permission; Tingo asks for it on your first recording, not here.</string>
 </resources>
