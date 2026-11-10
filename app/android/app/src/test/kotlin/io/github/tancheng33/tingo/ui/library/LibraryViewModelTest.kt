@@ -170,11 +170,11 @@ class LibraryViewModelTest {
         val vm = LibraryViewModel(MeetingRepository(engine, dispatcher), dispatcher, language = { "zh" })
         advanceUntilIdle()
 
-        vm.delete("m1")
+        vm.deleteToTrash("m1")
         meetings = emptyList()
         advanceUntilIdle()
 
-        // 单条删除与桌面一致：进回收站（可恢复），不是直删
+        // 界面上的"删除"就是进回收站（与桌面一致，可恢复）
         assertEquals(listOf("m1"), engine.trashed)
         assertEquals(LibraryUiState.Empty, vm.state.value)
     }

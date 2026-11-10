@@ -49,7 +49,6 @@ class MeetingRepository(
     }
 
     /** 删除整场会议，返回释放的字节数。 */
-    suspend fun delete(id: String): ULong = withContext(io) { engine.deleteMeeting(id) }
 
     /** 改标题。 */
     suspend fun rename(id: String, title: String) = withContext(io) { engine.renameMeeting(id, title) }

@@ -59,20 +59,25 @@ class LiveTranscriber(
         }
     }
 
-    /** 停止：把缓冲里剩下的话识别完，再退出线程（最多等 [STOP_TIMEOUT_MS]）。 */
-    fun stop() {
+    /**
+     * 停止并等它把缓冲里的话识别完（最多 [STOP_TIMEOUT_MS]）。
+     *
+     * 只给"已经在后台线程上"和测试用；界面线程不要调它。
+     */
+    fun stopAndWait() {
         running.set(false)
         runCatching { worker.join(STOP_TIMEOUT_MS) }
     }
 
     /**
-     * 标记关闭并停止线程。模型由推理线程自己在退出时释放（见 [worker]）。
+     * 关闭：丢弃后续样本、让线程自己收尾。**不等待、不阻塞调用方**。
      *
-     * 每场录音都会新建一份 [AsrModels]（VAD/识别/标点/声纹四个原生对象）：不释放就会一场漏一份。
+     * 模型由推理线程在自己退出时释放（见 [worker]），所以界面线程可以安全地直接调用它：
+     * 一次 recognize 最长 30 秒，等它等于把界面冻住。
      */
     fun close() {
         synchronized(lock) { closed = true }
-        stop()
+        running.set(false)
     }
 
     private fun loop() {

@@ -142,6 +142,7 @@
     <string name="library_batch_tag">Add tag</string>
     <string name="library_batch_tag_title">Tag selected meetings</string>
     <string name="library_batch_delete_audio">Delete audio</string>
+    <string name="library_batch_delete_audio_body">The recordings of the selected meetings are deleted permanently; transcripts and minutes stay, but they can no longer be played back.</string>
     <string name="library_batch_partial">%1$d could not be processed; the rest finished</string>
     <string name="library_search_expanded">Also searching: %1$s</string>
     <string name="library_hit_in_minutes">Found in minutes</string>
@@ -287,5 +288,4 @@
     <string name="detail_delete_audio_confirm_body">The recording is deleted permanently; the transcript and minutes stay, but you can\'t play it back.</string>
     <string name="detail_save_and_regenerate">Save &amp; regenerate minutes</string>
     <string name="detail_audio_deleted">Recording deleted — freed %1$d MB</string>
-    <string name="library_batch_delete_audio_body">The recordings of the selected meetings are deleted permanently; transcripts and minutes stay, but they can no longer be played back.</string>
 </resources>

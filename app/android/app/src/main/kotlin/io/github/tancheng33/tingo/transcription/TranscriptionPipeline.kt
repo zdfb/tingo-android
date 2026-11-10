@@ -167,8 +167,4 @@ class TranscriptionPipeline(
 
     /** 四个模型都就绪后才建对象；缺任何一个都直接报错，不做半残障运行。 */
     private fun requireModel(): AsrModels = AsrModels.open(store, catalog)
-
-    companion object {
-
-    }
 }

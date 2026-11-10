@@ -87,12 +87,15 @@ arm64）跑通 **35 个设备级用例**（引擎桥接、备份恢复、设置�
 语音链路的离线可用性由 `RecognitionInstrumentedTest` / `PipelineInstrumentedTest` 证明；
 它们要下载约 750 MB 模型，**本轮没有跑**，所以这里不把"飞行模式可识别"写成结论。
 
-设备侧一共 63 个 `@Test`（24 个测试类）：**Compose UI 测试 11 个**只在本机模拟器跑（HyperOS 会拦掉
-instrumentation 发起的 Activity 启动）；非 UI 46 个里有 3 个在本机跑不了——
+设备侧一共 63 个 `@Test`（24 个测试类）：**Compose UI 测试 13 个**（DetailScreen 5、LibraryScreen 4、
+TingoRoot 自适应 2、其余组件 2）只在本机模拟器跑（HyperOS 会拦掉 instrumentation 发起的 Activity 启动）；
+非 UI 50 个里有 3 个在本机跑不了——
 `LanguageSwitchTest`、`MainActivityEndToEndTest`（同一个 Activity 启动限制，会挂住）
 与 `ModelDownloadInstrumentedTest`（要联网下 700 MB 模型）；另有 4 个类依赖下载模型或重活
 （`PipelineInstrumentedTest`、`RecognitionInstrumentedTest`、`BundledModelInstrumentedTest`、
-`LongMixInstrumentedTest`）。其余 35 个是这一轮实跑全绿的（`OK (35 tests)`）。
+`LongMixInstrumentedTest`）。这一轮分批实跑 **31 个用例全绿**（EngineBridge 10 / LibraryManage 7 / DemoMeeting 4 /
+ImportAudio 3 / Settings 2 / BrandAssets 2 / HomeScreen 3）；`CaptureProbeInstrumentedTest`
+（真开麦克风 3 秒）在设备休眠时会挂住，需解锁后手工跑。
 Compose UI 测试（11 个）在 HyperOS 上被系统拦截——instrumentation 发起的 Activity 启动被
 系统取消，需在开发者选项里放开限制，属环境限制而非代码问题；这部分在 API 36 模拟器上全绿。
 完整设备级套件要下载约 750 MB 模型，本机网络下约 1.5 小时；只想跑非网络用例可以排除三个

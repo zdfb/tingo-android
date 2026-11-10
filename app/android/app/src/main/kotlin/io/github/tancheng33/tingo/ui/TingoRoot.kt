@@ -588,7 +588,7 @@ fun TingoRoot(
                             unreadablePath = container.meetingDir(card.id).absolutePath
                         },
                         onSetArchived = { card, archived -> libraryViewModel.setArchived(card.id, archived) },
-                        onDelete = { card -> libraryViewModel.delete(card.id) },
+                        onDelete = { card -> libraryViewModel.deleteToTrash(card.id) },
                         onOpenAtHit = { id, ms ->
                             onOpenMeeting(id)
                             // 跳到命中位置由详情页的播放器接手：先记录待跳转毫秒

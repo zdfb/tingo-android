@@ -56,7 +56,7 @@ class LiveTranscriberTest {
         // 推理线程异步：给它一点时间把窗口喂完
         val deadline = System.currentTimeMillis() + 2_000
         while (lines.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        live.close()
+        live.stopAndWait()
 
         assertTrue("应该识别出句子：$lines", lines.isNotEmpty())
         assertTrue("窗口必须按 512 对齐喂进去", asr.windows.all { it.size == 512 })
@@ -74,7 +74,7 @@ class LiveTranscriberTest {
         while (asr.windows.size < 2 && System.currentTimeMillis() < deadline) Thread.sleep(20)
         // 运行中只喂整窗口（不足一窗的留着等下一批），停止时才补零收尾
         assertEquals("运行中只喂整窗口", 2, asr.windows.size)
-        live.close()
+        live.stopAndWait()
         assertTrue("收尾时不足一窗的样本补零后喂进去", asr.windows.size >= 3)
     }
 
@@ -97,7 +97,7 @@ class LiveTranscriberTest {
         live.start()
         live.offer(samples(512))
         Thread.sleep(300)
-        live.close()
+        live.stopAndWait()
 
         assertEquals("短于 200ms 的人声不该出现在实时文字里", emptyList<String>(), lines.toList())
     }
@@ -109,20 +109,42 @@ class LiveTranscriberTest {
         val live = LiveTranscriber(asr = asr, onSentence = {})
         live.start()
         live.offer(samples(512 * 2 + 200))
-        live.stop()
+        live.stopAndWait()
 
         assertEquals("不足一窗的尾巴补零后要喂进去", 3, asr.windows.size)
         assertTrue("补零也要保持窗口长度", asr.windows.all { it.size == 512 })
     }
 
     @Test
-    fun closingReleasesTheModels() {
+    fun theInferenceThreadReleasesTheModelsOnItsWayOut() {
         var released = 0
         val live = LiveTranscriber(asr = FakeAsr(), releaseModels = { released++ }, onSentence = {})
         live.start()
+        // 释放发生在推理线程的 finally 里：线程结束（join 返回）时一定已经释放
+        live.stopAndWait()
+
+        assertEquals("每场会议都会新建一份模型：线程退出必须释放，否则一场漏一份", 1, released)
+    }
+
+    @Test
+    fun closeDoesNotBlockTheCaller() {
+        // 一次 recognize 最长 30 秒：close() 要是等线程，界面就冻住了
+        val asr = object : LiveAsr {
+            override fun acceptWindow(window: FloatArray) = Unit
+            override fun hasSegment(): Boolean = false
+            override fun popSegment(): FloatArray = FloatArray(0)
+            override fun flush() {
+                Thread.sleep(800)
+            }
+            override fun recognize(samples: FloatArray): String = ""
+        }
+        val live = LiveTranscriber(asr = asr, onSentence = {})
+        live.start()
+        val started = System.currentTimeMillis()
         live.close()
 
-        assertEquals("每场会议都会新建一份模型：关掉必须释放，否则一场漏一份", 1, released)
+        assertTrue("close() 不该等推理线程，实测用了 ${System.currentTimeMillis() - started}ms",
+            System.currentTimeMillis() - started < 300)
     }
 
     @Test
@@ -130,7 +152,7 @@ class LiveTranscriberTest {
         val asr = FakeAsr()
         val lines = CopyOnWriteArrayList<String>()
         val live = LiveTranscriber(asr = asr, onSentence = { lines += it })
-        live.close()
+        live.stopAndWait()
 
         live.offer(samples(512 * 100))
         Thread.sleep(200)

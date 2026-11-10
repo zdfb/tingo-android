@@ -109,7 +109,7 @@ object FishboneGrounding {
     }
 
     /** 去掉方括号与空白：`[00:12]` → `00:12`。 */
-    fun cleanRef(ref: String): String = ref.trim().removePrefix("[").removeSuffix("]")
+    private fun cleanRef(ref: String): String = ref.trim().removePrefix("[").removeSuffix("]")
 
     /** `mm:ss` / `h:mm:ss` → 毫秒；认不出返回 null（与桌面 `tsToMs` 同一套写法）。 */
     fun parseTimestamp(ref: String): Long? {

@@ -348,7 +348,7 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
         }
         "delete_audio" => {
             // 与单场同一条路径：真删录音文件、转写与纪要留下。桌面把它挪进系统废纸篓，
-            // Android 没有可浏览的回收站，所以确认框明说"无法恢复"，这里也真删。
+            // Android 的回收站只有整场会议，所以确认框明说"无法恢复"，这里也真删。
             remove_audio(&meetings::audio_files(&dir), "batch").map(|_| ())
         }
         "delete" => {
@@ -370,9 +370,9 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
 
 /// 删掉这些录音文件并返回腾出的字节数。
 ///
-/// 桌面把录音挪进系统废纸篓（访达里看得见、能拖回来）；Android 应用内没有"被删的录音"
-/// 这类界面，挪到 `.trash` 只会变成**既占着空间又找不回来**的东西——界面还承诺"腾出空间"
-/// 就没兑现。所以这里真删，并且界面上的确认框明说"无法恢复"。
+/// 桌面把录音挪进系统废纸篓（访达里看得见、能拖回来）。Android 的回收站只收**整场会议**，
+/// 没有"被删掉的录音"这一栏：挪进 `.trash` 就成了既占着空间又找不回来的东西，
+/// 而界面承诺"腾出空间"。所以这里真删，确认框也明说"无法恢复"。
 fn remove_audio(files: &[std::path::PathBuf], op: &str) -> Result<u64, EngineError> {
     let mut freed = 0u64;
     for file in files {
@@ -701,8 +701,8 @@ impl TingoEngine {
     /// 只删这场会议的录音：**真的删掉**，转写与纪要留在原位。返回腾出的字节数。
     ///
     /// 与桌面的差别是刻意的：桌面挪进系统废纸篓（访达里看得见、能拖回来），
-    /// Android 没有对应的可浏览回收站，挪进 `.trash` 只会变成"占着空间又找不回来"。
-    /// 因此界面的确认框明说"无法恢复"，这里也真删，保证"腾出空间"说到做到。
+    /// Android 的回收站只有整场会议、没有"被删掉的录音"一栏，挪进 `.trash` 只会变成
+    /// "占着空间又找不回来"。因此确认框明说"无法恢复"，这里也真删。
     ///
     /// @param skip_ids 正在转写/写纪要的会议 id：删掉正在被读的录音会让那一场中途炸掉
     pub fn delete_audio(&self, id: String, skip_ids: Vec<String>) -> Result<u64, EngineError> {
@@ -1723,7 +1723,7 @@ mod tests {
         assert_eq!(freed, 4096, "腾出的字节数要按被移走的录音算");
         assert!(!dir.join("录音.wav").exists(), "录音要离开会议目录");
         assert!(dir.join("纪要.md").is_file(), "转写与纪要必须留在原位");
-        // 真删：Android 没有可浏览的回收站，留一份只会既占空间又找不回来
+        // 真删：Android 的回收站只收整场会议，留一份录音只会既占空间又找不回来
         assert!(std::fs::read_dir(root.join("meetings").join(TRASH_DIR)).is_err(), "不该往回收站里塞录音");
         // 会议本身还在库里（只是没有录音了）
         assert_eq!(engine.scan_library().unwrap().len(), 1);

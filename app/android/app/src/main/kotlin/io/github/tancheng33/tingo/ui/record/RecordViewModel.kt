@@ -274,26 +274,16 @@ class RecordViewModel(
     /**
      * 停止录音时关掉实时转写：识别线程不该比录音活得久。
      *
-     * `close()` 会 join 推理线程（最多 3 秒）并释放四个原生模型，放到 IO 上跑，
-     * 否则收尾这几秒会卡住界面。
+     * `close()` 只置标志、不等线程（模型由推理线程自己退出时释放），所以
+     * 停止、放弃、被中断、离开录音页四条路径都可以直接调它，不会冻住界面。
+     * 场次号在这里推进：之后旧线程再吐出的话不会被当成这一场的。
      */
-    private fun stopLiveTranscription(joinNow: Boolean = false) {
+    private fun stopLiveTranscription() {
         (capture as? MicRecorder)?.onSamples = null
         val transcriber = live ?: return
-        if (joinNow) {
-            // onCleared 之后 viewModelScope 已经取消，launch 出去的协程不会执行：
-            // 这里必须同步收尾（join 上限 3 秒，且这是最后一次机会）
-            liveSession++
-            live = null
-            transcriber.close()
-            return
-        }
-        // 收尾放到 IO 上：join 最多 3 秒，不该卡界面。场次号在 close 之后才推进，
-        // 让推理线程把缓冲里最后那几句发完
-        viewModelScope.launch(io) {
-            transcriber.close()
-            if (live === transcriber) live = null
-        }
+        live = null
+        liveSession++
+        transcriber.close()
     }
 
     /**
@@ -418,7 +408,7 @@ class RecordViewModel(
         ticker = null
         runCatching { capture.stop() }
         // 中断同样是"这一场到此为止"：实时转写的线程与模型要一起收掉
-        stopLiveTranscription(joinNow = true)
+        stopLiveTranscription()
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
         // 中断也要把两路合起来，否则对方的声音就留在了没人看的 system.wav 里；
@@ -439,7 +429,7 @@ class RecordViewModel(
     override fun onCleared() {
         // 实时转写持有四个原生模型与一条线程：离开录音页不关就是永久泄漏。
         // 这里必须同步收尾——onCleared 时 viewModelScope 已经取消，异步的 close 不会执行
-        stopLiveTranscription(joinNow = true)
+        stopLiveTranscription()
         if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) {
             runCatching { capture.stop() }
             currentDir?.let { mergeInBackground(it) }
@@ -454,7 +444,7 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
-        stopLiveTranscription(joinNow = true)
+        stopLiveTranscription()
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
         session.fail("用户取消")

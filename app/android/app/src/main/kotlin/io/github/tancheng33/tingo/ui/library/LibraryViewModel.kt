@@ -200,23 +200,6 @@ class LibraryViewModel(
         }
     }
 
-    /** 彻底删除整场会议（不进回收站）；界面负责先确认。 */
-    fun delete(id: String) {
-        if (rejectIfBusy(id)) return
-        viewModelScope.launch(io) {
-            try {
-                // 与桌面一致：单条删除也进回收站（批量删除本来就走回收站），
-                // 用户点错了能从"最近删除"里拿回来
-                repository.deleteToTrash(id)
-                tasks?.forget(id)
-            } catch (e: TingoFailure) {
-                _lastError.value = e.kind
-                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
-            }
-            refreshNow()
-        }
-    }
-
     /** 删除到回收站：可恢复，是界面上"删除"的默认动作。 */
     fun deleteToTrash(id: String) {
         if (rejectIfBusy(id)) return
