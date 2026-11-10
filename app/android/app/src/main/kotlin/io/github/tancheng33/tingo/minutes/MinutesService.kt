@@ -17,6 +17,8 @@ interface MinutesGenerator {
  */
 class MinutesService(
     private val generator: MinutesGenerator,
+    /** 单次生成的上限字符数；超过就走分段提炼（桌面远端模型同样是 40000 量级） */
+    private val maxChars: Int = DEFAULT_MAX_CHARS,
     /**
      * 提示词里的"专有名词"段；由调用方从引擎按**纪要语言**取（与桌面同一份文案）。
      *
@@ -40,6 +42,8 @@ class MinutesService(
         transcript: Transcript,
         meetingDir: File,
         onToken: (String) -> Unit = {},
+        /** 分段提炼的进度文字（"分段提炼 2/5"）；短会议不会回调 */
+        onStage: (String) -> Unit = {},
         /**
          * 最终纪要怎么写。
          *
@@ -53,14 +57,22 @@ class MinutesService(
 
         val spoken = MinutesLanguage.detect(transcript.sentences.map { it.text })
         val language = MinutesLanguage.resolve(languageSetting(), transcript.sentences.map { it.text })
-        val prompt = MinutesPrompt.build(
-            transcript,
-            glossary = glossary(language),
-            language = language,
-            meetingDate = meetingDate(meetingDir),
-            // 选定的纪要语言与会议说的话不一致时，明确要求翻译
-            spokenLanguage = spoken,
-        )
+        val date = meetingDate(meetingDir)
+        val terms = glossary(language)
+        val lines = MinutesPrompt.transcriptLines(transcript, language)
+        val body = lines.joinToString("\n")
+        // 长会议：整段喂进去，待办会被无关内容稀释（桌面同样先分段提炼再合并）
+        val prompt = if (body.length <= maxChars) {
+            MinutesPrompt.build(
+                transcript,
+                glossary = terms,
+                language = language,
+                meetingDate = date,
+                spokenLanguage = spoken,
+            )
+        } else {
+            summarizeInParts(lines, language, date, terms, spoken, onStage)
+        }
         var markdown = generator.generate(prompt, maxTokens, onToken)
         var problems = MinutesPrompt.validate(markdown, language)
 
@@ -80,6 +92,52 @@ class MinutesService(
 
         saveFinal(markdown)
         return File(meetingDir, FILE_NAME)
+    }
+
+    /**
+     * 长会议：分段提炼 → 合并成纪要。
+     *
+     * 提示词是"合并后的"那一份，所以后面校验/重试走的仍是同一条路。
+     */
+    private suspend fun summarizeInParts(
+        lines: List<String>,
+        language: String,
+        date: String?,
+        glossary: String,
+        spoken: String,
+        onStage: (String) -> Unit,
+    ): String {
+        val chunks = MinutesPrompt.splitChunks(lines, maxChars)
+        val english = language == MinutesLanguage.EN
+        val notes = chunks.mapIndexed { index, chunk ->
+            onStage(
+                if (english) {
+                    "Summarizing part ${index + 1}/${chunks.size}"
+                } else {
+                    "分段提炼 ${index + 1}/${chunks.size}"
+                },
+            )
+            val partPrompt = MinutesPrompt.chunkPrompt(
+                chunk = chunk,
+                index = index + 1,
+                total = chunks.size,
+                language = language,
+                meetingDate = date,
+                glossary = glossary,
+                spokenLanguage = spoken,
+            )
+            // 分段只摘条目，不需要模型长篇输出
+            val note = generator.generate(partPrompt, CHUNK_MAX_TOKENS)
+            (if (english) "### Part ${index + 1}" else "### 第 ${index + 1} 段") + "\n" + note
+        }
+        onStage(if (english) "Merging into minutes" else "合并成纪要")
+        return MinutesPrompt.reducePrompt(
+            notes = notes,
+            language = language,
+            meetingDate = date,
+            glossary = glossary,
+            spokenLanguage = spoken,
+        )
     }
 
     /**
@@ -103,6 +161,12 @@ class MinutesService(
     }
 
     companion object {
+        /** 与 `MinutesPrompt.build` 的默认值一致：约两小时的会议 */
+        const val DEFAULT_MAX_CHARS = 48_000
+
+        /** 分段提炼只输出条目，给 600 就够 */
+        const val CHUNK_MAX_TOKENS = 600
+
         const val FILE_NAME = "纪要.md"
 
         /** 自检不通过时模型输出的落点，供用户手动改完再另存 */

@@ -132,6 +132,45 @@ Transcript:
 That is the whole transcript (there is nothing after this point). Now write the meeting minutes.
 """
 
+
+    /** 中文分段提炼提示词（桌面 `CHUNK_PROMPT`）。 */
+    private const val CHUNK_PROMPT_ZH = """下面是一场长会议中的一段转写（第 {index}/{total} 段），格式为「[时间戳] 说话人：内容」。会议日期：{meeting_date}。
+
+请提炼这一段的：讨论要点、已拍板的决议、待办（事项/负责人/截止时间）、待定问题与风险。
+每条都附出处时间戳 [mm:ss]，只依据原文，不编造，用简洁的条目输出。{glossary}{translate}
+
+转写：
+{transcript}
+"""
+
+    /** 英文分段提炼提示词（桌面 `CHUNK_PROMPT_EN`）。 */
+    private const val CHUNK_PROMPT_EN = """Below is one part (part {index} of {total}) of the transcript of a long meeting, one line per turn in the form "[timestamp] Speaker: content". Meeting date: {meeting_date}
+
+Extract from this part: key discussion points, decisions made, action items (item / owner / due date), and open questions & risks.
+End every entry with its source timestamp [mm:ss]. Use only what is in the transcript, do not make anything up, and output concise bullet points.{glossary}{translate}
+
+Transcript:
+{transcript}
+"""
+
+    /** 中文合并提示词（桌面 `REDUCE_PROMPT`）。 */
+    private const val REDUCE_PROMPT_ZH = """下面是一场长会议按时间顺序分段提炼的笔记。请把它们合并成一份完整的会议纪要，去重、按议题归并，保留出处时间戳。
+
+{instructions}
+
+分段笔记：
+{notes}
+"""
+
+    /** 英文合并提示词（桌面 `REDUCE_PROMPT_EN`）。 */
+    private const val REDUCE_PROMPT_EN = """Below are notes taken part by part, in chronological order, from a long meeting. Merge them into one complete set of meeting minutes: remove duplicates, group points by topic, and keep the source timestamps.
+
+{instructions}
+
+Notes by part:
+{notes}
+"""
+
     /**
      * 拼提示词时把转写压成「[mm:ss] 说话人：内容」，与桌面版一致。
      *
@@ -169,6 +208,17 @@ That is the whole transcript (there is nothing after this point). Now write the 
         }
         // 热词那一段由引擎产出，调用方按纪要语言取中/英那一份（`minutesGlossary(lang)`），
         // 所以这里直接放进来即可。没有热词时整行消失，不留一段空行。
+        return filledTemplate(language, glossary, meetingDate, spokenLanguage)
+            .replace("{transcript}", clipped)
+    }
+
+    /** 填好语言相关占位符的模板（不含转写正文）。合并提示词只取它前半段的格式要求。 */
+    private fun filledTemplate(
+        language: String,
+        glossary: String,
+        meetingDate: String?,
+        spokenLanguage: String?,
+    ): String {
         val template = if (isEnglish(language)) TEMPLATE_EN else TEMPLATE_ZH
         val terms = glossary.trim()
         val filled = if (terms.isEmpty()) {
@@ -181,7 +231,87 @@ That is the whole transcript (there is nothing after this point). Now write the 
         return filled
             .replace("{meeting_date}", meetingDate.orEmpty())
             .replace("{translate}", translateNote(language, spokenLanguage))
-            .replace("{transcript}", clipped)
+    }
+
+    /** 转写正文行：`[mm:ss] 说话人：内容`，一行一句。分段提炼与单次生成共用它。 */
+    fun transcriptLines(transcript: Transcript, language: String): List<String> {
+        val english = isEnglish(language)
+        return transcript.sentences.map { sentence ->
+            buildString {
+                append('[').append(Transcript.mmss(sentence.startMs)).append("] ")
+                // 英文纪要里没改过名的说话人叫 Speaker N（与桌面 `transcript.localized(lang)` 一致）
+                val label = transcript.speakerLabel(sentence.speaker)
+                append(if (english) englishSpeakerLabel(label) else label)
+                append(if (english) ": " else "：")
+                append(sentence.text.trim())
+            }
+        }
+    }
+
+    /** 按行切段：每段不超过 `maxChars` 个字符，不切断一行。 */
+    fun splitChunks(lines: List<String>, maxChars: Int): List<String> {
+        val chunks = mutableListOf<String>()
+        val buffer = mutableListOf<String>()
+        var size = 0
+        lines.forEach { line ->
+            val n = line.length
+            if (buffer.isNotEmpty() && size + n > maxChars) {
+                chunks += buffer.joinToString("\n")
+                buffer.clear()
+                size = 0
+            }
+            buffer += line
+            size += n + 1
+        }
+        if (buffer.isNotEmpty()) chunks += buffer.joinToString("\n")
+        return chunks
+    }
+
+    /**
+     * 长会议的分段提炼提示词（对应桌面 `CHUNK_PROMPT`）。
+     *
+     * 长转写整段喂给模型，待办会被大段无关内容稀释；桌面因此先分段摘条目再合并。
+     */
+    fun chunkPrompt(
+        chunk: String,
+        index: Int,
+        total: Int,
+        language: String,
+        meetingDate: String? = null,
+        glossary: String = "",
+        spokenLanguage: String? = null,
+    ): String {
+        val template = if (isEnglish(language)) CHUNK_PROMPT_EN else CHUNK_PROMPT_ZH
+        return template
+            .replace("{index}", index.toString())
+            .replace("{total}", total.toString())
+            .replace("{meeting_date}", meetingDate.orEmpty())
+            .replace("{glossary}", glossary.trim())
+            .replace("{translate}", translateNote(language, spokenLanguage))
+            .replace("{transcript}", chunk)
+    }
+
+    /** 把分段笔记合并成最终纪要（对应桌面 `REDUCE_PROMPT`）。 */
+    fun reducePrompt(
+        notes: List<String>,
+        language: String,
+        meetingDate: String? = null,
+        glossary: String = "",
+        spokenLanguage: String? = null,
+    ): String {
+        val english = isEnglish(language)
+        val template = if (english) REDUCE_PROMPT_EN else REDUCE_PROMPT_ZH
+        // 合并时只带"格式要求"那一段，不带单段提示词里的"以上是全部转写"尾巴
+        val marker = if (english) "\nTranscript:" else "转写："
+        val instructions = filledTemplate(
+            language = language,
+            glossary = glossary,
+            meetingDate = meetingDate,
+            spokenLanguage = spokenLanguage,
+        ).substringBefore(marker)
+        return template
+            .replace("{instructions}", instructions)
+            .replace("{notes}", notes.joinToString("\n\n"))
     }
 
     /** 校验模型输出：该有的章节要在，鱼骨图 JSON 要能解析。 */

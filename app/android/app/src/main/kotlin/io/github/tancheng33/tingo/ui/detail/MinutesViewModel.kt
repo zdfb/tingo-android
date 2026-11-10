@@ -27,7 +27,8 @@ sealed interface MinutesUiState {
     /** 还没配模型服务：不给点，先引导去设置页 */
     data object NotConfigured : MinutesUiState
 
-    data object Generating : MinutesUiState
+    /** @param stage 分段提炼的进度文字（"分段提炼 2/5"）；短会议为 null */
+    data class Generating(val stage: String? = null) : MinutesUiState
 
     data class Done(val file: File) : MinutesUiState
 
@@ -92,11 +93,13 @@ class MinutesViewModel(
                 // 纪要只有"在写"，没有可量化进度：首页显示成一条没有百分比的活
                 val key = RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name)
                 tasks?.start(key, meetingDir.name, meetingTitle(), TaskKind.MINUTES)
-                _state.value = MinutesUiState.Generating
+                _state.value = MinutesUiState.Generating()
                 val service = serviceFactory()
                 val file = service.generate(
                     transcript,
                     meetingDir,
+                    // 长会议会分段提炼：把进度写进状态，界面才不是一块不动的"生成中"
+                    onStage = { stage -> _state.value = MinutesUiState.Generating(stage) },
                     saveFinal = saveMinutes ?: { text -> service.write(meetingDir, text); Unit },
                 )
                 tasks?.finish(key)

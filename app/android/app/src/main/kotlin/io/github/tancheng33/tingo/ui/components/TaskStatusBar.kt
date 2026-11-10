@@ -28,8 +28,11 @@ sealed interface TaskStatus {
     /** @param missingMb 还要下载多少 MB */
     data class NeedModel(val missingMb: Long) : TaskStatus
 
-    /** @param fraction null 表示"在跑但没法量化进度" */
-    data class Running(val fraction: Float?, val labelRes: Int) : TaskStatus
+    /**
+     * @param fraction null 表示"在跑但没法量化进度"
+     * @param stage 可选的进度细节（例如"分段提炼 2/5"），比笼统的"生成中"更能说明还在动
+     */
+    data class Running(val fraction: Float?, val labelRes: Int, val stage: String? = null) : TaskStatus
 
     data object Done : TaskStatus
 
@@ -87,6 +90,7 @@ fun TaskStatusBar(
                 LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
             }
             Text(stringResource(status.labelRes), style = MaterialTheme.typography.bodySmall)
+            status.stage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
         }
 

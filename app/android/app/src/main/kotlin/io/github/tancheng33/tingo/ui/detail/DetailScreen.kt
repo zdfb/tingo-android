@@ -539,7 +539,8 @@ private fun MinutesUiState.toTaskStatus(): TaskStatus = when (this) {
         message = stringResource(R.string.err_llm_not_configured),
         actionLabelRes = R.string.detail_minutes_go_settings,
     )
-    MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating)
+    // 分段提炼时把"第几段"显示出来（长会议一两分钟没反馈，用户以为卡住了）
+    is MinutesUiState.Generating -> TaskStatus.Running(null, R.string.minutes_generating, stage = stage)
     is MinutesUiState.Done -> TaskStatus.Done
     is MinutesUiState.Failed -> TaskStatus.Failed(
         message = failureMessage(reasonRes, detail),
