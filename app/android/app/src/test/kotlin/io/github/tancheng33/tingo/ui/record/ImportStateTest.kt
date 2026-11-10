@@ -51,8 +51,9 @@ class ImportStateTest {
             Transcript(source = wav.name, durationMs = 0, sentences = emptyList())
     }
 
-    private fun importer(decodes: Boolean = true): AudioImport = AudioImport(
-        engine = FakeEnginePort(),
+    private fun importer(decodes: Boolean = true, engine: FakeEnginePort = FakeEnginePort()): AudioImport =
+        AudioImport(
+        engine = engine,
         transcriber = OkTranscriber(),
         cacheDir = Files.createTempDirectory("tingo-record-import").toFile(),
         decoding = object : AudioDecoding {
@@ -131,20 +132,17 @@ class ImportStateTest {
     }
 
     @Test
-    fun importShowsUpInRunningTasksWithTheFileName() = runTest(dispatcher) {
+    fun importTaskCarriesTheRealMeetingIdOnceTheDirectoryExists() = runTest(dispatcher) {
         val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
-        val vm = viewModel(importer(), tasks)
+        val vm = viewModel(importer(engine = FakeEnginePort()), tasks)
 
-        vm.importAudio(source(), title = "", modifiedMs = 0)
-        // 进度回调里就登记了：不必等转写跑完
+        vm.importAudio(source(), title = "周会", modifiedMs = 0)
         advanceUntilIdle()
-        val running = tasks.tasks.value.singleOrNull()
 
-        // 转写在同一轮里就跑完了，所以要么已经在跑（kind 对），要么已经撤掉
-        if (running != null) {
-            assertEquals(io.github.tancheng33.tingo.ui.tasks.TaskKind.IMPORT, running.kind)
-            assertTrue("没填标题时用文件名：${running.title}", running.title.contains("importsource"))
-        }
+        // 转写跑完就撤掉了，所以这里看的是"曾经登记过、且 id 是引擎给的"
+        val importedId = vm.import.value.meetingId
+        assertEquals("导入成功应给出新会议 id", "2026-11-07_1000_周会", importedId)
+        assertTrue("结束后不该留在进行中", tasks.tasks.value.isEmpty())
     }
 
     @Test
@@ -168,5 +166,38 @@ class ImportStateTest {
 
         assertEquals(RecordViewModel.ImportFailure.UNREADABLE, vm.import.value.failure)
         assertTrue("失败也要撤掉，否则首页永远挂着一条假的进行中", tasks.tasks.value.isEmpty())
+    }
+
+    @Test
+    fun importIsRegisteredBeforeTranscriptionFinishes() = runTest(dispatcher) {
+        val tasks = io.github.tancheng33.tingo.ui.tasks.TaskCenter()
+        // 转写不主动收尾：停在"正在转写"这一步，才能看到中途的登记表
+        val slow = object : Transcriber {
+            override suspend fun transcribe(wav: File, outputDir: File, onProgress: (Float) -> Unit): Transcript {
+                onProgress(0.5f)
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+        val importer = AudioImport(
+            engine = FakeEnginePort(),
+            transcriber = slow,
+            cacheDir = Files.createTempDirectory("tingo-record-import").toFile(),
+            decoding = object : AudioDecoding {
+                override fun toWav(source: File, target: File): File {
+                    target.writeBytes(ByteArray(44))
+                    return target
+                }
+            },
+        )
+        val vm = viewModel(importer, tasks)
+
+        vm.importAudio(source(), title = "周会", modifiedMs = 0)
+        advanceUntilIdle()
+
+        val running = tasks.tasks.value.singleOrNull()
+        assertTrue("转写途中必须能在「进行中」看到它", running != null)
+        assertEquals(io.github.tancheng33.tingo.ui.tasks.TaskKind.IMPORT, running!!.kind)
+        assertEquals("中途就该能点进会议", "2026-11-07_1000_周会", running.meetingId)
+        assertEquals("转写进度要反映到那一行", 0.5f, running.fraction ?: 0f, 0.2f)
     }
 }

@@ -3,6 +3,7 @@ package io.github.tancheng33.tingo.ui.record
 import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
+import io.github.tancheng33.tingo.importing.AudioDecoder
 import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.RecordingSession
@@ -123,7 +124,8 @@ class RecordViewModel(
         _import.value = ImportState(progress = 0f)
         // 一次导入一个 key：会议目录建好之前还没有 id，只能用序号占位
         val taskKey = "${TaskKind.IMPORT.name}:import-${System.nanoTime()}"
-        val shownTitle = title.ifBlank { source.name }
+        // 与落库时的会议名同一条规则（去扩展名），首页那一行才不会带着 .m4a
+        val shownTitle = title.ifBlank { AudioDecoder.titleOf(source.name) }
         tasks?.start(taskKey, meetingId = "", title = shownTitle, kind = TaskKind.IMPORT, fraction = 0f)
         viewModelScope.launch(io) {
             try {

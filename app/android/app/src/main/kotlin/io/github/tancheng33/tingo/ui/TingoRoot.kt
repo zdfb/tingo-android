@@ -419,7 +419,10 @@ fun TingoRoot(
                     autoStoppedAfter = autoStoppedAfter,
                     runningTasks = runningTasks,
                     onOpenTask = { id ->
-                        if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
+                        // 导入刚登记时会议目录还没建好，id 是空的：这一下点了不该跳去空会议
+                        if (id.isNotBlank()) {
+                            if (wide) selectedMeetingId = id else navController.navigate("$DETAIL_ROUTE/$id")
+                        }
                     },
                     importProgress = importState.progress,
                     importFailure = importState.failure,
