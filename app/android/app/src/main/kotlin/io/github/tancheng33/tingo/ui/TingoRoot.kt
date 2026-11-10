@@ -358,8 +358,13 @@ fun TingoRoot(
     var showOnboarding by rememberSaveable { mutableStateOf(false) }
     val hasMeetings = (libraryState as? LibraryUiState.Content)?.items?.isNotEmpty() == true
     // 第一次打开、而且库里还没有会议时才拦人：老用户升级上来不该被引导一次
+    var onboardingDecided by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(hasMeetings) {
-        if (libraryState is LibraryUiState.Content && onboardViewModel.shouldOnboard(hasMeetings)) {
+        // 这个 effect 会随会议库刷新反复触发（装完示例会议就会变一次）。
+        // 只决定一次：否则用户正走到第三步，后台刷新一下就把画面拽回第一步
+        if (onboardingDecided || libraryState !is LibraryUiState.Content) return@LaunchedEffect
+        onboardingDecided = true
+        if (onboardViewModel.shouldOnboard(hasMeetings)) {
             // 上次没走完（例如中途被杀掉）：接着走，不要把人按回第一步
             onboardViewModel.resume()
             showOnboarding = true
@@ -396,9 +401,8 @@ fun TingoRoot(
             onSkip = onboardViewModel::skip,
             onInstallDemo = { onboardViewModel.installDemo(container.uiLanguage() == "en") },
             onOpenSettings = {
-                // 记住走到哪一步：去设置填完 Key 回来能接着走，而不是从第一步重看
-                onboardViewModel.rememberStep()
-                onboardViewModel.skip()
+                // 收起引导但不算走完：设置页那条"继续新手引导"才能出现
+                onboardViewModel.pause()
                 navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true }
             },
         )
@@ -676,7 +680,7 @@ fun TingoRoot(
                         showOnboarding = true
                         navController.popBackStack()
                     },
-                    onResumeOnboarding = if (!container.settings.onboarded) {
+                    onResumeOnboarding = if (!models.onboarded) {
                         {
                             onboardViewModel.resume()
                             showOnboarding = true

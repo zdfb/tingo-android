@@ -93,7 +93,10 @@ class OnboardingViewModel(
 
     private fun goTo(step: Step) {
         settings.onboardStep = steps.indexOf(step)
-        _state.value = _state.value.copy(step = step)
+        // 进入"录音权限"那一步要把上一次试录的结果清掉：从别的步骤绕回来时，
+        // 旧结果会显示在刚打开的那一屏上（桌面每次进入也重置）
+        val probe = if (step == Step.PERMISSION) null else _state.value.probe
+        _state.value = _state.value.copy(step = step, probe = probe)
         if (step == Step.MODEL) refreshModel()
     }
 
@@ -104,7 +107,8 @@ class OnboardingViewModel(
      */
     fun resume() {
         val index = settings.onboardStep.coerceIn(0, steps.lastIndex)
-        _state.value = _state.value.copy(step = steps[index], finished = false)
+        val probe = if (steps[index] == Step.PERMISSION) null else _state.value.probe
+        _state.value = _state.value.copy(step = steps[index], finished = false, probe = probe)
         if (_state.value.step == Step.MODEL) refreshModel()
     }
 
@@ -130,9 +134,15 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(finished = true)
     }
 
-    /** 用户从"大模型"那一步跑去设置填 Key：把当前步记住，回来接着走。 */
-    fun rememberStep() {
+    /**
+     * 用户从"大模型"那一步跑去设置填 Key：收起引导但**不算走完**。
+     *
+     * 这里不能用 [skip]：skip 会把 `onboarded` 置真，设置页那条"继续新手引导"就永远不显示了
+     * ——功能做了却没人能用。
+     */
+    fun pause() {
         settings.onboardStep = steps.indexOf(_state.value.step)
+        _state.value = _state.value.copy(finished = true)
     }
 
     /** 界面拿走跳转信号后清掉，避免重复跳。 */

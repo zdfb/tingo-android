@@ -88,6 +88,8 @@ data class SettingsUiState(
     val hotwordsFailed: Boolean = false,
     /** 跨会议术语表（只读展示，点一下加进热词） */
     val glossary: List<GlossaryTerm> = emptyList(),
+    /** 引导走完了没有：设置页据此决定显示"继续新手引导"还是只有"重玩" */
+    val onboarded: Boolean = true,
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
     val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
@@ -255,6 +257,7 @@ class SettingsViewModel(
                 storage = stats,
                 hotwords = hotwords,
                 glossary = glossary,
+                onboarded = settings.onboarded,
                 autoStopSilenceMin = settings.autoStopSilenceMin,
             )
         } catch (e: Exception) {

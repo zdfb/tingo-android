@@ -256,12 +256,82 @@ class OnboardingTest {
     }
 
     @Test
-    fun aCorruptStepValueDoesNotCrashTheTour() = runTest(dispatcher) {
+    fun anOutOfRangeStepLandsOnTheLastScreen() = runTest(dispatcher) {
+        // 步数上限属于引导自己：设置里只存数字，越界在 resume() 那一侧夹住
         val settings = AppSettings(Store()).apply { onboardStep = 99 }
 
-        assertEquals("越界值要夹回最后一步", 4, settings.onboardStep)
         val vm = viewModel(settings)
         vm.resume()
+
         assertEquals(OnboardingViewModel.Step.DEMO, vm.state.value.step)
+    }
+
+    @Test
+    fun aNegativeStepDoesNotLandBeforeTheFirstScreen() = runTest(dispatcher) {
+        val settings = AppSettings(Store()).apply { onboardStep = -5 }
+
+        val vm = viewModel(settings)
+        vm.resume()
+
+        assertEquals(OnboardingViewModel.Step.HELLO, vm.state.value.step)
+    }
+
+    @Test
+    fun goingToSettingsDoesNotCountAsFinishingTheTour() = runTest(dispatcher) {
+        // 这条是那个"做了却没人能用"的坑：如果 pause 顺手把 onboarded 置真，
+        // 设置页就再也不显示"继续新手引导"
+        val settings = AppSettings(Store())
+        val vm = viewModel(settings)
+        vm.next()
+        vm.next()
+        vm.next()
+
+        vm.pause()
+
+        assertTrue("引导要收起", vm.state.value.finished)
+        assertFalse("但不能算走完", settings.onboarded)
+        assertEquals("步数要留住", 3, settings.onboardStep)
+    }
+
+    @Test
+    fun resumingAnUnfinishedTourKeepsTheResumeEntryAvailable() = runTest(dispatcher) {
+        val settings = AppSettings(Store())
+        val vm = viewModel(settings)
+        vm.next()
+        vm.pause()
+
+        vm.resume()
+
+        assertFalse(vm.state.value.finished)
+        assertFalse("回到引导里不该突然变成已走完", settings.onboarded)
+        assertEquals(OnboardingViewModel.Step.MODEL, vm.state.value.step)
+    }
+
+    @Test
+    fun skipDoesMarkTheTourFinished() = runTest(dispatcher) {
+        val settings = AppSettings(Store())
+        val vm = viewModel(settings)
+
+        vm.skip()
+
+        assertTrue(settings.onboarded)
+        assertTrue(vm.state.value.finished)
+    }
+
+    @Test
+    fun returningToThePermissionStepClearsTheOldProbeResult() = runTest(dispatcher) {
+        val vm = viewModel(
+            probe = { io.github.tancheng33.tingo.recording.CaptureProbeResult(3, peak = 0.4f) },
+        )
+        vm.next()
+        vm.next() // 到"录音权限"
+        vm.testCapture()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.probe != null)
+
+        vm.next() // 去"大模型"
+        vm.back() // 绕回权限这一步
+
+        assertEquals("上一次试录的结果不该显示在刚回来的这一屏", null, vm.state.value.probe)
     }
 }

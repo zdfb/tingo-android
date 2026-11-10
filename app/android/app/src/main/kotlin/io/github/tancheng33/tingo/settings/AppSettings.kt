@@ -92,13 +92,13 @@ class AppSettings(private val store: KeyValueStore) {
      * 而不是从第一步重走；手机上同理——用户是去填 API Key 的，回来还得重看四屏是折磨。
      */
     var onboardStep: Int
-        get() = (store.getString(KEY_ONBOARD_STEP)?.toIntOrNull() ?: 0).coerceIn(0, MAX_ONBOARD_STEP)
-        set(value) = store.putString(KEY_ONBOARD_STEP, value.coerceIn(0, MAX_ONBOARD_STEP).toString())
+        // 上限不在这里：步数是引导自己的事（`OnboardingViewModel.steps`），
+        // 这里只保证不出现负数；越界由 `resume()` 夹到最后一屏
+        get() = (store.getString(KEY_ONBOARD_STEP)?.toIntOrNull() ?: 0).coerceAtLeast(0)
+        set(value) = store.putString(KEY_ONBOARD_STEP, value.coerceAtLeast(0).toString())
 
     private companion object {
         const val KEY_ONBOARD_STEP = "onboard_step"
-        /** 引导一共 5 步（与 `OnboardingViewModel.Step` 对齐）；越界值一律夹回去 */
-        const val MAX_ONBOARD_STEP = 4
         const val KEY_AUTO_STOP = "auto_stop_silence_min"
         const val MAX_SILENCE_MIN = 60
         const val KEY_ONBOARDED = "onboarded"
