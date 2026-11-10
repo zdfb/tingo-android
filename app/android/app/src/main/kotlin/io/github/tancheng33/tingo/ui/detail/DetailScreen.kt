@@ -36,7 +36,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +60,7 @@ import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.ui.components.TextInputDialog
+import io.github.tancheng33.tingo.ui.components.TingoDialog
 import io.github.tancheng33.tingo.ui.components.TingoTextDialog
 import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.engine.Fishbone
@@ -742,11 +742,13 @@ private fun HistorySheet(
     onDismiss: () -> Unit,
 ) {
     val colors = TingoTheme.colors
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.card,
-        title = { Text(stringResource(R.string.detail_history, versions.size), color = colors.text) },
-        text = {
+    TingoDialog(
+        title = stringResource(R.string.detail_history, versions.size),
+        onDismiss = onDismiss,
+        confirm = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = colors.blue) }
+        },
+        content = {
             if (versions.isEmpty()) {
                 Text(stringResource(R.string.detail_history_empty), color = colors.muted)
             } else {
@@ -798,9 +800,6 @@ private fun HistorySheet(
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = colors.blue) }
-        },
     )
 }
 
@@ -819,32 +818,11 @@ private fun VersionPreviewDialog(
     onClose: () -> Unit,
     onRestore: () -> Unit,
 ) {
-    val colors = TingoTheme.colors
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = colors.card,
-        title = { Text(stringResource(R.string.detail_history_preview_title), color = colors.text) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    text = preview.text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.text,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onRestore) {
-                Text(stringResource(R.string.detail_history_restore), color = colors.blue)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onClose) { Text(stringResource(R.string.action_close), color = colors.muted) }
-        },
+    TingoTextDialog(
+        title = stringResource(R.string.detail_history_preview_title),
+        text = preview.text,
+        confirmLabel = stringResource(R.string.detail_history_restore),
+        onConfirm = onRestore,
+        onDismiss = onClose,
     )
 }

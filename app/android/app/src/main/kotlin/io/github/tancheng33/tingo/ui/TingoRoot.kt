@@ -21,9 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -152,15 +150,27 @@ fun TingoRoot(
         },
     )
     val libraryState by libraryViewModel.state.collectAsStateWithLifecycle()
-    val libraryError by libraryViewModel.lastError.collectAsStateWithLifecycle()
     // 会议库的写操作失败统一走底部提示：内容区顶部那条在长列表里根本看不到。
-    // 文案在组合期算好（stringResource 不能在 effect 里调）
-    val libraryErrorText = libraryError?.let { stringResource(R.string.library_action_failed, failureText(it)) }
-    androidx.compose.runtime.LaunchedEffect(libraryErrorText) {
-        libraryErrorText?.let { container.toasts.show(it) }
+    // 用一次性事件而不是 lastError 状态：连续两次同样的失败也要能各响一次
+    val libraryFailure by libraryViewModel.failureEvents.collectAsStateWithLifecycle()
+    val libraryErrorText = libraryFailure?.let {
+        stringResource(R.string.library_action_failed, failureText(it.kind))
+    }
+    androidx.compose.runtime.LaunchedEffect(libraryFailure?.id) {
+        libraryErrorText?.let { container.toasts.show(it, error = true) }
     }
     val trashItems by libraryViewModel.trash.collectAsStateWithLifecycle()
     val batchFailures by libraryViewModel.lastBatchFailures.collectAsStateWithLifecycle()
+    val batchReason by libraryViewModel.lastBatchReason.collectAsStateWithLifecycle()
+    // 批量部分失败也要说清原因：只说"3 场失败"没法让人判断该做什么
+    val batchFailureText = if (batchFailures > 0) {
+        stringResource(R.string.library_batch_failed, batchFailures, batchReason.orEmpty())
+    } else {
+        null
+    }
+    androidx.compose.runtime.LaunchedEffect(batchFailureText) {
+        batchFailureText?.let { container.toasts.show(it, error = true) }
+    }
     // 回收站视图与"列表/详情"共用同一页：用状态切换而不是再加一条导航路由
     val trashVisible by libraryViewModel.trashVisible.collectAsStateWithLifecycle()
     // 搜索命中要跳到具体毫秒：详情页的播放器接这个值
@@ -388,7 +398,6 @@ fun TingoRoot(
         }
     }
 
-        ToastHost(center = container.toasts)
         NavHost(
             navController = navController,
             startDestination = TopDestination.MEETINGS.route,
@@ -561,6 +570,29 @@ fun TingoRoot(
                 val models by settingsViewModel.state.collectAsStateWithLifecycle()
                 val settingsContext = androidx.compose.ui.platform.LocalContext.current
 
+                // 设置页的写操作也走全局提示：原来这些结果只写在一节文字里，
+                // 用户点完按钮常常已经滚到别处（桌面端这些操作都会弹一条）
+                val hotwordsFailedText = if (models.hotwordsFailed) {
+                    stringResource(R.string.settings_hotwords_failed)
+                } else {
+                    null
+                }
+                androidx.compose.runtime.LaunchedEffect(hotwordsFailedText) {
+                    hotwordsFailedText?.let { container.toasts.show(it, error = true) }
+                }
+                val libraryOpText = when (val result = models.libraryResult) {
+                    null, is io.github.tancheng33.tingo.ui.settings.LibraryOpResult.BackedUp -> null
+                    is io.github.tancheng33.tingo.ui.settings.LibraryOpResult.Restored ->
+                        stringResource(R.string.settings_library_restored, result.restored, result.skipped, result.rejected)
+                    io.github.tancheng33.tingo.ui.settings.LibraryOpResult.Failed ->
+                        stringResource(R.string.settings_library_failed)
+                }
+                androidx.compose.runtime.LaunchedEffect(libraryOpText) {
+                    libraryOpText?.let {
+                        container.toasts.show(it, error = models.libraryResult is io.github.tancheng33.tingo.ui.settings.LibraryOpResult.Failed)
+                    }
+                }
+
                 // 备份：用户选落点，zip 直接写进 SAF 给的流（没有临时文件、没有清理负担）
                 val backupLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
                     androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
@@ -614,6 +646,10 @@ fun TingoRoot(
                 )
             }
         }
+        // 提示条必须画在 NavHost **之后**（后画的在上面），而且要铺满内容区：
+        // 只包住文字的话 Box 高度就是文字高度，`Alignment.BottomCenter` 等于没生效，
+        // 提示会贴着内容区顶部，还会被页面盖住。
+        ToastHost(center = container.toasts, modifier = Modifier.fillMaxSize())
     }
 }
 

@@ -236,4 +236,5 @@
     <string name="record_running_tasks">进行中（%1$d）</string>
     <string name="task_transcribe">转写中</string>
     <string name="task_minutes">写纪要中</string>
+    <string name="library_batch_failed">%1$d 场操作失败：%2$s</string>
 </resources>

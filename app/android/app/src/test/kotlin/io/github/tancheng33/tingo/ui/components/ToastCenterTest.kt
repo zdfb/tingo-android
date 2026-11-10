@@ -59,3 +59,25 @@ class ToastCenterTest {
         assertNull(center.current.value)
     }
 }
+
+/** 失败提示的颜色与停留时间来自同一个地方（红色 + 更久）。 */
+class ToastSeverityTest {
+
+    @Test
+    fun errorToastsAreMarkedForTheHost() {
+        val center = ToastCenter()
+
+        center.show("备份失败", error = true)
+
+        assertEquals(true, center.current.value?.error)
+    }
+
+    @Test
+    fun normalToastsAreNotMarked() {
+        val center = ToastCenter()
+
+        center.show("已恢复 2 场")
+
+        assertEquals(false, center.current.value?.error)
+    }
+}

@@ -236,4 +236,5 @@
     <string name="record_running_tasks">In progress (%1$d)</string>
     <string name="task_transcribe">Transcribing</string>
     <string name="task_minutes">Writing minutes</string>
+    <string name="library_batch_failed">%1$d failed: %2$s</string>
 </resources>

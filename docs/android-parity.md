@@ -67,8 +67,8 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | `recent` 最近会议 | 会议库整列即列表 | 已完成：首页"最近 3 场"卡片 |
 | `env` 环境块（占用/时长/版本） | 设置页有存储一节 | 已完成：首页底部状态行（模型就绪 / 纪要服务 / 版本） |
 | 拖拽导入覆盖层 | 无（手机没有拖拽） | 换成"导入音频"入口（第五批） |
-| `modal` 通用弹层 | 统一为 `components/TingoDialog` / `TingoConfirmDialog` / `TingoTextDialog` + 输入框 | 已对齐 |
-| toast | 底部一条全局提示（`ToastCenter` + `ToastHost`，3 秒自动消失） | 已对齐（会议库写操作失败已接入） |
+| `modal` 通用弹层 | 统一为 `components/TingoDialog` / `TingoConfirmDialog` / `TingoTextDialog` + `TextInputDialog`；旧的 AlertDialog 已清零 | 已对齐 |
+| toast | 底部一条全局提示：失败红色停留 4.2 秒、普通 2.4 秒；会议库失败、批量失败原因、热词保存、备份/恢复结果已接入 | 已对齐；**导入失败与详情页写失败仍是页内提示** |
 
 顺序：先把首页（新会议）与会议库的视觉对齐，再统一弹层与提示，最后做导入与引导。
 

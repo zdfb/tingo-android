@@ -79,8 +79,20 @@ class LibraryViewModel(
     val lastError: StateFlow<FailureKind?> = _lastError.asStateFlow()
 
     /** 上一次批量操作里失败的会议数；0 表示全部成功。 */
+    /**
+     * 一次性失败事件：`lastError` 是状态（同样的失败再来一次不会发新值），提示需要"每次都响"，
+     * 所以另开一条带自增编号的事件流。
+     */
+    private val _failureEvents = MutableStateFlow<LibraryFailure?>(null)
+    val failureEvents: StateFlow<LibraryFailure?> = _failureEvents.asStateFlow()
+    private var failureSeq = 0L
+
     private val _lastBatchFailures = MutableStateFlow(0)
     val lastBatchFailures: StateFlow<Int> = _lastBatchFailures.asStateFlow()
+
+    /** 批量失败的第一条原因：只说"3 场失败"没法让人判断该做什么。 */
+    private val _lastBatchReason = MutableStateFlow<String?>(null)
+    val lastBatchReason: StateFlow<String?> = _lastBatchReason.asStateFlow()
 
     /** 回收站内容；非空且 [trashVisible] 为真时界面显示回收站视图。 */
     private val _trash = MutableStateFlow<List<TrashItem>>(emptyList())
@@ -164,6 +176,7 @@ class LibraryViewModel(
                 repository.setArchived(id, archived)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshNow()
         }
@@ -177,6 +190,7 @@ class LibraryViewModel(
                 tasks?.forget(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshNow()
         }
@@ -191,6 +205,7 @@ class LibraryViewModel(
                 tasks?.forget(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshNow()
         }
@@ -202,6 +217,7 @@ class LibraryViewModel(
                 repository.restoreFromTrash(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshTrash()
         }
@@ -214,6 +230,7 @@ class LibraryViewModel(
                 repository.cleanupLeftovers()
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshNow()
         }
@@ -226,6 +243,7 @@ class LibraryViewModel(
                 repository.purgeTrash("")
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshTrash()
         }
@@ -237,6 +255,7 @@ class LibraryViewModel(
                 repository.purgeTrash(id)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshTrash()
         }
@@ -272,6 +291,7 @@ class LibraryViewModel(
                 repository.rename(id, title)
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
             }
             refreshNow()
         }
@@ -299,14 +319,17 @@ class LibraryViewModel(
         if (ids.isEmpty()) return
         // 上一批的失败数不能带进来：用户看到的是这一批的结果
         _lastBatchFailures.value = 0
+        _lastBatchReason.value = null
         viewModelScope.launch(io) {
             val failures = try {
                 val outcomes = repository.batch(ids, action, tag)
                 // 批量删除也是一条删除路径：漏掉这里，首页会挂着一场删掉的会议
                 if (action == BatchAction.DELETE) outcomes.filter { it.ok }.forEach { tasks?.forget(it.id) }
+                _lastBatchReason.value = outcomes.firstOrNull { !it.ok }?.error?.takeIf { it.isNotBlank() }
                 outcomes.count { !it.ok }
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
                 ids.size
             }
             _lastBatchFailures.value = failures
@@ -352,3 +375,6 @@ class LibraryViewModel(
         const val SEARCH_DEBOUNCE_MS = 250L
     }
 }
+
+/** @param id 自增编号：同样是权限错误，第二次也要能再提示一次 */
+data class LibraryFailure(val id: Long, val kind: FailureKind)
