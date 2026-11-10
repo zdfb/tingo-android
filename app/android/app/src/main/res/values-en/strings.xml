@@ -284,7 +284,7 @@
     <string name="detail_fishbone_quotes">%1$d quote(s) · %2$d chars</string>
     <string name="detail_delete_audio">Delete recording</string>
     <string name="detail_delete_audio_confirm_title">Delete this meeting\'s recording?</string>
-    <string name="detail_delete_audio_confirm_body">The recording moves to the Trash; the transcript and minutes stay, but you can\'t play it back.</string>
+    <string name="detail_delete_audio_confirm_body">The recording is deleted permanently; the transcript and minutes stay, but you can\'t play it back.</string>
     <string name="detail_save_and_regenerate">Save &amp; regenerate minutes</string>
-    <string name="detail_audio_deleted">Recording moved to the Trash — freed %1$d MB</string>
+    <string name="detail_audio_deleted">Recording deleted — freed %1$d MB</string>
 </resources>

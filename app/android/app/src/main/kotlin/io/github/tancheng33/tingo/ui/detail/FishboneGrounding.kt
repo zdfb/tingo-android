@@ -39,8 +39,10 @@ object FishboneGrounding {
      */
     fun resolve(ref: String, transcript: Transcript): Quote? {
         val ms = parseTimestamp(ref) ?: return null
-        // 桌面 `turnResolver` 无条件做这个检查：时间戳超出录音长度就不算依据
-        if (ms > transcript.durationMs.toLong() + 1_000) return null
+        // 时长未知（0，例如从别的设备导入的 transcript.json）时不做上限判断——
+        // 桌面在同样情况下传的是 Infinity：不知道就别拿"超出长度"当借口把依据判没
+        val duration = transcript.durationMs.toLong()
+        if (duration > 0 && ms > duration + 1_000) return null
         val turns = transcript.turns
         // 时间戳落在"从这段话开始往后 1 秒内"都算这段：模型常给整秒，发言起点带毫秒
         var hit: Int = -1
@@ -70,9 +72,21 @@ object FishboneGrounding {
         return Grounding(quotes, chars, level)
     }
 
-    /** 某条 ref 解析到的引用；对不上原话时返回 null（界面据此把胶囊画成不可点）。 */
-    fun quoteOf(ref: String, transcript: Transcript?): Quote? =
-        transcript?.let { resolve(ref, it) }
+    /**
+     * 折叠视图要的东西：核对上的引用（去重、按时间排）与对不上的原文。
+     *
+     * 两者都要给：只画核对上的，等于把"这条分支引用了什么"藏掉一半；
+     * 只画原文，那堆时间戳又没法点。
+     */
+    data class RefChips(val quotes: List<Quote>, val unresolved: List<String>)
+
+    fun split(refs: List<String>, transcript: Transcript?): RefChips {
+        val seen = HashSet<String>()
+        val unresolved = refs.filter { ref ->
+            transcript?.let { resolve(ref, it) } == null && seen.add(ref)
+        }
+        return RefChips(quotes = ground(refs, transcript).quotes, unresolved = unresolved)
+    }
 
     fun summarize(fishbone: Fishbone, transcript: Transcript?): Summary {
         val branches = fishbone.branches.filter { it.title.isNotBlank() }

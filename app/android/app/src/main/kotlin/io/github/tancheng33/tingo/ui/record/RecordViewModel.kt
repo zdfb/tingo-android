@@ -245,16 +245,19 @@ class RecordViewModel(
         val factory = liveTranscriber ?: return
         val mic = capture as? MicRecorder ?: return // 只有真实麦克风有样本回调
         _liveLines.value = emptyList()
-        val transcriber = runCatching {
+        lateinit var created: LiveTranscriber
+        created = runCatching {
             factory { sentence ->
+                // 上一场的推理线程可能还在收尾：它的句子不该灌进这一场
+                if (live !== created) return@factory
                 // 回调在推理线程上：`update` 是原子的读改写；手写
                 // "value = value + s" 会让并发回调互相覆盖（丢句、顺序乱）
                 _liveLines.update { lines -> (lines + sentence).takeLast(LIVE_LINES_SHOWN) }
             }
         }.getOrNull() ?: return
-        transcriber.start()
-        live = transcriber
-        mic.onSamples = { samples -> transcriber.offer(samples) }
+        created.start()
+        live = created
+        mic.onSamples = { samples -> created.offer(samples) }
     }
 
     /**
@@ -409,6 +412,8 @@ class RecordViewModel(
      * 但退出应用、或系统回收界面时会。
      */
     override fun onCleared() {
+        // 实时转写持有四个原生模型与一条线程：离开录音页不关就是永久泄漏
+        stopLiveTranscription()
         if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) {
             runCatching { capture.stop() }
             currentDir?.let { mergeInBackground(it) }
@@ -423,6 +428,7 @@ class RecordViewModel(
         ticker?.cancel()
         ticker = null
         runCatching { capture.stop() }
+        stopLiveTranscription()
         systemAudio?.let { runCatching { it.stop() } }
         systemAudio = null
         session.fail("用户取消")

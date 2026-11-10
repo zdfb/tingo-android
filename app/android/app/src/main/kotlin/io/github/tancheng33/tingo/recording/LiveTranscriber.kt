@@ -48,7 +48,7 @@ class LiveTranscriber(
         }
     }
 
-    /** 停止：把缓冲里剩下的话识别完，再退出线程。 */
+    /** 停止：把缓冲里剩下的话识别完，再退出线程（最多等 [STOP_TIMEOUT_MS]）。 */
     fun stop() {
         running.set(false)
         runCatching { worker.join(STOP_TIMEOUT_MS) }
@@ -63,6 +63,9 @@ class LiveTranscriber(
     fun close() {
         synchronized(lock) { closed = true }
         stop()
+        // 线程还活着说明它可能正卡在 flush()/recognize() 里（一段最长 30 秒）：这时候释放原生
+        // 对象就是 use-after-free。宁可漏掉这一份模型，也不能在别人脚下抽地毯。
+        if (worker.isAlive) return
         runCatching { releaseModels() }
     }
 
@@ -123,12 +126,8 @@ class LiveTranscriber(
     }
 
     companion object {
-        /**
-         * 与转写管线同一个最短段门限（`TranscriptionPipeline.MIN_SEGMENT_MS`）。
-         *
-         * 曾自己定成 800ms，结果是"实时看到的句子比最终转写少"——同一个门限只该有一处定义。
-         */
-        const val MIN_SPEECH_MS = 200L
+        /** 与正式转写同一个门限（定义在 [AsrModels.MIN_SPEECH_MS]） */
+        const val MIN_SPEECH_MS = AsrModels.MIN_SPEECH_MS
 
         /** 缓冲上限：约 30 秒的样本；超过就丢新来的，保住录音线程 */
         const val MAX_PENDING_SAMPLES = 16_000 * 30

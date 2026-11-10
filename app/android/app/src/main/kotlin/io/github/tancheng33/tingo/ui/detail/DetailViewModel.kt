@@ -387,9 +387,12 @@ class DetailViewModel(
                 _state.value = next
                 return@launch
             }
-            // 保留历史与预览：load() 会重建整个状态，不带上就被抹成空，界面会闪一下"没有历史"
+            // 保留历史与预览：load() 会重建整个状态，不带上就被抹成空，界面会闪一下"没有历史"。
+            // 但录音已经不在时（"只删录音"之后）必须把播放条收起来：留着一个按不动的播放条，
+            // 用户会以为播放器坏了。
+            val keepPlayback = audioFile?.let { it.isFile && it.length() > WavHeader.MIN_BYTES } == true
             _state.value = next.copy(
-                playback = _state.value.playback,
+                playback = if (keepPlayback) _state.value.playback else PlaybackState(),
                 history = _state.value.history,
                 preview = _state.value.preview,
             )

@@ -259,8 +259,9 @@ fun DetailScreen(
                                 )
                             }
                             // 有录音才给「只删录音」：没有录音的会议点了只会报错
-                            // 录音还在不在由引擎在详情里给出（与会议库同一判断），界面不再自己算
-                            if (detail?.summary?.hasAudio == true) {
+                            // 能播就等于"有录音"：引擎的 hasAudio 只认混音后的"录音.*"，
+                            // 崩溃/未混音的会议只剩 mic/system 原始音轨（照样能播、也能删）
+                            if (state.playback.available || detail?.summary?.hasAudio == true) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -554,18 +555,22 @@ private fun FishboneCard(
                         FishboneQuoteRow(quote = quote, onPlayFrom = onPlayFrom)
                     }
                 } else if (branch.refs.isNotEmpty()) {
-                    // 折叠时照原样显示模型给的时间戳：对不上原话的 ref 也要看得见，
-                    // 否则"这条分支引用了什么"就被界面悄悄删掉了
+                    // 折叠时显示模型给的时间戳：核对上的去重排序、可点回听；对不上的照原样列出
+                    // （不可点）。两边都不藏，用户才看得出"这条分支引用了什么"。
+                    val refs = FishboneGrounding.split(branch.refs, transcript)
                     androidx.compose.foundation.layout.FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        branch.refs.forEach { ref ->
-                            val resolved = FishboneGrounding.quoteOf(ref, transcript)
+                        refs.quotes.forEach { quote ->
                             AssistChip(
-                                onClick = { resolved?.let { onPlayFrom(it.ms.toULong()) } },
-                                enabled = resolved != null,
-                                label = { Text(ref) },
+                                onClick = { onPlayFrom(quote.ms.toULong()) },
+                                label = {
+                                    Text(io.github.tancheng33.tingo.transcription.Transcript.mmss(quote.ms))
+                                },
                             )
+                        }
+                        refs.unresolved.forEach { ref ->
+                            AssistChip(onClick = {}, enabled = false, label = { Text(ref) })
                         }
                     }
                 }

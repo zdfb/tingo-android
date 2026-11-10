@@ -303,12 +303,7 @@ const MAX_CLEANUP_DAYS: u32 = 3650;
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
 
-/// 只删掉的录音放在回收站下的这个子目录里（名字带点号：不进回收站列表）。
-///
-/// 不能直接放进 `.trash/<id>`：那样回收站里会出现一个"和库里同名"的目录，
-/// 之后这场会议既没法整体删进回收站（同名冲突），也没法从回收站恢复（库里已有同 id）。
-/// 录音单独一层、目录名带时间戳，就不会和"整场会议的回收站目录"抢同一个名字。
-const AUDIO_TRASH_DIR: &str = ".audio";
+
 
 /// 导入结果：会议 id 与它的目录。
 ///
@@ -354,7 +349,7 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
         "delete_audio" => {
             // 与桌面 batch 同一条路径：录音移到回收站，转写与纪要留下。直接 remove_file 会
             // 让"批量只删录音"变成不可恢复，和界面上说的"可从废纸篓恢复"对不上。
-            trash_audio(&root, id, &meetings::audio_files(&dir), "batch").map(|_| ())
+            remove_audio(&meetings::audio_files(&dir), "batch").map(|_| ())
         }
         "delete" => {
             // 与单条删除同一语义：先进回收站，用户能反悔
@@ -373,20 +368,16 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
     }
 }
 
-/// 把"只删掉的录音"移进回收站的独立子目录，返回腾出的字节数。
-fn trash_audio(root: &std::path::Path, id: &str, files: &[std::path::PathBuf], op: &str) -> Result<u64, EngineError> {
-    if files.is_empty() {
-        return Ok(0);
-    }
-    // 目录名带毫秒：同一场会议删两次录音也不会互相覆盖
-    let stamp = chrono::Local::now().timestamp_millis();
-    let trash = root.join(TRASH_DIR).join(AUDIO_TRASH_DIR).join(format!("{id}-{stamp}"));
-    std::fs::create_dir_all(&trash).map_err(|e| io_error(e, op))?;
+/// 删掉这些录音文件并返回腾出的字节数。
+///
+/// 桌面把录音挪进系统废纸篓（访达里看得见、能拖回来）；Android 应用内没有"被删的录音"
+/// 这类界面，挪到 `.trash` 只会变成**既占着空间又找不回来**的东西——界面还承诺"腾出空间"
+/// 就没兑现。所以这里真删，并且界面上的确认框明说"无法恢复"。
+fn remove_audio(files: &[std::path::PathBuf], op: &str) -> Result<u64, EngineError> {
     let mut freed = 0u64;
     for file in files {
         freed += meetings::size_of(file);
-        let name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
-        std::fs::rename(file, trash.join(&name)).map_err(|e| io_error(e, op))?;
+        std::fs::remove_file(file).map_err(|e| io_error(e, op))?;
     }
     Ok(freed)
 }
@@ -707,10 +698,11 @@ impl TingoEngine {
         })
     }
 
-    /// 只删这场会议的录音：移到回收站（可恢复），转写与纪要留在原位。返回腾出的字节数。
+    /// 只删这场会议的录音：**真的删掉**，转写与纪要留在原位。返回腾出的字节数。
     ///
-    /// 与桌面 `server.rs::delete_audio` 同一语义：桌面界面的确认框写的是"录音会移到废纸篓"，
-    /// 所以这里不能直接 `remove_file`，否则用户点错了就再也拿不回来。
+    /// 与桌面的差别是刻意的：桌面挪进系统废纸篓（访达里看得见、能拖回来），
+    /// Android 没有对应的可浏览回收站，挪进 `.trash` 只会变成"占着空间又找不回来"。
+    /// 因此界面的确认框明说"无法恢复"，这里也真删，保证"腾出空间"说到做到。
     ///
     /// @param skip_ids 正在转写/写纪要的会议 id：删掉正在被读的录音会让那一场中途炸掉
     pub fn delete_audio(&self, id: String, skip_ids: Vec<String>) -> Result<u64, EngineError> {
@@ -728,7 +720,7 @@ impl TingoEngine {
                     detail: "这场会议没有录音文件".to_string(),
                 });
             }
-            trash_audio(&root, &id, &files, "delete_audio")
+            remove_audio(&files, "delete_audio")
         })
     }
 
@@ -1718,7 +1710,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_audio_trashes_only_the_recording() {
+    fn delete_audio_removes_only_the_recording() {
         let root = temp_root("delete-audio");
         let dir = meeting(&root, "2026-10-28_1430_复盘");
         std::fs::write(dir.join("录音.wav"), vec![0u8; 4096]).unwrap();
@@ -1731,11 +1723,8 @@ mod tests {
         assert_eq!(freed, 4096, "腾出的字节数要按被移走的录音算");
         assert!(!dir.join("录音.wav").exists(), "录音要离开会议目录");
         assert!(dir.join("纪要.md").is_file(), "转写与纪要必须留在原位");
-        // 移到回收站而不是删掉：用户点错了还能找回来（独立子目录，不和整场会议的回收站目录抢名字）
-        let audio_trash = root.join("meetings").join(TRASH_DIR).join(AUDIO_TRASH_DIR);
-        let moved = std::fs::read_dir(&audio_trash).unwrap().flatten().map(|e| e.path()).collect::<Vec<_>>();
-        assert_eq!(moved.len(), 1);
-        assert!(moved[0].join("录音.wav").is_file());
+        // 真删：Android 没有可浏览的回收站，留一份只会既占空间又找不回来
+        assert!(std::fs::read_dir(root.join("meetings").join(TRASH_DIR)).is_err(), "不该往回收站里塞录音");
         // 会议本身还在库里（只是没有录音了）
         assert_eq!(engine.scan_library().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&root);
@@ -1760,8 +1749,7 @@ mod tests {
 
     #[test]
     fn a_meeting_that_lost_its_audio_can_still_be_deleted_and_restored() {
-        // 回归：把录音直接放进 `.trash/<id>` 会让这场会议再也删不掉（同名冲突）、
-        // 也恢复不了（库里已有同 id）。录音必须放在独立子目录里。
+        // 回归：只删录音不能污染回收站目录，否则这场会议之后既删不掉也恢复不了
         let root = temp_root("delete-audio-then-trash");
         let dir = meeting(&root, "2026-10-28_1430_复盘");
         std::fs::write(dir.join("录音.wav"), vec![0u8; 1024]).unwrap();
@@ -1787,7 +1775,7 @@ mod tests {
     }
 
     #[test]
-    fn batch_delete_audio_also_trashes_the_recording() {
+    fn batch_delete_audio_also_removes_the_recording() {
         let root = temp_root("batch-delete-audio");
         let dir = meeting(&root, "2026-10-28_1430_复盘");
         std::fs::write(dir.join("录音.wav"), vec![0u8; 2048]).unwrap();
@@ -1803,8 +1791,7 @@ mod tests {
 
         assert!(!dir.join("录音.wav").exists());
         assert!(dir.join("纪要.md").is_file());
-        // 批量也一样进回收站（独立子目录）
-        assert!(root.join("meetings").join(TRASH_DIR).join(AUDIO_TRASH_DIR).is_dir());
+        // 批量与单场同一语义：真删，腾出的空间说到做到
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -1146,7 +1146,7 @@ private fun DetailRoute(
             guessing = state.guessing,
             guessFailure = state.guessFailure,
             guessNote = state.guessNote,
-            onRenameSpeaker = { index, name, afterSave -> viewModel.renameSpeaker(index, name, afterSave) },
+            onRenameSpeaker = viewModel::renameSpeaker,
             onDeleteRecording = {
                 val busyIds = container.tasks.tasks.value.map { it.meetingId }
                 viewModel.deleteRecording(

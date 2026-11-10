@@ -84,6 +84,14 @@ class AsrModels internal constructor(
     companion object {
         const val SAMPLE_RATE = 16_000
 
+        /**
+         * 短于这个人声段就当噪声丢掉（毫秒）。
+         *
+         * 正式转写与边录边转共用：两处各写一个 200ms 迟早会漂移成
+         * "实时看到的句子比最终转写少"这种解释不清的问题。
+         */
+        const val MIN_SPEECH_MS = 200L
+
         /** 模型没就绪时抛 [IllegalStateException]，调用方据此提示"去下载模型"。 */
         fun open(store: ModelStore, catalog: ModelCatalog): AsrModels {
             val missing = catalog.files.filterNot { store.isReady(it) }

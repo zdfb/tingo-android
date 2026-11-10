@@ -60,11 +60,20 @@ class FishboneGroundingTest {
     }
 
     @Test
-    fun aZeroLengthRecordingHasNoEvidence() {
-        // 桌面无条件比较时长：录音长度未知（0）时任何时间戳都不该算依据
-        val empty = transcript(Triple(0L, "说话人1", "有内容"), durationMs = 0)
+    fun anUnknownDurationDoesNotRejectEveryRef() {
+        // 时长未知（导入的 transcript.json 常是 0）时，桌面传的是 Infinity：不能拿"超出长度"把依据判没
+        val unknown = transcript(Triple(0L, "说话人1", "有内容"), durationMs = 0)
 
-        assertNull(FishboneGrounding.resolve("00:05", empty))
+        assertEquals(0L, FishboneGrounding.resolve("00:05", unknown)?.ms)
+    }
+
+    @Test
+    fun splitSeparatesGroundedQuotesFromRawRefs() {
+        val chips = FishboneGrounding.split(listOf("[00:12]", "00:13", "99:00", "99:00"), meeting)
+
+        // 核对上的去重、按时间排；对不上的照原文列出（同一串只列一次）
+        assertEquals(1, chips.quotes.size)
+        assertEquals(listOf("99:00"), chips.unresolved)
     }
 
     @Test

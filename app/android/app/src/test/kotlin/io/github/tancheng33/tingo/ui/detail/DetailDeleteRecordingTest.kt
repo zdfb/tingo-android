@@ -99,6 +99,7 @@ class DetailDeleteRecordingTest {
         assertEquals("忙碌列表要原样交给引擎", listOf("别的会议"), engine.lastDeleteAudioBusyIds)
         assertEquals("腾出的字节数要交给界面做提示", 2_048uL, freed)
         assertFalse("删完录音播放条必须消失", vm.state.value.detail?.summary?.hasAudio == true)
+        assertFalse("播放条的状态也要收起来（不能留一个按不动的播放条）", vm.state.value.playback.available)
     }
 
     @Test
@@ -126,5 +127,6 @@ class DetailDeleteRecordingTest {
         // 删录音失败不能把整页换成错误页：转写和纪要都还好好的
         assertNull(vm.state.value.failure)
         assertTrue("失败之后录音还在，播放条不该消失", vm.state.value.detail?.summary?.hasAudio == true)
+        assertNull("失败不该动播放条状态", vm.state.value.playback.available.takeIf { it })
     }
 }
