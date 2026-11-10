@@ -9,7 +9,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | # | 能力 | 桌面端 | Android | 差距 |
 |---|---|---|---|---|
 | 1 | 录音（麦克风） | `/api/record/*` | 已有（前台服务） | — |
-| 2 | 系统内录 | `/api/record/*`（macOS 系统音频） | 已有（AudioPlaybackCapture，尽力而为） | — |
+| 2 | 系统内录 | `/api/record/*`（macOS 系统音频） | 已有（AudioPlaybackCapture） | 会议软件可以禁止被抓（`allowAudioPlaybackCapture=false`），此时只有麦克风那一路；界面上会提示"没抓到系统声音" |
 | 3 | 静音自动停录 | `autostop.rs`（5 秒窗口 RMS 门限 + 保留 30 秒） | 已有：每 tick 取两路峰值，连续 N 分钟无声自动结束并截掉尾巴 | **门限是峰值刻度不是桌面那套 dB 刻度**；未做"会议软件退出即结束"与"边录边转写算有声" |
 | 4 | 转写（Paraformer + 标点 + 声纹聚类） | `asr.rs` + `cluster.rs` | 已有（sherpa-onnx） | — |
 | 5 | Apple Speech 可选后端 | `apple_speech.rs` | 不适用（macOS 专有） | 不迁移 |
@@ -19,7 +19,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 9 | 鱼骨图 | `fishbone.rs` | 已有（解析 + 卡片） | — |
 | 10 | 说话人命名（手改） | `/api/meetings/{id}/speakers` | 已有（详情页说话人 chip 点开改名） | — |
 | 11 | AI 猜说话人名字 | `/api/meetings/{id}/speakers/guess` | 已有（提示词与解析复用引擎，调模型走用户配置） | — |
-| 12 | 人名/术语表（跨会议） | `terms.rs`（从各场纪要的 terms 块汇总） | 引擎已能读（FFI `glossary`）；App 内只读展示待做 | 缺界面 |
+| 12 | 人名/术语表（跨会议） | `terms.rs`（汇总各场纪要 terms）+ 纪要里"加进热词" | 已有：设置页「术语表」只读列出 + 点一下加进热词 | 入口位置不同（桌面在纪要里点，手机集中一处） |
 | 13 | 跨会议搜索（含识别错字模糊匹配） | `terms::search` + `/api/search` | 已接（引擎全文检索、命中片段、跳转时间点） | — |
 | 14 | 会议重命名 | `/api/meetings/{id}/meta` | 已有（详情页溢出菜单） | — |
 | 15 | 标签 | `/api/meetings/{id}/meta`（tags） | 已有（详情编辑、批量加/减） | — |
@@ -79,7 +79,8 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 - 引导第二步是"模型已就绪"（手机模型随包内置），桌面是"下载约 330 MB"——同一位置的两种事实
 - 模型服务：桌面打开设置页会自动拉一次模型列表，Android 只在点「拉取模型列表」时拉
   （省流量，也算一种"测试连接"）；桌面"测试连接"还会校验模型名是否存在，Android 只报连通性
-- 会议库位置：桌面能选任意目录，Android 固定在应用私有目录——这是分区存储的直接后果
+- 会议库位置：桌面能选任意目录，Android 固定（`getExternalFilesDir` 下的应用私有目录，
+  "文件"App 里看得见，额度随应用卸载清掉）——这是分区存储的直接后果
   （SAF 给的是 uri，不是可以传给引擎的路径）；要搬家请用"备份会议库 / 还原"
 - 自动停录：桌面还会把"边录边转写出了新文字"当成有人说话，Android 没有流式识别，这一路缺席；
   录音过程中改设置不生效（下一场才按新值，桌面每 5 秒重读配置）
@@ -87,9 +88,6 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
   Android 前者只在详情页显示、后者由前台服务通知承载；导入是同步短任务，不登记
 - 引导第三步只说明权限状态，不做"试录 3 秒"（桌面用 `/api/record/test` 真的录一段并回报两路音频状态）
 - 引导内部没有"回到引导并从原步骤继续"：点"去设置里填"会结束引导，回来看只能从第一步重走
-- 会议库位置不可切换：Android 的库固定在应用外部目录（可被"文件"App 看到），
-  桌面可以指向任意目录（#31 仍缺）
-
 - 导出仅覆盖"当前版本"，桌面还能导出某个历史版本（`?version=`）
 - Android 的 PDF只有文字排版，没有品牌页眉页脚，也没有鱼骨图示意（桌面用 HTML/CSS 画）
 

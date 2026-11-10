@@ -237,4 +237,7 @@
     <string name="task_transcribe">转写中</string>
     <string name="task_minutes">写纪要中</string>
     <string name="library_batch_failed">%1$d 场操作失败：%2$s</string>
+    <string name="settings_glossary">术语表（%1$d）</string>
+    <string name="settings_glossary_hint">这些词来自各场纪要的人名与专有名词。点一下加进热词：以后写纪要时按这个写法纠正同音字（识别阶段是否生效取决于模型）。</string>
+    <string name="settings_glossary_added">%1$s（已加）</string>
 </resources>

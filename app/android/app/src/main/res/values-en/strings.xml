@@ -237,4 +237,7 @@
     <string name="task_transcribe">Transcribing</string>
     <string name="task_minutes">Writing minutes</string>
     <string name="library_batch_failed">%1$d failed: %2$s</string>
+    <string name="settings_glossary">Glossary (%1$d)</string>
+    <string name="settings_glossary_hint">Terms collected from your meetings — names and proper nouns. Tap one to add it to hotwords so minutes spell it this way; whether recognition uses it depends on the model.</string>
+    <string name="settings_glossary_added">%1$s (added)</string>
 </resources>

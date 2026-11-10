@@ -26,11 +26,20 @@ interface HotwordsPort {
     /** 向表单里正在填的服务要模型列表；失败要如实返回原因 */
     suspend fun listModels(config: LlmConfig): List<String>
 
+    /**
+     * 跨会议术语表：各场纪要 terms 块里记下的人名/项目名/听错写法。
+     *
+     * 桌面在纪要里给每个术语一个"加进热词"的按钮；手机上放在热词那一节，
+     * 用户不必翻遍每场会议去找自己该加什么词。
+     */
+    suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
+
     /** 没有引擎时（测试/未初始化）什么都不做 */
     data object None : HotwordsPort {
         override suspend fun load(): List<String> = emptyList()
         override suspend fun save(words: List<String>): List<String> = words
         override suspend fun listModels(config: LlmConfig): List<String> = emptyList()
+        override suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
     }
 }
 
@@ -75,6 +84,8 @@ data class SettingsUiState(
     val hotwords: List<String> = emptyList(),
     /** 上一次保存热词失败了（界面据此提示，而不是照样说"已保存"） */
     val hotwordsFailed: Boolean = false,
+    /** 跨会议术语表（只读展示，点一下加进热词） */
+    val glossary: List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList(),
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
     val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
@@ -138,6 +149,15 @@ class SettingsViewModel(
                 hotwordsFailed = result.isFailure,
             )
         }
+    }
+
+    /** 把一个术语加进热词（已存在就不重复加）。桌面在纪要里点"加进热词"，这里是同一个动作。 */
+    fun addHotword(term: String) {
+        val word = term.trim()
+        if (word.isEmpty()) return
+        val current = _state.value.hotwords
+        if (current.any { it.equals(word, ignoreCase = true) }) return
+        saveHotwords(current + word)
     }
 
     /** 保存"几分钟没说话就自动结束"；0 表示不自动结束。 */
@@ -217,12 +237,14 @@ class SettingsViewModel(
         val next = try {
             val stats = runCatching { storageStats() }.getOrNull()
             val hotwords = runCatching { hotwordsPort.load() }.getOrDefault(emptyList())
+            val glossary = runCatching { hotwordsPort.glossary() }.getOrDefault(emptyList())
             _state.value.copy(
                 loading = false,
                 asr = groupOf(catalog),
                 llmConfig = settings.llm,
                 storage = stats,
                 hotwords = hotwords,
+                glossary = glossary,
                 autoStopSilenceMin = settings.autoStopSilenceMin,
             )
         } catch (e: Exception) {

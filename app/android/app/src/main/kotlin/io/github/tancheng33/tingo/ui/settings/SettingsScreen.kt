@@ -64,6 +64,7 @@ fun SettingsScreen(
     onSaveLlmConfig: (LlmConfig) -> Unit = {},
     onFetchModels: (LlmConfig) -> Unit = {},
     onSaveHotwords: (List<String>) -> Unit = {},
+    onAddHotword: (String) -> Unit = {},
     onReplayOnboarding: () -> Unit = {},
     onSaveAutoStopSilence: (Int) -> Unit = {},
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
@@ -128,6 +129,12 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
+
+        // 跨会议术语表：桌面在纪要里给每个术语一个"加进热词"，这里集中成一处，
+        // 用户不必翻遍每场会议去找自己该加什么词
+        if (models.glossary.isNotEmpty()) {
+            GlossarySection(terms = models.glossary, words = models.hotwords, onAdd = onAddHotword)
+        }
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
@@ -664,5 +671,51 @@ private fun PresetRow(current: String, english: Boolean, onPick: (String) -> Uni
             style = MaterialTheme.typography.bodySmall,
             color = TingoTheme.colors.muted,
         )
+    }
+}
+
+/**
+ * 术语表：各场纪要里记下的人名、项目代号、听错写法。
+ *
+ * 只读展示 + 点一下加进热词。桌面端没有独立的术语表页面（术语挂在纪要里），
+ * 手机上集中一处更好找；加进热词后两边行为一致：写纪要时按这个写法纠正同音字。
+ */
+@Composable
+private fun GlossarySection(
+    terms: List<io.github.tancheng33.tingo.engine.GlossaryTerm>,
+    words: List<String>,
+    onAdd: (String) -> Unit,
+) {
+    val colors = TingoTheme.colors
+    val added = remember(words) { words.map { it.lowercase() }.toSet() }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.settings_glossary, terms.size),
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+        )
+        Text(
+            stringResource(R.string.settings_glossary_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.muted,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            terms.forEach { term ->
+                // 已经在热词里的就标成已加：避免用户反复点同一个词
+                val already = term.term.lowercase() in added
+                PillFilter(
+                    label = if (already) {
+                        stringResource(R.string.settings_glossary_added, term.term)
+                    } else {
+                        term.term
+                    },
+                    selected = already,
+                    onClick = { if (!already) onAdd(term.term) },
+                )
+            }
+        }
     }
 }

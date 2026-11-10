@@ -625,6 +625,7 @@ fun TingoRoot(
                     onSaveLlmConfig = settingsViewModel::saveLlmConfig,
                     onFetchModels = settingsViewModel::fetchModels,
                     onSaveHotwords = settingsViewModel::saveHotwords,
+                    onAddHotword = settingsViewModel::addHotword,
                     onSaveAutoStopSilence = settingsViewModel::saveAutoStopSilence,
                     onReplayOnboarding = {
                         onboardViewModel.restart()
