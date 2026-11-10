@@ -37,6 +37,20 @@ Looking for a **free, open-source, local alternative to Otter.ai, Granola, Firef
 
 [Download v0.5.2](https://github.com/tancheng33/tingo/releases/tag/v0.5.2). Users of v0.5.1 and earlier must install this update manually once; later releases can be installed from within v0.5.2. For Apple silicon Macs.
 
+## Android
+
+The Android app mirrors the desktop app: recording (with best-effort system-audio capture), offline
+transcription with speaker diarization, remote-LLM minutes, playback, search/archive/delete/export,
+settings and a first-run tour. UI is rearranged for phones (bottom navigation).
+
+- Audio never leaves the device for transcription; the quantized models ship inside the APK, so
+  transcription works offline (APK with models: 392 MB compressed / 412 MB uncompressed).
+- The LLM API key lives in app-private `SharedPreferences` — never logged, never in exports, cleared
+  when you switch providers. Nothing is preconfigured.
+- System-audio capture needs a per-recording screen-capture consent, and meeting apps may refuse it.
+- Build steps, model sources/licences and a row-by-row desktop→Android parity table live in
+  [app/android/README.md](app/android/README.md) and [docs/android-parity.md](docs/android-parity.md).
+
 ## Highlights
 
 **Evidence-bound fishbone diagrams.** When a meeting analyzes causes, Tingo draws a fishbone. Expand a branch to see who said what and when; click a timestamp to listen. Branches whose cited timestamps can't be found in the transcript are marked red ("no evidence"), thin ones amber. Export to [Excalidraw](https://excalidraw.com) with one click.
@@ -103,6 +117,11 @@ git clone https://github.com/tancheng33/tingo && cd tingo
 uv sync && uv run pytest -m "not slow"     # Python backend / CLI
 cd app && pnpm install && pnpm tauri dev   # desktop app (Tauri + Rust)
 cd engine && cargo test                    # Rust core
+
+# Android (Kotlin + Compose, same Rust core through UniFFI)
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+cd app/android && ./gradlew :app:testDebugUnitTest          # 366 JVM unit tests
+./gradlew :app:assembleDebug -PtingoSkipBundledModels=true  # APK without the 327 MB models
 ```
 
 Official release signing and notarization are documented in [the macOS release guide](app/scripts/README.md). Regular source builds do not need a distribution certificate.

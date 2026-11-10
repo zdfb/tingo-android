@@ -8,6 +8,15 @@
 设置页只是给出五家常服务的"填空按钮"（点一下填好地址、协议、模型名），
 密钥永远由用户自己粘，换服务商时会清空——上一家的密钥不该被送到下一家。
 
+## 界面
+
+| 录制 | 会议库 | 详情 | 设置 |
+|---|---|---|---|
+| ![](../../docs/android/record.png) | ![](../../docs/android/library.png) | ![](../../docs/android/detail.png) | ![](../../docs/android/settings.png) |
+
+截图拍于 2026-11-09（REDMI Turbo 4 / Android 16），之后又加过品牌行、术语表与「进行中」任务面板，
+所以细节会与当前版本略有出入；布局与信息层级一致。
+
 ## 结构
 
 ```
@@ -101,7 +110,8 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 模型（238 MB）+ CT-Transformer 标点 **int8**（76 MB）+ CAM++ 声纹（28 MB，fp32，桌面端同样是这一份）
 + Silero VAD（0.6 MB，fp32）。识别与标点都是 int8 量化版，声纹与 VAD 上游只提供 fp32，
 桌面端也用这两个，所以两边一致。
-打进 `assets/models/`，**debug 包实测 620 MB**（模型按不压缩方式存放；release 用签名压缩会更小）。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
+打进 `assets/models/`，**debug 包实测 392 MB（压缩后）/ 412 MB（解压后）**，其中模型占 327 MB
+（模型以不压缩方式存放，所以体积基本等于模型本身）。安装后首次启动由 `ModelInstaller` 解包到应用私有目录
 （幂等、带进度），**转写全程不需要网络**。（早期版本的端侧纪要 GGUF 与 llama.cpp 已整体移除。）
 
 **图标与品牌图是生成的，不要手改**：`res/mipmap-*/ic_launcher*.png` 与

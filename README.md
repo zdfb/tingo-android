@@ -41,6 +41,13 @@
 设置与新手引导，界面按手机重排（底栏导航）。见 [app/android/README.md](app/android/README.md)：
 构建步骤、模型来源与许可、以及桌面→Android 的逐条对照表（`docs/android-parity.md`）。
 
+手机端和桌面端守同一条隐私线，差别只在系统限制：
+
+- 录音、语音识别、说话人区分都在手机上完成，APK 内置量化模型，**转写不需要联网**。
+- API Key 存在应用私有的 SharedPreferences，**不进日志、不进导出包**；换服务商会清空上一家的 Key。
+- 系统内录需要每次录制过一次系统"录屏"授权；会议软件可以拒绝被抓（那一路就只有麦克风）。
+- 会议库在应用私有目录（`getExternalFilesDir`），"文件"App 里看得见，卸载即清。
+
 ## 功能
 
 ### 原因分析鱼骨图：一眼看出哪条是空话
@@ -251,6 +258,14 @@ git clone https://github.com/tancheng33/tingo && cd tingo
 uv sync
 uv run pytest -m "not slow"          # 不下载模型的单元测试
 
+# Android（Kotlin + Compose，引擎复用同一份 Rust 核心）
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
+cd app/android && ./gradlew :app:testDebugUnitTest     # 366 个 JVM 单测
+./gradlew :app:assembleDebug -PtingoSkipBundledModels=true   # 不带 327 MB 语音模型出包
+# 设备级测试需要先接一台设备（或模拟器）：
+./gradlew :app:connectedDebugAndroidTest
+
 # 界面（TypeScript + Vite），构建产物输出到 src/tingo/web，桌面版和 `tingo ui` 共用
 cd app && pnpm install
 pnpm dev                             # 浏览器打开 http://localhost:1420，接口转给 8765 端口的后端
@@ -269,7 +284,8 @@ cargo run --release --example serve -- <模型目录> <录音组件> 8765   # �
 ## 致谢
 
 - [FunASR](https://github.com/modelscope/FunASR)：语音识别、VAD、标点、说话人模型
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)：桌面版的本地推理
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)：桌面与 Android 的本地推理
+- [UniFFI](https://mozilla.github.io/uniffi-rs/)：Rust 核心到 Kotlin 的绑定
 - [Tauri](https://tauri.app)、[Excalidraw](https://excalidraw.com)
 - [Meetily](https://github.com/Zackriya-Solutions/meetily)、[Hyprnote](https://github.com/fastrepl/anarlog)：本地会议助手的思路
 

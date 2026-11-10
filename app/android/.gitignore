@@ -8,6 +8,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# 内置模型（约 718 MB，由 scripts/fetch-models-offline.sh 取到本地，不进仓库）
+# 内置语音模型（327 MB，由 scripts/fetch-models-offline.sh 取到本地，不进仓库）
 # 必须锚定到仓库根：不加前导斜杠会连 Kotlin 源码里的 models/ 包一起忽略
 /models/
