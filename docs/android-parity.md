@@ -4,7 +4,7 @@
 `app/engine/src/server.rs` 的路由表（30+ 条）与 `app/src/views/*.ts` 的界面。
 
 Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
-`app/engine-ffi/src/lib.rs`（第一批后导出 20 个函数）共同决定。
+`app/engine-ffi/src/lib.rs`（`impl TingoEngine` 导出 34 个方法，另有 3 个独立的 `fn`）共同决定。
 
 | # | 能力 | 桌面端 | Android | 差距 |
 |---|---|---|---|---|
@@ -19,7 +19,7 @@ Android 侧现状由 `app/android/app/src/main/kotlin/**` 与
 | 9 | 鱼骨图 | `fishbone.rs` | 已有（解析 + 卡片） | — |
 | 10 | 说话人命名（手改） | `/api/meetings/{id}/speakers` | 已有（详情页说话人 chip 点开改名） | — |
 | 11 | AI 猜说话人名字 | `/api/meetings/{id}/speakers/guess` | 已有（提示词与解析复用引擎，调模型走用户配置） | — |
-| 12 | 人名/术语表（跨会议） | `terms.rs`（汇总各场纪要 terms）+ 纪要里"加进热词" | 已有：设置页「术语表」只读列出 + 点一下加进热词 | 入口位置不同（桌面在纪要里点，手机集中一处） |
+| 12 | 人名/术语表（跨会议） | `terms.rs`（汇总各场纪要 terms）+ 纪要里「全部加入热词」一次加完整场 | 已有：设置页「术语表」列出（含听错的写法）+ 点一下加进热词 | 入口位置不同（桌面在纪要里一次加整场，手机集中一处逐个加） |
 | 13 | 跨会议搜索（含识别错字模糊匹配） | `terms::search` + `/api/search` | 已接（引擎全文检索、命中片段、跳转时间点） | — |
 | 14 | 会议重命名 | `/api/meetings/{id}/meta` | 已有（详情页溢出菜单） | — |
 | 15 | 标签 | `/api/meetings/{id}/meta`（tags） | 已有（详情编辑、批量加/减） | — |

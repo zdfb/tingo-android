@@ -75,6 +75,8 @@ class SettingsHotwordsTest {
             askedWith = config
             return models()
         }
+
+        override suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
     }
 
     @Test
@@ -105,6 +107,7 @@ class SettingsHotwordsTest {
             override suspend fun load(): List<String> = listOf("旧词")
             override suspend fun save(words: List<String>): List<String> = error("磁盘满了")
             override suspend fun listModels(config: io.github.tancheng33.tingo.settings.LlmConfig) = emptyList<String>()
+            override suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
         }
         val vm = viewModel(port)
         advanceUntilIdle()

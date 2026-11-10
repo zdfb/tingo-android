@@ -240,4 +240,6 @@
     <string name="settings_glossary">Glossary (%1$d)</string>
     <string name="settings_glossary_hint">Terms collected from your meetings — names and proper nouns. Tap one to add it to hotwords so minutes spell it this way; whether recognition uses it depends on the model.</string>
     <string name="settings_glossary_added">%1$s (added)</string>
+    <string name="settings_glossary_term_with_variants">%1$s (heard as %2$s)</string>
+    <string name="settings_glossary_more">%1$d more terms not shown</string>
 </resources>

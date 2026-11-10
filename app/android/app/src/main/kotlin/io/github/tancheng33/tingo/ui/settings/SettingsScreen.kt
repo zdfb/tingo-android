@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import io.github.tancheng33.tingo.engine.GlossaryTerm
+
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -682,12 +684,14 @@ private fun PresetRow(current: String, english: Boolean, onPick: (String) -> Uni
  */
 @Composable
 private fun GlossarySection(
-    terms: List<io.github.tancheng33.tingo.engine.GlossaryTerm>,
+    terms: List<GlossaryTerm>,
     words: List<String>,
     onAdd: (String) -> Unit,
 ) {
     val colors = TingoTheme.colors
     val added = remember(words) { words.map { it.lowercase() }.toSet() }
+    // 设置页是一整列滚动内容，几百个胶囊会明显拖慢组合：只画前 MAX_TERMS 个并说明还有多少
+    val shown = terms.take(MAX_GLOSSARY_TERMS)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(R.string.settings_glossary, terms.size),
@@ -703,19 +707,34 @@ private fun GlossarySection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            terms.forEach { term ->
+            shown.forEach { term ->
                 // 已经在热词里的就标成已加：避免用户反复点同一个词
                 val already = term.term.lowercase() in added
                 PillFilter(
-                    label = if (already) {
-                        stringResource(R.string.settings_glossary_added, term.term)
-                    } else {
-                        term.term
+                    label = when {
+                        already -> stringResource(R.string.settings_glossary_added, term.term)
+                        // 听错的写法也要让人看见：桌面在纪要里直接写"识别成 星河划计"
+                        term.variants.isNotEmpty() -> stringResource(
+                            R.string.settings_glossary_term_with_variants,
+                            term.term,
+                            term.variants.joinToString("、"),
+                        )
+                        else -> term.term
                     },
                     selected = already,
                     onClick = { if (!already) onAdd(term.term) },
                 )
             }
         }
+        if (terms.size > shown.size) {
+            Text(
+                stringResource(R.string.settings_glossary_more, terms.size - shown.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.faint,
+            )
+        }
     }
 }
+
+/** 术语表一次最多画多少个：再多也没什么人翻，反而拖慢设置页滚动。 */
+private const val MAX_GLOSSARY_TERMS = 40

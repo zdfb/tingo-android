@@ -110,6 +110,7 @@ import io.github.tancheng33.tingo.recording.RecordingService
 import io.github.tancheng33.tingo.recording.requiresForegroundService
 import io.github.tancheng33.tingo.ui.record.RecordScreen
 import io.github.tancheng33.tingo.ui.record.RecordViewModel
+import io.github.tancheng33.tingo.engine.GlossaryTerm
 import io.github.tancheng33.tingo.ui.settings.SettingsScreen
 
 private const val DETAIL_ROUTE = "detail"
@@ -560,6 +561,10 @@ fun TingoRoot(
                                     ): List<String> = withContext(Dispatchers.IO) {
                                         LlmCatalog(UrlHttpJsonClient()).list(config)
                                     }
+
+                                    // 跨会议术语表：引擎从各场纪要的 terms 块汇总
+                                    override suspend fun glossary(): List<GlossaryTerm> =
+                                        withContext(Dispatchers.IO) { container.engine.glossary() }
                                 },
                                 meetingsRoot = File(container.dataRoot, "meetings"),
                                 installProgress = container.installProgress,

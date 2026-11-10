@@ -240,4 +240,6 @@
     <string name="settings_glossary">术语表（%1$d）</string>
     <string name="settings_glossary_hint">这些词来自各场纪要的人名与专有名词。点一下加进热词：以后写纪要时按这个写法纠正同音字（识别阶段是否生效取决于模型）。</string>
     <string name="settings_glossary_added">%1$s（已加）</string>
+    <string name="settings_glossary_term_with_variants">%1$s（识别成 %2$s）</string>
+    <string name="settings_glossary_more">还有 %1$d 个术语未显示</string>
 </resources>

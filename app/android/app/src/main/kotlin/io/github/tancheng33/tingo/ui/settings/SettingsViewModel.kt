@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import io.github.tancheng33.tingo.engine.GlossaryTerm
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tancheng33.tingo.data.LibraryBackup
@@ -32,14 +34,14 @@ interface HotwordsPort {
      * 桌面在纪要里给每个术语一个"加进热词"的按钮；手机上放在热词那一节，
      * 用户不必翻遍每场会议去找自己该加什么词。
      */
-    suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
+    suspend fun glossary(): List<GlossaryTerm>
 
     /** 没有引擎时（测试/未初始化）什么都不做 */
     data object None : HotwordsPort {
         override suspend fun load(): List<String> = emptyList()
         override suspend fun save(words: List<String>): List<String> = words
         override suspend fun listModels(config: LlmConfig): List<String> = emptyList()
-        override suspend fun glossary(): List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList()
+        override suspend fun glossary(): List<GlossaryTerm> = emptyList()
     }
 }
 
@@ -85,7 +87,7 @@ data class SettingsUiState(
     /** 上一次保存热词失败了（界面据此提示，而不是照样说"已保存"） */
     val hotwordsFailed: Boolean = false,
     /** 跨会议术语表（只读展示，点一下加进热词） */
-    val glossary: List<io.github.tancheng33.tingo.engine.GlossaryTerm> = emptyList(),
+    val glossary: List<GlossaryTerm> = emptyList(),
     /** 连续多少分钟没人说话自动结束录音；0 = 不自动结束 */
     val autoStopSilenceMin: Int = io.github.tancheng33.tingo.recording.SilenceWatcher.DEFAULT_MINUTES,
     /** 拉取模型列表的结果：null 表示没拉过 */
@@ -121,6 +123,9 @@ class SettingsViewModel(
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
+    /** 最近一次"要写的词表"：连点时以它为准，避免互相覆盖。落盘成功后清掉。 */
+    private var pendingHotwords: List<String>? = null
+
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
@@ -141,6 +146,9 @@ class SettingsViewModel(
 
     /** 保存热词；返回归一化后的词表（界面据此回填）。 */
     fun saveHotwords(words: List<String>) {
+        // 连点两个术语时，第二次读到的是"上一次还没写完"的旧状态，会把第一个词丢掉。
+        // 所以这里先同步记下最新的词表，再异步落盘
+        pendingHotwords = words
         viewModelScope.launch(io) {
             val result = runCatching { hotwordsPort.save(words) }
             _state.value = _state.value.copy(
@@ -148,6 +156,8 @@ class SettingsViewModel(
                 hotwords = result.getOrElse { _state.value.hotwords },
                 hotwordsFailed = result.isFailure,
             )
+            // 写完了就不再需要"待写"的影子：之后以界面状态为准
+            pendingHotwords = null
         }
     }
 
@@ -155,7 +165,7 @@ class SettingsViewModel(
     fun addHotword(term: String) {
         val word = term.trim()
         if (word.isEmpty()) return
-        val current = _state.value.hotwords
+        val current = pendingHotwords ?: _state.value.hotwords
         if (current.any { it.equals(word, ignoreCase = true) }) return
         saveHotwords(current + word)
     }
