@@ -243,10 +243,11 @@ private fun LibraryHeader(
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // 品牌块：图标 + 名字（桌面侧栏同一块）。图标是自适应图标的前景层，
-            // 所以不需要再单独存一份；裁成圆角就是为了不露出那层白底
+            // 品牌块：图标 + 名字（桌面侧栏同一块）。
+            // 必须用位图而不是 `@mipmap/ic_launcher`：那是个 adaptive-icon XML，
+            // `painterResource` 只认 VectorDrawable 与位图，传进去会直接崩
             Image(
-                painter = painterResource(R.mipmap.ic_launcher),
+                painter = painterResource(R.drawable.tingo_mark),
                 contentDescription = null,
                 modifier = Modifier
                     .size(TingoDimens.brandMark)
