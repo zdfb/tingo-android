@@ -24,7 +24,7 @@
 
 - [x] 6.1 调整 `TingoRoot` 的底部/侧边导航视觉并保留当前窄屏、宽屏行为；运行 `TingoRootAdaptiveTest` 和 `LanguageSwitchTest`，确认导航、详情布局及语言切换通过。
 - [x] 6.2 运行 `:app:testDebugUnitTest` 与 API 36 模拟器上的相关 Compose instrumentation tests，使用 `-PtingoSkipBundledModels=true` 构建 Debug 包并安装到连接的 Android 测试机；检查中英文、系统浅/深色、引导/录音/会议库/详情/设置截图及系统栏避让。
-- [ ] 6.3 按 code-review 技能从已确认基点执行 Standards 与 Spec 两轴审查，修复所有发现并重复审查与相关测试，直至两轴均无未解决问题。
+- [x] 6.3 按 code-review 技能从已确认基点执行 Standards 与 Spec 两轴审查，修复所有发现并重复审查与相关测试，直至两轴均无未解决问题。
 
 ## Workflow follow-up
 
