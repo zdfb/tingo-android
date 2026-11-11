@@ -131,47 +131,30 @@ fun LibraryScreen(
         return
     }
     when (state) {
-        LibraryUiState.Loading -> Column(modifier.fillMaxSize()) {
+        LibraryUiState.Loading, LibraryUiState.Empty, is LibraryUiState.Failed -> Column(modifier.fillMaxSize()) {
             LibraryHeader(
                 query = "", onQueryChange = onQueryChange, archivedOnly = false,
                 onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
                 countLabel = stringResource(R.string.library_count, 0),
             )
             Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
-            }
-        }
-
-        LibraryUiState.Empty -> Column(modifier.fillMaxSize()) {
-            LibraryHeader(
-                query = "", onQueryChange = onQueryChange, archivedOnly = false,
-                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
-                countLabel = stringResource(R.string.library_count, 0),
-            )
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                MessageBlock(
-                    title = stringResource(R.string.library_empty),
-                    body = stringResource(R.string.library_empty_body),
-                    action = stringResource(R.string.library_start_recording),
-                    onAction = onStartRecording,
-                    actionKind = PillKind.Primary,
-                )
-            }
-        }
-
-        is LibraryUiState.Failed -> Column(modifier.fillMaxSize()) {
-            LibraryHeader(
-                query = "", onQueryChange = onQueryChange, archivedOnly = false,
-                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
-                countLabel = stringResource(R.string.library_count, 0),
-            )
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                MessageBlock(
-                    title = stringResource(R.string.error_title),
-                    body = stringResource(R.string.library_failed),
-                    action = stringResource(R.string.action_refresh),
-                    onAction = onRefresh,
-                )
+                when (state) {
+                    LibraryUiState.Loading -> CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+                    LibraryUiState.Empty -> MessageBlock(
+                        title = stringResource(R.string.library_empty),
+                        body = stringResource(R.string.library_empty_body),
+                        action = stringResource(R.string.library_start_recording),
+                        onAction = onStartRecording,
+                        actionKind = PillKind.Primary,
+                    )
+                    is LibraryUiState.Failed -> MessageBlock(
+                        title = stringResource(R.string.error_title),
+                        body = stringResource(R.string.library_failed),
+                        action = stringResource(R.string.action_refresh),
+                        onAction = onRefresh,
+                    )
+                    is LibraryUiState.Content -> Unit
+                }
             }
         }
 

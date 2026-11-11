@@ -338,7 +338,27 @@ private fun GalleryToggle(label: String, selected: Boolean, onClick: () -> Unit)
     )
 }
 
-private enum class PreviewTab { Record, Meetings, Settings }
+private enum class PreviewTab(
+    private val chineseLabel: String,
+    private val englishLabel: String,
+) {
+    Record("新会议", "New"),
+    Meetings("会议记录", "Meetings"),
+    Settings("设置", "Settings");
+
+    fun label(variant: TingoPreviewVariant): String = variant.text(chineseLabel, englishLabel)
+}
+
+@Composable
+private fun PreviewTab.Icon(selected: Boolean) {
+    val colors = TingoTheme.colors
+    val tint = if (selected) colors.blue else colors.muted
+    when (this) {
+        PreviewTab.Record -> MicGlyph(tint, Modifier.size(22.dp))
+        PreviewTab.Meetings -> NotesGlyph(tint, Modifier.size(22.dp))
+        PreviewTab.Settings -> SlidersGlyph(tint, Modifier.size(22.dp))
+    }
+}
 
 @Composable
 private fun PreviewWindow(
@@ -381,11 +401,6 @@ private fun PreviewNavItem(
     selected: Boolean,
 ) {
     val colors = TingoTheme.colors
-    val label = when (tab) {
-        PreviewTab.Record -> variant.text("新会议", "New")
-        PreviewTab.Meetings -> variant.text("会议记录", "Meetings")
-        PreviewTab.Settings -> variant.text("设置", "Settings")
-    }
     Column(
         modifier = Modifier.widthIn(min = 84.dp).heightIn(min = 50.dp).clip(RoundedCornerShape(12.dp))
             .clickable(role = Role.Tab, onClick = {})
@@ -393,12 +408,8 @@ private fun PreviewNavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        when (tab) {
-            PreviewTab.Record -> MicGlyph(if (selected) colors.blue else colors.muted, Modifier.size(22.dp))
-            PreviewTab.Meetings -> NotesGlyph(if (selected) colors.blue else colors.muted, Modifier.size(22.dp))
-            PreviewTab.Settings -> SlidersGlyph(if (selected) colors.blue else colors.muted, Modifier.size(22.dp))
-        }
-        Text(label, color = if (selected) colors.blue else colors.muted, style = MaterialTheme.typography.labelSmall)
+        tab.Icon(selected)
+        Text(tab.label(variant), color = if (selected) colors.blue else colors.muted, style = MaterialTheme.typography.labelSmall)
     }
 }
 

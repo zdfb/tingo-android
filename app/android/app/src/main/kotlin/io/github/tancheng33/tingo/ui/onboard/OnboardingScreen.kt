@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -146,7 +145,7 @@ private fun StepBar(steps: List<OnboardingViewModel.Step>, index: Int) {
                     Text(
                         text = if (done) "✓" else (position + 1).toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (now) Color.White else if (done) colors.green else colors.muted,
+                        color = if (now) colors.onBlack else if (done) colors.green else colors.muted,
                     )
                 }
                 Text(

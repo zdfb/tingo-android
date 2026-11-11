@@ -132,15 +132,24 @@ fun DetailScreen(
     /** 跳到指定毫秒并开始播放（搜索命中跳转用） */
     onPlayFrom: (Long) -> Unit = {},
 ) {
+    val pageTitle = state.detail?.summary?.title?.takeIf(String::isNotBlank)
+        ?: stringResource(R.string.nav_meetings)
     when {
-        state.loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        state.loading -> Column(
+            modifier.fillMaxSize().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TingoPageTitle(pageTitle, style = MaterialTheme.typography.headlineSmall)
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
 
         state.failure != null -> Column(
             modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            TingoPageTitle(pageTitle, style = MaterialTheme.typography.headlineSmall)
             Text(stringResource(R.string.error_title), style = MaterialTheme.typography.titleMedium)
             Text(failureText(state.failure), style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = onRetry) { Text(stringResource(R.string.action_refresh)) }
@@ -167,7 +176,7 @@ fun DetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     TingoPageTitle(
-                        text = detail?.summary?.title.orEmpty(),
+                        text = pageTitle,
                         style = MaterialTheme.typography.headlineSmall,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

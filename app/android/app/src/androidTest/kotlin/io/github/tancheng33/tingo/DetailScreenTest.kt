@@ -134,6 +134,16 @@ class DetailScreenTest {
     }
 
     @Test
+    fun loadingStateShowsAnAccessiblePageTitle() {
+        render(DetailUiState(loading = true))
+
+        compose.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
+                .and(androidx.compose.ui.test.hasText(text(R.string.nav_meetings))),
+        ).assertIsDisplayed()
+    }
+
+    @Test
     fun rendersFishboneBranches() {
         val doc = MinutesDoc(
             title = "复盘",
@@ -188,6 +198,10 @@ class DetailScreenTest {
     @Test
     fun unreadableMeetingShowsErrorWithRetry() {
         render(DetailUiState(loading = false, failure = FailureKind.MALFORMED))
+        compose.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
+                .and(androidx.compose.ui.test.hasText(text(R.string.nav_meetings))),
+        ).assertIsDisplayed()
         compose.onNodeWithText(text(R.string.error_title)).assertIsDisplayed()
         compose.onNodeWithText(text(R.string.action_refresh)).assertIsDisplayed()
     }
