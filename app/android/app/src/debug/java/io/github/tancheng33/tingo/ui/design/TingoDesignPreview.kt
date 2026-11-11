@@ -143,7 +143,7 @@ fun TingoEmptyLibraryPreview(
     @PreviewParameter(TingoPreviewVariantProvider::class) variant: TingoPreviewVariant,
 ) {
     PreviewWindow(variant, selectedTab = PreviewTab.Meetings, showBottomBar = true) {
-        LibraryBody(variant, empty = true)
+        LibraryBody(variant, LibraryPreviewMode.EMPTY)
     }
 }
 
@@ -153,7 +153,7 @@ fun TingoLibraryPreview(
     @PreviewParameter(TingoPreviewVariantProvider::class) variant: TingoPreviewVariant,
 ) {
     PreviewWindow(variant, selectedTab = PreviewTab.Meetings, showBottomBar = true) {
-        LibraryBody(variant, empty = false)
+        LibraryBody(variant, LibraryPreviewMode.GROUPED)
     }
 }
 
@@ -163,7 +163,7 @@ fun TingoLibrarySelectionPreview(
     @PreviewParameter(TingoPreviewVariantProvider::class) variant: TingoPreviewVariant,
 ) {
     PreviewWindow(variant, selectedTab = PreviewTab.Meetings, showBottomBar = true) {
-        LibraryBody(variant, empty = false, selecting = true)
+        LibraryBody(variant, LibraryPreviewMode.SELECTION)
     }
 }
 
@@ -308,6 +308,15 @@ private enum class PreviewScreen(
     Settings("设置", "Settings", { TingoSettingsPreview(it) });
 
     fun label(variant: TingoPreviewVariant): String = variant.text(chineseLabel, englishLabel)
+}
+
+private enum class LibraryPreviewMode(
+    val showsEmptyState: Boolean,
+    val selectionEnabled: Boolean,
+) {
+    EMPTY(showsEmptyState = true, selectionEnabled = false),
+    GROUPED(showsEmptyState = false, selectionEnabled = false),
+    SELECTION(showsEmptyState = false, selectionEnabled = true),
 }
 
 private tailrec fun Context.activityOrNull(): Activity? = when (this) {
@@ -858,8 +867,10 @@ private fun TranscriptLine(variant: TingoPreviewVariant, speaker: String, time: 
 }
 
 @Composable
-private fun LibraryBody(variant: TingoPreviewVariant, empty: Boolean, selecting: Boolean = false) {
+private fun LibraryBody(variant: TingoPreviewVariant, mode: LibraryPreviewMode) {
     val text = variant::text
+    val empty = mode.showsEmptyState
+    val selecting = mode.selectionEnabled
     Column(Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
