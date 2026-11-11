@@ -16,8 +16,8 @@
 |---|---|---|---|
 | ![](../../docs/android/record.png) | ![](../../docs/android/library.png) | ![](../../docs/android/detail.png) | ![](../../docs/android/settings.png) |
 
-截图拍于 2026-11-09（REDMI Turbo 4 / Android 16），之后又加过品牌行、术语表与「进行中」任务面板，
-所以细节会与当前版本略有出入；布局与信息层级一致。
+截图拍于 2026-11-11，来自 Android API 36 模拟器中实际运行的 v0.5.2；会议库只含 App 内置的演示会议。
+[真实操作录屏（MP4）](../../docs/android/demo.mp4) · [GIF 预览](../../docs/android/demo.gif)。
 
 ## 结构
 

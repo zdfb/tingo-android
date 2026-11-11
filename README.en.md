@@ -1,133 +1,66 @@
-<p align="center"><img src="brand/tingo-icon.svg" width="120" alt="Tingo"></p>
+<p align="center"><img src="brand/tingo-icon.svg" width="112" alt="Tingo"></p>
 
-<h1 align="center">Tingo</h1>
+<h1 align="center">Tingo for Android</h1>
 
-<p align="center"><b>Every meeting, heard.</b><br>Local-first meeting minutes for Chinese — and every conclusion links back to what was actually said.</p>
+<p align="center"><b>Every meeting, heard.</b><br>Record meetings on Android, transcribe them on device, and trace each conclusion back to the original words.</p>
 
 <p align="center">
-  <a href="https://github.com/tancheng33/tingo/releases/latest"><img src="https://img.shields.io/badge/download-macOS%20app-1f4bff?logo=apple" alt="Download"></a>
-  <img src="https://img.shields.io/badge/macOS-13%2B-000?logo=apple" alt="macOS 13+">
-  <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT">
-  <a href="https://tancheng33.github.io/tingo/en.html"><img src="https://img.shields.io/badge/website-tancheng33.github.io%2Ftingo-555" alt="Website"></a>
-  <a href="README.md"><img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-555" alt="中文"></a>
+  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.2"><img src="https://img.shields.io/badge/version-v0.5.2-2457ff" alt="v0.5.2"></a>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white" alt="Android 8.0+">
+  <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT license">
+  <a href="README.md"><img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-555" alt="中文 README"></a>
 </p>
 
-<p align="center"><img src="docs/screenshots/demo.gif" width="880" alt="Demo: search across meetings, jump to the original words, expand fishbone quotes, watch the minutes being written"></p>
+<p align="center"><a href="docs/android/demo.mp4"><img src="docs/android/demo.gif" width="480" alt="Tingo Android v0.5.2 screen recording preview"></a></p>
+<p align="center"><a href="docs/android/demo.mp4">Watch the Android screen recording (MP4, about 34 seconds)</a></p>
 
-*Tingo* comes from 听 (*tīng*, "to listen"); its Chinese name 听过 means "heard it".
+The screenshots and recording were captured from v0.5.2 running in an Android API 36 emulator. The meeting is Tingo's built-in sample, not a mockup or a user's recording. The GIF was converted from that recording.
 
-Tingo records Tencent Meeting / Feishu / Zoom audio plus your mic, transcribes it **on your machine**, tells speakers apart, and has the LLM of your choice write structured minutes: topics, decisions, action items with owners and due dates, risks — and, when the meeting discussed *why* something happened, a **fishbone diagram whose every branch is bound to the original quotes**.
+## Android screenshots
 
-- **Audio never leaves your Mac.** Speech recognition and speaker diarization run locally. Minutes can be written by DeepSeek, Qwen or any OpenAI-compatible API — or a local Ollama model, fully offline.
-- **Built for Chinese.** Uses Alibaba DAMO's FunASR models, which handle Chinese punctuation, numbers and names far better than English-first stacks. Relative dates ("next Wednesday", "end of month") are resolved against the meeting date.
-- **Every claim has a source.** Each line of the minutes carries a timestamp that jumps to that second of the recording. The fishbone diagram counts how much original speech backs each branch and flags the ones with **no evidence** — so hand-waving is visible at a glance.
-- **English and Chinese.** The app, the minutes and every export work in both languages. English meetings are recognized with SenseVoice, and a Chinese meeting can get English minutes (and vice versa).
-- **About 13 MB to download.** Tauri + Rust, no Python or ffmpeg needed. A live recording is fully transcribed seconds after you hit stop; a 76-minute file imports in about 3.5 minutes on an M1 Pro.
+<table>
+  <tr>
+    <td align="center"><b>Record</b><br><img src="docs/android/record.png" alt="Recording screen" width="100%"></td>
+    <td align="center"><b>Meetings</b><br><img src="docs/android/library.png" alt="Meeting library" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Meeting details</b><br><img src="docs/android/detail.png" alt="Meeting minutes" width="100%"></td>
+    <td align="center"><b>Settings</b><br><img src="docs/android/settings.png" alt="App settings" width="100%"></td>
+  </tr>
+</table>
 
-Looking for a **free, open-source, local alternative to Otter.ai, Granola, Fireflies.ai or Fathom** — an AI meeting note taker that never uploads your audio? That's what Tingo is for.
+## Features
 
-> The meetings, names and numbers in the screenshots are fictional demo data.
+- **Audio and transcription stay on your device.** Record the microphone and optionally try to capture meeting app audio. Paraformer speech recognition, punctuation, and speaker separation run locally; transcription works offline.
+- **Trace minutes back to the source.** Connect your own LLM service to create minutes from the transcript. Timestamps jump to the matching audio. Tingo does not upload recordings to the minutes service.
+- **Manage meetings.** Search meeting content, archive or restore deleted meetings, export or back up data, and switch between Chinese and English.
+- **Keep control of local data.** Recordings and meetings live in Android's app-specific directory. Uninstalling the app deletes that directory, so export or back up meetings you want to keep.
 
-## v0.5.2: in-app updates
+System audio capture uses Android MediaProjection / Audio Playback Capture and requires confirmation during recording. Some meeting apps block playback capture, depending on the app and device.
 
-- Download and verify an update, then click **Restart and update** to replace and reopen the app automatically. Meetings, settings and speech models are kept.
-- See download and verification progress, and install later if preferred. Installation waits until recording and other active tasks are finished.
-- Manual update checks now bypass stale backend results.
-- Developer ID-signed and Apple-notarized apps; update packages also carry a signature bound to the release version.
+## Download and install
 
-[Download v0.5.2](https://github.com/tancheng33/tingo/releases/tag/v0.5.2). Users of v0.5.1 and earlier must install this update manually once; later releases can be installed from within v0.5.2. For Apple silicon Macs.
+1. Download `Tingo-Android-v0.5.2-debug.apk` from [v0.5.2 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.2).
+2. When Android prompts you, allow your browser or file manager to install apps, then continue.
+3. Grant microphone access when you start recording. Follow the system prompt if you want to capture meeting app audio.
 
-## Android
+This is a test build distributed as an installable debug APK. The package is about 412 MiB. Minimum supported version: Android 8.0 (API 26).
 
-The Android app mirrors the desktop app: recording (with best-effort system-audio capture), offline
-transcription with speaker diarization, remote-LLM minutes, playback, search/archive/delete/export,
-settings and a first-run tour. UI is rearranged for phones (bottom navigation).
+### Minutes service and privacy
 
-- Audio never leaves the device for transcription; the quantized models ship inside the APK, so
-  transcription works offline (APK with models: 392 MB compressed / 412 MB uncompressed).
-- The LLM API key lives in app-private `SharedPreferences` — never logged, never in exports, cleared
-  when you switch providers. Nothing is preconfigured.
-- System-audio capture needs a per-recording screen-capture consent, and meeting apps may refuse it.
-- Build steps, model sources/licences and a row-by-row desktop→Android parity table live in
-  [app/android/README.md](app/android/README.md) and [docs/android-parity.md](docs/android-parity.md).
+Speech recognition and speaker separation run on device. To generate minutes, the **transcript text** is sent to the provider configured in Settings; audio files are not sent. Your API key is stored in app-private settings. Recording, transcription, and playback remain available without an LLM service.
 
-## Highlights
+## Build from source
 
-**Evidence-bound fishbone diagrams.** When a meeting analyzes causes, Tingo draws a fishbone. Expand a branch to see who said what and when; click a timestamp to listen. Branches whose cited timestamps can't be found in the transcript are marked red ("no evidence"), thin ones amber. Export to [Excalidraw](https://excalidraw.com) with one click.
-
-<p align="center"><img src="docs/screenshots/fishbone.png" width="820" alt="Fishbone diagram bound to quotes"></p>
-
-**Never wait.** Stop recording and start the next meeting right away — transcription and minutes run in the background, with per-task progress in the sidebar. Open a meeting to watch the minutes being written section by section (including "thinking" progress for reasoning models).
-
-<p align="center"><img src="docs/screenshots/home.png" width="49%" alt="Background tasks"> <img src="docs/screenshots/generating.png" width="49%" alt="Minutes being written"></p>
-
-**Search everything that was said.** Search across all transcripts and jump to the exact second. A names & terms table at the end of the minutes records the correct spelling and misheard variants, so searching finds those too — and you can add them all to your hotwords in one click.
-
-**Less busywork.** Let AI guess who's who from how people address each other (each guess comes with evidence). Recording stops by itself when the meeting app quits or after 10 minutes of silence, and the silent tail is trimmed.
-
-**Export & share.** A4 PDF, editable Word, SRT subtitles, Obsidian notes with properties and an embedded Excalidraw drawing (optionally automatic), Feishu / DingTalk / WeCom group bots, or plain Markdown. Fishbone exports omit evidence details, and PDF/Word omit the names & terms appendix. In-app evidence and terminology remain available.
-
-<p align="center"><img src="docs/screenshots/pdf.png" width="820" alt="PDF export layout preview; current exports omit evidence details and terms"></p>
-
-**Minutes history.** Regeneration and manual edits preserve the previous minutes; failed generation leaves the current version intact. Choose a version in the history browser to preview, export, copy or share it. Historical PDF, Word and Obsidian exports use separate filenames; SRT always uses the meeting transcript. Deleting a historical version is permanent and leaves current minutes unchanged. Previously overwritten content cannot be recovered.
-
-**Stay organized.** Tag meetings by project or type and filter the list by tag; archive finished ones (they stay searchable). Select several meetings to tag, archive or delete them at once, and rename any meeting. Deleting a whole meeting moves it to the Trash, so nothing is lost by accident. On desktop, "delete recording only" also lands in the system Trash; Android's Trash only holds whole meetings, so there the recording is deleted outright and the confirm dialog says it cannot be undone. On desktop, **Settings → Storage** also lets you choose a meeting folder without restarting. By default, recordings, transcripts, minutes and history are copied to a new empty folder and verified, with progress shown and originals kept. You can also switch without copying and switch back to view the old library. Finish active tasks before switching; speech models stay in place. Settings → Storage shows what takes space and can drop old recordings (optionally archived ones only) while keeping transcripts and minutes.
-
-**Swappable ASR models.** Paraformer-large (default, fast and accurate for Chinese), SenseVoice (mixed Chinese / English / Japanese / Korean / Cantonese) or Fun-ASR-Nano (most accurate, applies your hotwords during recognition) — downloaded and switched in Settings, all running locally.
-
-## Install
-
-**Desktop app:** download `Tingo_x.y.z_aarch64.dmg` from [Releases](https://github.com/tancheng33/tingo/releases/latest) (Apple Silicon, macOS 13+; recording system audio needs macOS 15+). On first launch it downloads ~330 MB of models, then works offline.
-
-**Official releases from v0.5.0 are Developer ID-signed and Apple-notarized.** Open the DMG and drag Tingo into Applications. No manual signing, right-click workaround or `xattr` command is needed. Ad-hoc builds made from source are not notarized release packages.
-
-Quit the old app before replacing it; meetings, history and settings are preserved. Microphone and screen/system-audio permissions are still required. If recording permissions stop working after upgrading from an older ad-hoc build, grant them again in System Settings → Privacy & Security.
-
-**Command line** (Python + FunASR; needs Python 3.11+ and ffmpeg):
+Requires JDK 21, Android SDK 37, NDK 30, Rust, and `cargo-ndk`. Speech models are bundled in the APK; a full build is about 412 MiB.
 
 ```bash
-uv tool install git+https://github.com/tancheng33/tingo
-tingo record -t standup        # record system audio + mic, Ctrl+C to stop, minutes follow
-tingo run meeting.mp4          # process an existing recording
-tingo ui                       # open the GUI
+cd app/android
+./gradlew :app:assembleDebug
 ```
 
-## Privacy
+See the [Android development guide](app/android/README.md) for model licenses, configuration, and test details. The [feature parity table](docs/android-parity.md) compares Android and desktop.
 
-Audio and transcripts stay on your machine. When generating minutes, the **transcript text** is sent to the LLM endpoint you configure — use a local Ollama model to keep that offline too. The built-in server listens on 127.0.0.1 only. No analytics, no telemetry.
+## License
 
-## How it works
-
-ScreenCaptureKit records system audio and mic → audio is chunked at pauses while recording → VAD → ASR (Paraformer / SenseVoice / Fun-ASR-Nano via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)) → punctuation → CAM++ speaker embeddings → spectral clustering → LLM minutes (map-reduce for long meetings, dates resolved, glossary to fix homophones) → every fishbone citation is checked against the transcript. Engine comparison notes: [`spike/sherpa/RESULTS.md`](spike/sherpa/RESULTS.md) (in Chinese).
-
-## FAQ
-
-**How do I record and transcribe a Zoom / Teams / Google Meet call on Mac?** Hit record in Tingo. It captures system audio (the other side) and your microphone at the same time — no BlackHole or virtual audio device needed. You can also drop in recordings exported by the meeting app.
-
-**Is my audio uploaded?** No. Transcription and speaker separation run on your Mac. Only the transcript text goes to the LLM you configure — use a local Ollama model and nothing leaves the machine.
-
-**Which LLMs are supported?** Any OpenAI-compatible API (OpenAI, Gemini, DeepSeek, Qwen, Ollama, …) and the Anthropic (Claude) API.
-
-**Does it work for English meetings?** Yes. Switch the speech model to SenseVoice and the app and minutes to English in Settings.
-
-## Development
-
-```bash
-git clone https://github.com/tancheng33/tingo && cd tingo
-uv sync && uv run pytest -m "not slow"     # Python backend / CLI
-cd app && pnpm install && pnpm tauri dev   # desktop app (Tauri + Rust)
-cd engine && cargo test                    # Rust core
-
-# Android (Kotlin + Compose, same Rust core through UniFFI)
-export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-cd app/android && ./gradlew :app:testDebugUnitTest          # 366 JVM unit tests
-./gradlew :app:assembleDebug -PtingoSkipBundledModels=true  # APK without the 327 MB models
-```
-
-Official release signing and notarization are documented in [the macOS release guide](app/scripts/README.md). Regular source builds do not need a distribution certificate.
-
-Issues and PRs are welcome. Licensed under [MIT](LICENSE).
-
-### Apple system speech (macOS 26+)
-
-The desktop app offers **Apple Speech** in Settings → Speech model. Select Chinese or English explicitly, then **Check / install** to prepare system language assets and shared models, or **Use** when ready. Transcription runs on device; macOS manages the language assets. Tingo still uses its speaker model for diarization. Unsupported systems show an explanation and can use the existing engines. This option does not change LLM summarization.
+[MIT](LICENSE)
