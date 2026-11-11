@@ -319,6 +319,17 @@ private enum class LibraryPreviewMode(
     SELECTION(showsEmptyState = false, selectionEnabled = true),
 }
 
+private enum class MeetingPreviewStatus(
+    private val chineseLabel: String,
+    private val englishLabel: String,
+    val warning: Boolean,
+) {
+    READY("已完成", "Ready", warning = false),
+    GENERATING_MINUTES("纪要生成中", "Writing minutes", warning = true);
+
+    fun label(variant: TingoPreviewVariant): String = variant.text(chineseLabel, englishLabel)
+}
+
 private tailrec fun Context.activityOrNull(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.activityOrNull()
@@ -740,8 +751,8 @@ private fun RecordHomeBody(variant: TingoPreviewVariant, microphoneDenied: Boole
         }
         HorizontalDivider(color = TingoTheme.colors.line)
         SectionHeading(text("最近会议", "Recent meetings"), text("全部", "View all"))
-        MeetingPreviewRow(variant, "产品周会第 12 周", "10:24", text("54 分钟", "54 min"), text("已完成", "Ready"), text("产品", "Product"))
-        MeetingPreviewRow(variant, "增长复盘", text("昨天 09:10", "Yesterday 09:10"), text("38 分钟", "38 min"), text("正在生成纪要", "Writing minutes"), text("增长", "Growth"))
+        MeetingPreviewRow(variant, "产品周会第 12 周", "10:24", text("54 分钟", "54 min"), MeetingPreviewStatus.READY, text("产品", "Product"))
+        MeetingPreviewRow(variant, "增长复盘", text("昨天 09:10", "Yesterday 09:10"), text("38 分钟", "38 min"), MeetingPreviewStatus.GENERATING_MINUTES, text("增长", "Growth"))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SoftBadge(text("识别模型已就绪", "Recognition ready"), TingoTheme.colors.green)
             SoftBadge(text("纪要服务未配置", "Minutes not configured"), TingoTheme.colors.amber)
@@ -769,7 +780,7 @@ private fun MeetingPreviewRow(
     title: String,
     time: String,
     duration: String,
-    status: String,
+    status: MeetingPreviewStatus,
     tag: String,
     selected: Boolean = false,
 ) {
@@ -784,7 +795,10 @@ private fun MeetingPreviewRow(
                 }
             }
             Text(title, modifier = Modifier.weight(1f), color = TingoTheme.colors.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            SoftBadge(status, if (status.contains("生成") || status.contains("Writing")) TingoTheme.colors.amber else TingoTheme.colors.green)
+            SoftBadge(
+                label = status.label(variant),
+                color = if (status.warning) TingoTheme.colors.amber else TingoTheme.colors.green,
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(start = if (selected) 32.dp else 0.dp)) {
             Text(time, color = TingoTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
@@ -909,10 +923,10 @@ private fun LibraryBody(variant: TingoPreviewVariant, mode: LibraryPreviewMode) 
                 }
             } else {
                 SectionHeading(text("今天", "Today"), "2")
-                MeetingPreviewRow(variant, "产品周会第 12 周", "10:24", text("54 分钟", "54 min"), text("已完成", "Ready"), text("产品", "Product"), selected = selecting)
-                MeetingPreviewRow(variant, "增长复盘", "09:10", text("38 分钟", "38 min"), text("纪要生成中", "Writing minutes"), text("增长", "Growth"), selected = selecting)
+                MeetingPreviewRow(variant, "产品周会第 12 周", "10:24", text("54 分钟", "54 min"), MeetingPreviewStatus.READY, text("产品", "Product"), selected = selecting)
+                MeetingPreviewRow(variant, "增长复盘", "09:10", text("38 分钟", "38 min"), MeetingPreviewStatus.GENERATING_MINUTES, text("增长", "Growth"), selected = selecting)
                 SectionHeading(text("昨天", "Yesterday"), "1")
-                MeetingPreviewRow(variant, "移动端体验评审", "16:40", text("42 分钟", "42 min"), text("已完成", "Ready"), text("设计", "Design"), selected = false)
+                MeetingPreviewRow(variant, "移动端体验评审", "16:40", text("42 分钟", "42 min"), MeetingPreviewStatus.READY, text("设计", "Design"), selected = false)
             }
         }
         if (selecting && !empty) {
