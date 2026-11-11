@@ -27,8 +27,7 @@ class OnboardingScreenTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test
-    fun welcomeTitleIsExposedAsAHeadingAndKeepsTheFiveStepActions() {
+    private fun renderWelcome() {
         compose.setContent {
             TingoTheme {
                 OnboardingScreen(
@@ -49,6 +48,11 @@ class OnboardingScreenTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun welcomeTitleIsExposedAsAHeadingAndKeepsTheFiveStepActions() {
+        renderWelcome()
 
         val title = context.getString(R.string.onboard_hello_title)
         compose.onNodeWithText(title)
@@ -111,26 +115,7 @@ class OnboardingScreenTest {
 
     @Test
     fun welcomeShowsTheTingoBrandMark() {
-        compose.setContent {
-            TingoTheme {
-                OnboardingScreen(
-                    state = OnboardingViewModel.UiState(step = OnboardingViewModel.Step.HELLO),
-                    steps = OnboardingViewModel.Step.entries,
-                    llmConfigured = false,
-                    micGranted = false,
-                    systemAudioSupported = false,
-                    testing = false,
-                    probe = null,
-                    onTest = {},
-                    onRequestPermission = {},
-                    onNext = {},
-                    onBack = {},
-                    onSkip = {},
-                    onInstallDemo = {},
-                    onOpenSettings = {},
-                )
-            }
-        }
+        renderWelcome()
 
         compose.onNodeWithContentDescription(context.getString(R.string.app_name)).assertIsDisplayed()
     }

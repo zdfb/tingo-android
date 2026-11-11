@@ -131,31 +131,42 @@ fun LibraryScreen(
         return
     }
     when (state) {
-        LibraryUiState.Loading, LibraryUiState.Empty, is LibraryUiState.Failed -> Column(modifier.fillMaxSize()) {
-            LibraryHeader(
-                query = "", onQueryChange = onQueryChange, archivedOnly = false,
-                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
-                countLabel = stringResource(R.string.library_count, 0),
+        LibraryUiState.Loading -> DefaultLibraryScaffold(
+            modifier = modifier,
+            onQueryChange = onQueryChange,
+            onArchivedOnlyChange = onArchivedOnlyChange,
+            onShowTrash = manage.onShowTrash,
+        ) {
+            CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+        }
+
+        LibraryUiState.Empty -> DefaultLibraryScaffold(
+            modifier = modifier,
+            onQueryChange = onQueryChange,
+            onArchivedOnlyChange = onArchivedOnlyChange,
+            onShowTrash = manage.onShowTrash,
+        ) {
+            MessageBlock(
+                title = stringResource(R.string.library_empty),
+                body = stringResource(R.string.library_empty_body),
+                action = stringResource(R.string.library_start_recording),
+                onAction = onStartRecording,
+                actionKind = PillKind.Primary,
             )
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                when (state) {
-                    LibraryUiState.Loading -> CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
-                    LibraryUiState.Empty -> MessageBlock(
-                        title = stringResource(R.string.library_empty),
-                        body = stringResource(R.string.library_empty_body),
-                        action = stringResource(R.string.library_start_recording),
-                        onAction = onStartRecording,
-                        actionKind = PillKind.Primary,
-                    )
-                    is LibraryUiState.Failed -> MessageBlock(
-                        title = stringResource(R.string.error_title),
-                        body = stringResource(R.string.library_failed),
-                        action = stringResource(R.string.action_refresh),
-                        onAction = onRefresh,
-                    )
-                    is LibraryUiState.Content -> Unit
-                }
-            }
+        }
+
+        is LibraryUiState.Failed -> DefaultLibraryScaffold(
+            modifier = modifier,
+            onQueryChange = onQueryChange,
+            onArchivedOnlyChange = onArchivedOnlyChange,
+            onShowTrash = manage.onShowTrash,
+        ) {
+            MessageBlock(
+                title = stringResource(R.string.error_title),
+                body = stringResource(R.string.library_failed),
+                action = stringResource(R.string.action_refresh),
+                onAction = onRefresh,
+            )
         }
 
         is LibraryUiState.Content -> Column(modifier.fillMaxSize()) {
@@ -227,6 +238,29 @@ fun LibraryScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DefaultLibraryScaffold(
+    modifier: Modifier,
+    onQueryChange: (String) -> Unit,
+    onArchivedOnlyChange: (Boolean) -> Unit,
+    onShowTrash: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(modifier.fillMaxSize()) {
+        LibraryHeader(
+            query = "",
+            onQueryChange = onQueryChange,
+            archivedOnly = false,
+            onArchivedOnlyChange = onArchivedOnlyChange,
+            onShowTrash = onShowTrash,
+            countLabel = stringResource(R.string.library_count, 0),
+        )
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            content()
         }
     }
 }

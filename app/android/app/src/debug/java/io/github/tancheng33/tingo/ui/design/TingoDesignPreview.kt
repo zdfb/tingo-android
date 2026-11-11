@@ -55,7 +55,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -210,26 +209,14 @@ fun TingoSettingsPreview(
 
 @Composable
 fun TingoDesignGallery() {
-    var selectedScreen by remember { mutableIntStateOf(0) }
+    var selectedScreen by remember { mutableStateOf(PreviewScreen.Onboarding) }
     var english by remember { mutableStateOf(false) }
     var dark by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     val variant = TingoPreviewVariant(english = english, dark = dark)
     val view = LocalView.current
     val window = view.context.activityOrNull()?.window
-    val labels = listOf(
-        variant.text("新手引导", "Onboarding"),
-        variant.text("新会议", "New meeting"),
-        variant.text("麦克风权限", "Mic permission"),
-        variant.text("录音中", "Recording"),
-        variant.text("空列表", "Empty list"),
-        variant.text("会议列表", "Meetings"),
-        variant.text("批量选择", "Selection"),
-        variant.text("纪要详情", "Minutes"),
-        variant.text("转写详情", "Transcript"),
-        variant.text("纪要未配置", "Minutes setup"),
-        variant.text("设置", "Settings"),
-    )
+    val screens = PreviewScreen.entries
 
     TingoTheme(darkTheme = dark) {
         SideEffect {
@@ -253,9 +240,9 @@ fun TingoDesignGallery() {
                         modifier = Modifier.clickable { menuExpanded = true }.padding(vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(1.dp),
                     ) {
-                        Text("${(selectedScreen + 1).toString().padStart(2, '0')} / 11", color = TingoTheme.colors.muted, style = MaterialTheme.typography.labelSmall)
+                        Text("${(screens.indexOf(selectedScreen) + 1).toString().padStart(2, '0')} / ${screens.size}", color = TingoTheme.colors.muted, style = MaterialTheme.typography.labelSmall)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(labels[selectedScreen], color = TingoTheme.colors.text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(selectedScreen.label(variant), color = TingoTheme.colors.text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("⌄", color = TingoTheme.colors.muted, style = MaterialTheme.typography.titleMedium)
                         }
                     }
@@ -274,15 +261,16 @@ fun TingoDesignGallery() {
                                     .verticalScroll(rememberScrollState())
                                     .padding(vertical = 5.dp),
                             ) {
-                                labels.forEachIndexed { index, label ->
+                                screens.forEach { screen ->
+                                    val selected = screen == selectedScreen
                                     Row(
                                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                            .clickable(role = Role.Button, onClick = { selectedScreen = index; menuExpanded = false })
+                                            .clickable(role = Role.Button, onClick = { selectedScreen = screen; menuExpanded = false })
                                             .padding(horizontal = 15.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text(label, modifier = Modifier.weight(1f), color = if (index == selectedScreen) TingoTheme.colors.blue else TingoTheme.colors.text, style = MaterialTheme.typography.bodyLarge)
-                                        if (index == selectedScreen) Icon(Icons.Default.Check, contentDescription = null, tint = TingoTheme.colors.blue, modifier = Modifier.size(18.dp))
+                                        Text(screen.label(variant), modifier = Modifier.weight(1f), color = if (selected) TingoTheme.colors.blue else TingoTheme.colors.text, style = MaterialTheme.typography.bodyLarge)
+                                        if (selected) Icon(Icons.Default.Check, contentDescription = null, tint = TingoTheme.colors.blue, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -296,22 +284,30 @@ fun TingoDesignGallery() {
             }
             HorizontalDivider(color = TingoTheme.colors.line)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (selectedScreen) {
-                    0 -> TingoOnboardingPreview(variant)
-                    1 -> TingoRecordHomePreview(variant)
-                    2 -> TingoMicPermissionPreview(variant)
-                    3 -> TingoLiveRecordingPreview(variant)
-                    4 -> TingoEmptyLibraryPreview(variant)
-                    5 -> TingoLibraryPreview(variant)
-                    6 -> TingoLibrarySelectionPreview(variant)
-                    7 -> TingoMeetingMinutesPreview(variant)
-                    8 -> TingoMeetingTranscriptPreview(variant)
-                    9 -> TingoUnconfiguredMinutesPreview(variant)
-                    else -> TingoSettingsPreview(variant)
-                }
+                selectedScreen.content(variant)
             }
         }
     }
+}
+
+private enum class PreviewScreen(
+    private val chineseLabel: String,
+    private val englishLabel: String,
+    val content: @Composable (TingoPreviewVariant) -> Unit,
+) {
+    Onboarding("新手引导", "Onboarding", { TingoOnboardingPreview(it) }),
+    NewMeeting("新会议", "New meeting", { TingoRecordHomePreview(it) }),
+    MicrophonePermission("麦克风权限", "Mic permission", { TingoMicPermissionPreview(it) }),
+    Recording("录音中", "Recording", { TingoLiveRecordingPreview(it) }),
+    EmptyLibrary("空列表", "Empty list", { TingoEmptyLibraryPreview(it) }),
+    Library("会议列表", "Meetings", { TingoLibraryPreview(it) }),
+    LibrarySelection("批量选择", "Selection", { TingoLibrarySelectionPreview(it) }),
+    Minutes("纪要详情", "Minutes", { TingoMeetingMinutesPreview(it) }),
+    Transcript("转写详情", "Transcript", { TingoMeetingTranscriptPreview(it) }),
+    MinutesSetup("纪要未配置", "Minutes setup", { TingoUnconfiguredMinutesPreview(it) }),
+    Settings("设置", "Settings", { TingoSettingsPreview(it) });
+
+    fun label(variant: TingoPreviewVariant): String = variant.text(chineseLabel, englishLabel)
 }
 
 private tailrec fun Context.activityOrNull(): Activity? = when (this) {
