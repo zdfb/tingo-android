@@ -609,6 +609,9 @@ fun TingoRoot(
                         trash = trashItems,
                         trashVisible = trashVisible,
                         batchFailures = batchFailures,
+                        onStartRecording = {
+                            navController.navigate(TopDestination.RECORD.route) { launchSingleTop = true }
+                        },
                     )
                 }
                 if (wide) {

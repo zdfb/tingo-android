@@ -49,6 +49,7 @@ import io.github.tancheng33.tingo.settings.LlmProtocol
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillFilter
 import io.github.tancheng33.tingo.ui.components.PillKind
+import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
@@ -94,6 +95,23 @@ fun SettingsScreen(
             .padding(horizontal = TingoDimens.gutter, vertical = TingoDimens.gap),
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TingoPageTitle(
+                text = stringResource(R.string.nav_settings),
+                modifier = Modifier.weight(1f),
+            )
+            PillButton(
+                label = stringResource(R.string.settings_replay_onboarding),
+                onClick = onReplayOnboarding,
+                kind = PillKind.Ghost,
+            )
+        }
+        Text(
+            stringResource(R.string.settings_local_config_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = TingoTheme.colors.muted,
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -167,21 +185,14 @@ fun SettingsScreen(
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
         // 引导走完就不再自动弹；想再看一遍得有个入口（桌面放在"运行环境"里）
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton(
-                label = stringResource(R.string.settings_replay_onboarding),
-                onClick = onReplayOnboarding,
-                kind = PillKind.Ghost,
-            )
+        if (onResumeOnboarding != null) {
             // 还没走完的人（去填 Key 时把引导关掉了）需要一条"接着走"的路，
             // 否则只能从第一步重看四屏——桌面端这种情况直接跳回大模型那一步
-            if (onResumeOnboarding != null) {
-                PillButton(
-                    label = stringResource(R.string.settings_resume_onboarding),
-                    onClick = onResumeOnboarding,
-                    kind = PillKind.Primary,
-                )
-            }
+            PillButton(
+                label = stringResource(R.string.settings_resume_onboarding),
+                onClick = onResumeOnboarding,
+                kind = PillKind.Primary,
+            )
         }
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)

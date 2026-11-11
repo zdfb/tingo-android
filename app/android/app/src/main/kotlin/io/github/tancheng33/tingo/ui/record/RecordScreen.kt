@@ -15,10 +15,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
+import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -145,8 +147,9 @@ fun RecordScreen(
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
+        TingoPageTitle(text = stringResource(R.string.nav_record))
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when (state) {
                 RecordUiState.Idle -> Column(
@@ -517,14 +520,12 @@ private fun RecentAndStatus(
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.muted,
             )
-            recent.forEach { card ->
+            recent.forEachIndexed { index, card ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.card, TingoDimens.cardShape)
-                        .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
                         .clickable { onOpenRecent(card.id) }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -542,6 +543,9 @@ private fun RecentAndStatus(
                             color = colors.muted,
                         )
                     }
+                }
+                if (index < recent.lastIndex) {
+                    HorizontalDivider(thickness = TingoDimens.hairline, color = colors.lineSoft)
                 }
             }
         }

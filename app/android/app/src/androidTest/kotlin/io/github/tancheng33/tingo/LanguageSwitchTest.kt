@@ -40,7 +40,8 @@ class LanguageSwitchTest {
 
         // 切到设置页
         compose.onNodeWithText(chineseSettings).performClick()
-        compose.onNodeWithText("English").performClick()
+        // “English” 也出现在后面的纪要语言设置里；首个是应用语言切换项。
+        compose.onAllNodesWithText("English")[0].performClick()
 
         // 重建后导航文案换成英文
         compose.waitUntil(timeoutMillis = 10_000) {

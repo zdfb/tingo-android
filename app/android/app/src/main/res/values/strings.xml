@@ -22,6 +22,7 @@
 
     <!-- 设置 -->
     <string name="settings_language">界面语言</string>
+    <string name="settings_local_config_hint">设置保存在本机</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
     <string name="settings_about">关于</string>
@@ -44,7 +45,13 @@
     <!-- 录音占位（录音能力在后续变更中实现） -->
 
     <!-- 会议列表 -->
-    <string name="library_empty">还没有会议。在桌面版录一场会议，或把会议目录放进会议库位置。</string>
+    <string name="library_title">会议·记录</string>
+    <string name="library_empty">还没有会议</string>
+    <string name="library_empty_body">开一场会，或者导入已有的录音。</string>
+    <string name="library_start_recording">开始录音</string>
+    <string name="library_no_results">没有找到会议</string>
+    <string name="library_no_results_body">试试其他关键词，或取消归档筛选。</string>
+    <string name="library_clear_filters">清除筛选</string>
     <string name="library_failed">会议库读取失败，请检查会议库位置是否可访问。</string>
     <string name="library_unreadable">不可读</string>
     <string name="library_search_hint">搜索标题、总结或标签</string>

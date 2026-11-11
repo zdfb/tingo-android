@@ -22,6 +22,7 @@
 
     <!-- Settings -->
     <string name="settings_language">Language</string>
+    <string name="settings_local_config_hint">Settings are saved on this device</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
     <string name="settings_about">About</string>
@@ -44,7 +45,13 @@
     <!-- Recording placeholder (recording lands in a later change) -->
 
     <!-- Library -->
-    <string name="library_empty">No meetings yet. Record one on desktop, or drop meeting folders into the library location.</string>
+    <string name="library_title">Meetings</string>
+    <string name="library_empty">No meetings yet</string>
+    <string name="library_empty_body">Start a recording or import an existing audio file.</string>
+    <string name="library_start_recording">Start recording</string>
+    <string name="library_no_results">No meetings found</string>
+    <string name="library_no_results_body">Try another term or clear the archive filter.</string>
+    <string name="library_clear_filters">Clear filters</string>
     <string name="library_failed">Could not read the meeting library. Please check that its location is accessible.</string>
     <string name="library_unreadable">Unreadable</string>
     <string name="library_search_hint">Search title, summary or tag</string>

@@ -14,9 +14,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -63,6 +60,7 @@ import io.github.tancheng33.tingo.ui.detail.failureText
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import io.github.tancheng33.tingo.ui.components.PillFilter
+import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.ui.theme.TingoType
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -117,6 +115,7 @@ fun LibraryScreen(
     trash: List<TrashItem> = emptyList(),
     trashVisible: Boolean = false,
     batchFailures: Int = 0,
+    onStartRecording: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = TingoTheme.colors
@@ -132,25 +131,48 @@ fun LibraryScreen(
         return
     }
     when (state) {
-        LibraryUiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+        LibraryUiState.Loading -> Column(modifier.fillMaxSize()) {
+            LibraryHeader(
+                query = "", onQueryChange = onQueryChange, archivedOnly = false,
+                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
+                countLabel = stringResource(R.string.library_count, 0),
+            )
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+            }
         }
 
-        LibraryUiState.Empty -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            MessageBlock(
-                title = stringResource(R.string.library_empty),
-                action = stringResource(R.string.action_refresh),
-                onAction = onRefresh,
+        LibraryUiState.Empty -> Column(modifier.fillMaxSize()) {
+            LibraryHeader(
+                query = "", onQueryChange = onQueryChange, archivedOnly = false,
+                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
+                countLabel = stringResource(R.string.library_count, 0),
             )
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                MessageBlock(
+                    title = stringResource(R.string.library_empty),
+                    body = stringResource(R.string.library_empty_body),
+                    action = stringResource(R.string.library_start_recording),
+                    onAction = onStartRecording,
+                    actionKind = PillKind.Primary,
+                )
+            }
         }
 
-        is LibraryUiState.Failed -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            MessageBlock(
-                title = stringResource(R.string.error_title),
-                body = stringResource(R.string.library_failed),
-                action = stringResource(R.string.action_refresh),
-                onAction = onRefresh,
+        is LibraryUiState.Failed -> Column(modifier.fillMaxSize()) {
+            LibraryHeader(
+                query = "", onQueryChange = onQueryChange, archivedOnly = false,
+                onArchivedOnlyChange = onArchivedOnlyChange, onShowTrash = manage.onShowTrash,
+                countLabel = stringResource(R.string.library_count, 0),
             )
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                MessageBlock(
+                    title = stringResource(R.string.error_title),
+                    body = stringResource(R.string.library_failed),
+                    action = stringResource(R.string.action_refresh),
+                    onAction = onRefresh,
+                )
+            }
         }
 
         is LibraryUiState.Content -> Column(modifier.fillMaxSize()) {
@@ -187,20 +209,39 @@ fun LibraryScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
             ) {
-                items(state.items, key = { it.id }) { card ->
-                    MeetingCardRow(
-                        card = card,
-                        query = state.query,
-                        selected = card.id in state.selection,
-                        selecting = state.selection.isNotEmpty(),
-                        onClick = {
-                            if (state.selection.isNotEmpty()) manage.onToggleSelection(card.id) else onOpenMeeting(card.id)
-                        },
-                        onLongClick = { manage.onToggleSelection(card.id) },
-                        onUnreadableClick = { onUnreadableClick(card) },
-                        onSetArchived = { onSetArchived(card, it) },
-                        onDelete = { manage.onDeleteToTrash(card.id) },
-                    )
+                if (state.items.isEmpty() && state.hits.isEmpty()) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(TingoDimens.gutter),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MessageBlock(
+                                title = stringResource(R.string.library_no_results),
+                                body = stringResource(R.string.library_no_results_body),
+                                action = stringResource(R.string.library_clear_filters),
+                                onAction = {
+                                    onQueryChange("")
+                                    if (state.archivedOnly) onArchivedOnlyChange(false)
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    items(state.items, key = { it.id }) { card ->
+                        MeetingCardRow(
+                            card = card,
+                            query = state.query,
+                            selected = card.id in state.selection,
+                            selecting = state.selection.isNotEmpty(),
+                            onClick = {
+                                if (state.selection.isNotEmpty()) manage.onToggleSelection(card.id) else onOpenMeeting(card.id)
+                            },
+                            onLongClick = { manage.onToggleSelection(card.id) },
+                            onUnreadableClick = { onUnreadableClick(card) },
+                            onSetArchived = { onSetArchived(card, it) },
+                            onDelete = { manage.onDeleteToTrash(card.id) },
+                        )
+                    }
                 }
             }
         }
@@ -234,39 +275,12 @@ private fun LibraryHeader(
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // 品牌块：图标 + 名字（桌面侧栏同一块）。
-            // 必须用位图而不是 `@mipmap/ic_launcher`：那是个 adaptive-icon XML，
-            // `painterResource` 只认 VectorDrawable 与位图，传进去会直接崩
-            Image(
-                painter = painterResource(R.drawable.tingo_mark),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(TingoDimens.brandMark)
-                    .clip(TingoDimens.cardShape),
-            )
-            Spacer(Modifier.size(TingoDimens.gapTight))
-            Text(
-                text = stringResource(R.string.app_name),
-                style = TextStyle(fontSize = TingoType.brand, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp),
-                color = colors.text,
+            TingoPageTitle(
+                text = stringResource(R.string.library_title),
                 modifier = Modifier.weight(1f),
             )
             Text(text = countLabel, style = MaterialTheme.typography.labelMedium, color = colors.faint)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight), verticalAlignment = Alignment.CenterVertically) {
-            PillFilter(
-                label = stringResource(R.string.library_filter_archived),
-                selected = archivedOnly,
-                onClick = { onArchivedOnlyChange(!archivedOnly) },
-            )
-            // 回收站入口：删除是可恢复的动作，就必须有个地方能把会议找回来
-            PillButton(
-                label = stringResource(R.string.library_trash_entry),
-                onClick = onShowTrash,
-                kind = PillKind.Ghost,
-            )
-        }
-
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
@@ -303,25 +317,41 @@ private fun LibraryHeader(
                 )
             }
         }
-
+        Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight), verticalAlignment = Alignment.CenterVertically) {
+            PillFilter(
+                label = stringResource(R.string.library_filter_archived),
+                selected = archivedOnly,
+                onClick = { onArchivedOnlyChange(!archivedOnly) },
+            )
+            // 回收站入口：删除是可恢复的动作，就必须有个地方能把会议找回来
+            PillButton(
+                label = stringResource(R.string.library_trash_entry),
+                onClick = onShowTrash,
+                kind = PillKind.Ghost,
+            )
+        }
     }
 }
 
 @Composable
-private fun MessageBlock(title: String, body: String? = null, action: String, onAction: () -> Unit) {
+private fun MessageBlock(
+    title: String,
+    body: String? = null,
+    action: String,
+    onAction: () -> Unit,
+    actionKind: PillKind = PillKind.Ghost,
+) {
     val colors = TingoTheme.colors
     Column(
         modifier = Modifier.padding(TingoDimens.gutter),
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text)
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.text)
         if (body != null) {
             Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         }
-        TextButton(onClick = onAction) {
-            Text(action, style = MaterialTheme.typography.labelLarge, color = colors.blue)
-        }
+        PillButton(label = action, onClick = onAction, kind = actionKind)
     }
 }
 
@@ -654,10 +684,10 @@ private fun TrashView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
+            TingoPageTitle(
                 stringResource(R.string.library_trash_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.text,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onBack) { Text(stringResource(R.string.action_back), color = colors.blue) }
             if (items.isNotEmpty()) {

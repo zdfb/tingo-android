@@ -1,7 +1,10 @@
 package io.github.tancheng33.tingo
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,11 +20,13 @@ import io.github.tancheng33.tingo.engine.Sentence
 import io.github.tancheng33.tingo.engine.SpeakerAlias
 import io.github.tancheng33.tingo.engine.Transcript
 import io.github.tancheng33.tingo.engine.Turn
+import io.github.tancheng33.tingo.audio.PlaybackState
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
 import io.github.tancheng33.tingo.ui.detail.DetailUiState
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertEquals
 
 /** 详情页界面契约：章节化展示、鱼骨图、说话人别名与降级。 */
 class DetailScreenTest {
@@ -81,6 +86,51 @@ class DetailScreenTest {
         compose.onNodeWithText("一句话总结").assertIsDisplayed()
         compose.onNodeWithText("决议").assertIsDisplayed()
         compose.onNodeWithText("先修注册页", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun meetingTitleIsAHeadingAndTabsKeepPlaybackActions() {
+        val doc = MinutesDoc(
+            title = "官网注册转化复盘",
+            sections = listOf(MinutesSection(SectionKind.ONE_LINER, "一句话总结", "转化率掉了三成。")),
+        )
+        val transcript = Transcript(
+            source = "录音.wav",
+            durationMs = 120_000uL,
+            aliases = listOf(SpeakerAlias(speaker = 0u, name = "林舟")),
+            turns = listOf(
+                Turn(
+                    speakerName = "林舟",
+                    startMs = 5_000uL,
+                    endMs = 9_000uL,
+                    text = "我们先看注册页。",
+                    sentences = listOf(Sentence(0u, 5_000uL, 9_000uL, "我们先看注册页。")),
+                ),
+            ),
+        )
+        var playCount = 0
+        compose.setContent {
+            TingoTheme {
+                DetailScreen(
+                    state = DetailUiState(loading = false, detail = detail(transcript), minutes = doc),
+                    onRetry = {},
+                    onSentenceClick = {},
+                    playback = PlaybackState(available = true, durationMs = 120_000),
+                    onTogglePlay = { playCount++ },
+                )
+            }
+        }
+
+        compose.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
+                .and(androidx.compose.ui.test.hasText("官网注册转化复盘")),
+        ).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.player_play)).performClick()
+        compose.onNodeWithText(text(R.string.detail_tab_transcript)).performClick()
+        compose.onNodeWithText("我们先看注册页。", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.detail_tab_minutes)).performClick()
+        compose.onNodeWithText("一句话总结").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, playCount) }
     }
 
     @Test

@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
+import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.ui.components.TextInputDialog
 import io.github.tancheng33.tingo.ui.components.TingoDialog
@@ -165,10 +166,9 @@ fun DetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
+                    TingoPageTitle(
                         text = detail?.summary?.title.orEmpty(),
                         style = MaterialTheme.typography.headlineSmall,
-                        color = TingoTheme.colors.text,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),

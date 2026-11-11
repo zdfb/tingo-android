@@ -282,6 +282,8 @@ dependencies {
     implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}")
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.tooling.preview)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -1,27 +1,36 @@
 package io.github.tancheng33.tingo.ui.onboard
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.recording.CaptureProbeResult
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
+import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
@@ -108,22 +117,44 @@ fun OnboardingScreen(
 }
 
 /** 顶部的步骤指示：走过的打勾、当前的高亮。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StepBar(steps: List<OnboardingViewModel.Step>, index: Int) {
     val colors = TingoTheme.colors
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         steps.forEachIndexed { position, step ->
             val done = position < index
             val now = position == index
-            Text(
-                text = if (done) "✓ ${label(step)}" else "${position + 1} ${label(step)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = when {
-                    now -> colors.blue
-                    done -> colors.green
-                    else -> colors.faint
-                },
-            )
+            Row(
+                modifier = Modifier
+                    .clip(TingoDimens.pillShape)
+                    .background(if (now) colors.blueSoft else colors.seg)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .background(if (now) colors.blue else colors.card, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (done) "✓" else (position + 1).toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (now) Color.White else if (done) colors.green else colors.muted,
+                    )
+                }
+                Text(
+                    text = label(step),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (now) colors.blue else colors.muted,
+                )
+            }
         }
     }
 }
@@ -142,40 +173,53 @@ private fun label(step: OnboardingViewModel.Step): String = stringResource(
 @Composable
 private fun Welcome() {
     val colors = TingoTheme.colors
-    Text(
-        stringResource(R.string.onboard_hello_title),
-        style = MaterialTheme.typography.headlineSmall,
-        color = colors.text,
-    )
-    Text(
-        stringResource(R.string.onboard_hello_body),
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.muted,
-    )
-    Point(stringResource(R.string.onboard_point_local_title), stringResource(R.string.onboard_point_local_body))
-    Point(stringResource(R.string.onboard_point_record_title), stringResource(R.string.onboard_point_record_body))
-    Point(stringResource(R.string.onboard_point_source_title), stringResource(R.string.onboard_point_source_body))
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.tingo_mark),
+            contentDescription = stringResource(R.string.app_name),
+            modifier = Modifier.size(72.dp),
+        )
+        TingoPageTitle(text = stringResource(R.string.onboard_hello_title))
+        Text(
+            stringResource(R.string.onboard_hello_body),
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.text2,
+        )
+        Spacer(Modifier.size(4.dp))
+        Point(stringResource(R.string.onboard_point_local_title), stringResource(R.string.onboard_point_local_body))
+        Point(stringResource(R.string.onboard_point_record_title), stringResource(R.string.onboard_point_record_body))
+        Point(stringResource(R.string.onboard_point_source_title), stringResource(R.string.onboard_point_source_body))
+    }
 }
 
 @Composable
 private fun Point(title: String, body: String) {
     val colors = TingoTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.card, RoundedCornerShape(TingoDimens.radiusCard))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = colors.text)
-        Text(body, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+        Box(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .size(8.dp)
+                .background(colors.blue, CircleShape),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+        }
     }
 }
 
 @Composable
 private fun ModelStep(ready: Boolean) {
     val colors = TingoTheme.colors
-    Text(stringResource(R.string.onboard_step_model), style = MaterialTheme.typography.titleLarge, color = colors.text)
+    TingoPageTitle(text = stringResource(R.string.onboard_step_model))
     Text(
         text = stringResource(if (ready) R.string.onboard_model_ready else R.string.onboard_model_missing),
         style = MaterialTheme.typography.bodyMedium,
@@ -198,11 +242,7 @@ private fun PermissionStep(
     onRequestPermission: () -> Unit,
 ) {
     val colors = TingoTheme.colors
-    Text(
-        stringResource(R.string.onboard_step_permission),
-        style = MaterialTheme.typography.titleLarge,
-        color = colors.text,
-    )
+    TingoPageTitle(text = stringResource(R.string.onboard_step_permission))
     Status(
         label = stringResource(R.string.onboard_perm_mic),
         ok = micGranted,
@@ -281,7 +321,7 @@ private fun Status(label: String, ok: Boolean, detail: String) {
 @Composable
 private fun LlmStep(configured: Boolean, onOpenSettings: () -> Unit) {
     val colors = TingoTheme.colors
-    Text(stringResource(R.string.onboard_step_llm), style = MaterialTheme.typography.titleLarge, color = colors.text)
+    TingoPageTitle(text = stringResource(R.string.onboard_step_llm))
     Text(
         text = stringResource(if (configured) R.string.onboard_llm_ready else R.string.onboard_llm_missing),
         style = MaterialTheme.typography.bodyMedium,
@@ -304,7 +344,7 @@ private fun LlmStep(configured: Boolean, onOpenSettings: () -> Unit) {
 @Composable
 private fun DemoStep(installing: Boolean, failed: Boolean, onInstall: () -> Unit) {
     val colors = TingoTheme.colors
-    Text(stringResource(R.string.onboard_step_demo), style = MaterialTheme.typography.titleLarge, color = colors.text)
+    TingoPageTitle(text = stringResource(R.string.onboard_step_demo))
     Text(
         stringResource(R.string.onboard_demo_body),
         style = MaterialTheme.typography.bodyMedium,
