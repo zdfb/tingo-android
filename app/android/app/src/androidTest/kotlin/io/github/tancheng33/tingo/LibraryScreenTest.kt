@@ -1,5 +1,6 @@
 package io.github.tancheng33.tingo
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tancheng33.tingo.data.MeetingCard
+import io.github.tancheng33.tingo.engine.FailureKind
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryManageActions
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
@@ -99,10 +101,33 @@ class LibraryScreenTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit))
             .assertIsDisplayed()
         compose.onNodeWithContentDescription(context.getString(R.string.library_search_hint)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.library_count, 0)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.library_start_recording)).performClick()
         compose.runOnIdle { assertEquals(1, startCount) }
         compose.onNodeWithText(context.getString(R.string.action_refresh)).performClick()
         compose.runOnIdle { assertEquals(1, refreshCount) }
+    }
+
+    @Test
+    fun loadingAndFailedLibraryDoNotPretendThereAreZeroMeetings() {
+        val countLabel = context.getString(R.string.library_count, 0)
+        val state = mutableStateOf<LibraryUiState>(LibraryUiState.Loading)
+
+        compose.setContent {
+            TingoTheme {
+                LibraryScreen(
+                    state = state.value,
+                    onOpenMeeting = {},
+                    onRefresh = {},
+                    onQueryChange = {},
+                    onArchivedOnlyChange = {},
+                )
+            }
+        }
+        compose.onNodeWithText(countLabel).assertDoesNotExist()
+
+        compose.runOnIdle { state.value = LibraryUiState.Failed(FailureKind.MALFORMED) }
+        compose.onNodeWithText(countLabel).assertDoesNotExist()
     }
 
     @Test

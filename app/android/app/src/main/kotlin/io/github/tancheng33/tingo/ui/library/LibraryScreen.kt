@@ -131,12 +131,16 @@ fun LibraryScreen(
         return
     }
     @Composable
-    fun DefaultStateScaffold(content: @Composable () -> Unit) {
+    fun DefaultStateScaffold(
+        countLabel: String? = null,
+        content: @Composable () -> Unit,
+    ) {
         DefaultLibraryScaffold(
             modifier = modifier,
             onQueryChange = onQueryChange,
             onArchivedOnlyChange = onArchivedOnlyChange,
             onShowTrash = manage.onShowTrash,
+            countLabel = countLabel,
             content = content,
         )
     }
@@ -145,7 +149,9 @@ fun LibraryScreen(
             CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
         }
 
-        LibraryUiState.Empty -> DefaultStateScaffold {
+        LibraryUiState.Empty -> DefaultStateScaffold(
+            countLabel = stringResource(R.string.library_count, 0),
+        ) {
             MessageBlock(
                 title = stringResource(R.string.library_empty),
                 body = stringResource(R.string.library_empty_body),
@@ -245,6 +251,7 @@ private fun DefaultLibraryScaffold(
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
     onShowTrash: () -> Unit,
+    countLabel: String?,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -254,7 +261,7 @@ private fun DefaultLibraryScaffold(
             archivedOnly = false,
             onArchivedOnlyChange = onArchivedOnlyChange,
             onShowTrash = onShowTrash,
-            countLabel = stringResource(R.string.library_count, 0),
+            countLabel = countLabel,
         )
         Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
             content()
@@ -274,7 +281,7 @@ private fun LibraryHeader(
     onQueryChange: (String) -> Unit,
     archivedOnly: Boolean,
     onArchivedOnlyChange: (Boolean) -> Unit,
-    countLabel: String,
+    countLabel: String?,
     onShowTrash: () -> Unit,
 ) {
     val colors = TingoTheme.colors
@@ -293,7 +300,9 @@ private fun LibraryHeader(
                 text = stringResource(R.string.library_title),
                 modifier = Modifier.weight(1f),
             )
-            Text(text = countLabel, style = MaterialTheme.typography.labelMedium, color = colors.faint)
+            if (countLabel != null) {
+                Text(text = countLabel, style = MaterialTheme.typography.labelMedium, color = colors.faint)
+            }
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,

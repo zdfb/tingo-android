@@ -64,6 +64,21 @@ class DetailScreenTest {
         fishbone = fishbone,
     )
 
+    private fun transcript(source: String, durationMs: ULong) = Transcript(
+        source = source,
+        durationMs = durationMs,
+        aliases = listOf(SpeakerAlias(speaker = 0u, name = "林舟")),
+        turns = listOf(
+            Turn(
+                speakerName = "林舟",
+                startMs = 5_000uL,
+                endMs = 9_000uL,
+                text = "我们先看注册页。",
+                sentences = listOf(Sentence(0u, 5_000uL, 9_000uL, "我们先看注册页。")),
+            ),
+        ),
+    )
+
     private fun render(state: DetailUiState, tab: Int = 0) {
         compose.setContent {
             TingoTheme {
@@ -94,20 +109,7 @@ class DetailScreenTest {
             title = "官网注册转化复盘",
             sections = listOf(MinutesSection(SectionKind.ONE_LINER, "一句话总结", "转化率掉了三成。")),
         )
-        val transcript = Transcript(
-            source = "录音.wav",
-            durationMs = 120_000uL,
-            aliases = listOf(SpeakerAlias(speaker = 0u, name = "林舟")),
-            turns = listOf(
-                Turn(
-                    speakerName = "林舟",
-                    startMs = 5_000uL,
-                    endMs = 9_000uL,
-                    text = "我们先看注册页。",
-                    sentences = listOf(Sentence(0u, 5_000uL, 9_000uL, "我们先看注册页。")),
-                ),
-            ),
-        )
+        val transcript = transcript(source = "录音.wav", durationMs = 120_000uL)
         var playCount = 0
         compose.setContent {
             TingoTheme {
@@ -162,20 +164,7 @@ class DetailScreenTest {
 
     @Test
     fun showsTranscriptSpeakerAlias() {
-        val transcript = Transcript(
-            source = "录音.m4a",
-            durationMs = 120_055uL,
-            aliases = listOf(SpeakerAlias(speaker = 0u, name = "林舟")),
-            turns = listOf(
-                Turn(
-                    speakerName = "林舟",
-                    startMs = 5_000uL,
-                    endMs = 9_000uL,
-                    text = "我们先看注册页。",
-                    sentences = listOf(Sentence(0u, 5_000uL, 9_000uL, "我们先看注册页。")),
-                ),
-            ),
-        )
+        val transcript = transcript(source = "录音.m4a", durationMs = 120_055uL)
         // 直接以转写栏打开（与其依赖点击注入，不如把初始栏位做成参数——将来"从搜索跳转"也要用）
         render(DetailUiState(loading = false, detail = detail(transcript = transcript), minutes = null), tab = 1)
         compose.onNodeWithText("林舟").assertIsDisplayed()
