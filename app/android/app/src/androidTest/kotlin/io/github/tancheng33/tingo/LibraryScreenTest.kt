@@ -80,13 +80,14 @@ class LibraryScreenTest {
     @Test
     fun emptyLibraryKeepsItsHeadingSearchAndStartAction() {
         var startCount = 0
+        var refreshCount = 0
 
         compose.setContent {
             TingoTheme {
                 LibraryScreen(
                     state = LibraryUiState.Empty,
                     onOpenMeeting = {},
-                    onRefresh = {},
+                    onRefresh = { refreshCount++ },
                     onQueryChange = {},
                     onArchivedOnlyChange = {},
                     onStartRecording = { startCount++ },
@@ -100,6 +101,8 @@ class LibraryScreenTest {
         compose.onNodeWithContentDescription(context.getString(R.string.library_search_hint)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.library_start_recording)).performClick()
         compose.runOnIdle { assertEquals(1, startCount) }
+        compose.onNodeWithText(context.getString(R.string.action_refresh)).performClick()
+        compose.runOnIdle { assertEquals(1, refreshCount) }
     }
 
     @Test

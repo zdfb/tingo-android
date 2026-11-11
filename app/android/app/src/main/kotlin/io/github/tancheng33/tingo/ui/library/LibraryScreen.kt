@@ -130,37 +130,34 @@ fun LibraryScreen(
         )
         return
     }
-    when (state) {
-        LibraryUiState.Loading -> DefaultLibraryScaffold(
+    @Composable
+    fun DefaultStateScaffold(content: @Composable () -> Unit) {
+        DefaultLibraryScaffold(
             modifier = modifier,
             onQueryChange = onQueryChange,
             onArchivedOnlyChange = onArchivedOnlyChange,
             onShowTrash = manage.onShowTrash,
-        ) {
+            content = content,
+        )
+    }
+    when (state) {
+        LibraryUiState.Loading -> DefaultStateScaffold {
             CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
         }
 
-        LibraryUiState.Empty -> DefaultLibraryScaffold(
-            modifier = modifier,
-            onQueryChange = onQueryChange,
-            onArchivedOnlyChange = onArchivedOnlyChange,
-            onShowTrash = manage.onShowTrash,
-        ) {
+        LibraryUiState.Empty -> DefaultStateScaffold {
             MessageBlock(
                 title = stringResource(R.string.library_empty),
                 body = stringResource(R.string.library_empty_body),
                 action = stringResource(R.string.library_start_recording),
                 onAction = onStartRecording,
                 actionKind = PillKind.Primary,
+                secondaryAction = stringResource(R.string.action_refresh),
+                onSecondaryAction = onRefresh,
             )
         }
 
-        is LibraryUiState.Failed -> DefaultLibraryScaffold(
-            modifier = modifier,
-            onQueryChange = onQueryChange,
-            onArchivedOnlyChange = onArchivedOnlyChange,
-            onShowTrash = manage.onShowTrash,
-        ) {
+        is LibraryUiState.Failed -> DefaultStateScaffold {
             MessageBlock(
                 title = stringResource(R.string.error_title),
                 body = stringResource(R.string.library_failed),
@@ -357,6 +354,8 @@ private fun MessageBlock(
     action: String,
     onAction: () -> Unit,
     actionKind: PillKind = PillKind.Ghost,
+    secondaryAction: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
 ) {
     val colors = TingoTheme.colors
     Column(
@@ -368,7 +367,14 @@ private fun MessageBlock(
         if (body != null) {
             Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         }
-        PillButton(label = action, onClick = onAction, kind = actionKind)
+        if (secondaryAction != null && onSecondaryAction != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight)) {
+                PillButton(label = action, onClick = onAction, kind = actionKind)
+                PillButton(label = secondaryAction, onClick = onSecondaryAction, kind = PillKind.Ghost)
+            }
+        } else {
+            PillButton(label = action, onClick = onAction, kind = actionKind)
+        }
     }
 }
 
