@@ -16,6 +16,10 @@
 
 The screenshots and recording were captured from v0.5.2 running in an Android API 36 emulator. The meeting is Tingo's built-in sample, not a mockup or a user's recording. The GIF was converted from that recording.
 
+## Project origin
+
+This Android app is based on the open-source [tancheng33/tingo](https://github.com/tancheng33/tingo) project. Thanks to the original author and contributors. This repository is maintained as an independent project, with its Android client implemented separately.
+
 ## Android screenshots
 
 <table>

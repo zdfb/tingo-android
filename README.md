@@ -16,6 +16,10 @@
 
 截图与录屏来自 Android API 36 模拟器上实际运行的 v0.5.2；会议内容是 App 内置的演示会议，不是界面稿或用户录音。GIF 由这段录屏转换而来。
 
+## 项目来源
+
+本项目是基于开源项目 [tancheng33/tingo](https://github.com/tancheng33/tingo) 开发的 Android 版本。感谢原作者及贡献者。本仓库作为独立项目维护，Android 客户端由本项目单独实现。
+
 ## Android 界面
 
 <table>
