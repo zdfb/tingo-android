@@ -165,7 +165,7 @@ class RecordViewModel(
 
         fun load(factory: ((String) -> Unit) -> LiveTranscriber) {
             Thread({
-                val created = runCatching { factory { text -> appendLiveSentence(sessionId, text, FloatArray(0)) } }
+                val created = runCatching { factory { _ -> } }
                     .getOrElse {
                         synchronized(lock) {
                             if (!closed && liveSession == sessionId) _liveTranscriptIncomplete.value = true
@@ -371,6 +371,7 @@ class RecordViewModel(
             _liveEntries.clear()
             var lastSpeaker: Int? = null
             _liveEntries.addAll(updated.map { item ->
+                // 同一录音的另一音轨偶尔没有声纹：沿用上一条已确认编号，避免两路合成时 UI 闪成未知。
                 val speaker = item.speaker ?: lastSpeaker
                 if (speaker != null) lastSpeaker = speaker
                 LiveEntry(item.key, item.text, speaker)

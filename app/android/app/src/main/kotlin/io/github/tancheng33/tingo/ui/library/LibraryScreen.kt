@@ -221,7 +221,9 @@ fun LibraryScreen(
                     onClear = manage.onClearSelection,
                     onBatch = manage.onBatch,
                 )
-            } else if (state.query.isNotBlank() && state.hits.any { it.meetingId in state.searchScopeIds }) {
+            } else if (state.query.isNotBlank() &&
+                (state.hits.any { it.meetingId in state.searchScopeIds } || state.expandedTerms.size > 1)
+            ) {
                 SearchHits(state = state, onOpenAt = onOpenAtHit)
             }
             LazyColumn(

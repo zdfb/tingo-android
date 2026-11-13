@@ -15,10 +15,8 @@ class LiveSpeakerReclusterer(
     init { require(reclusterEvery > 0) { "reclusterEvery 必须大于 0" } }
     private val items = mutableListOf<LiveSpeakerUtterance>()
     fun add(key: Long, text: String, embedding: FloatArray): List<LiveSpeakerUtterance> {
-        // 某一路临时识别偶尔拿不到声纹：沿用最近已确认的说话人，避免同一人的连续气泡闪回“未知”。
         val usable = embedding.isUsable()
-        val inheritedSpeaker = if (!usable) items.lastOrNull { it.speaker != null }?.speaker else null
-        items += LiveSpeakerUtterance(key, text, if (usable) embedding.copyOf() else FloatArray(0), inheritedSpeaker)
+        items += LiveSpeakerUtterance(key, text, if (usable) embedding.copyOf() else FloatArray(0))
         val validCount = items.count { it.embedding.isNotEmpty() }
         if (validCount == 1 || validCount % reclusterEvery == 0) recluster()
         return snapshot()
