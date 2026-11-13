@@ -7,10 +7,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import io.github.tancheng33.tingo.minutes.remote.LlmPresets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +25,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -56,6 +65,7 @@ import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillFilter
 import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.ui.components.TingoPageTitle
+import io.github.tancheng33.tingo.ui.components.TingoIcons
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
@@ -96,30 +106,20 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(TingoTheme.colors.bg)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = TingoDimens.gutter, vertical = TingoDimens.gap),
-        verticalArrangement = Arrangement.spacedBy(TingoDimens.gap),
+            .padding(horizontal = TingoDimens.gutter, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TingoPageTitle(
-                text = stringResource(R.string.nav_settings),
-                modifier = Modifier.weight(1f),
-            )
-            PillButton(
-                label = stringResource(R.string.settings_replay_onboarding),
-                onClick = onReplayOnboarding,
-                kind = PillKind.Ghost,
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+            TingoPageTitle(text = stringResource(R.string.nav_settings))
+            Text(
+                stringResource(R.string.settings_local_config_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TingoTheme.colors.muted,
             )
         }
-        Text(
-            stringResource(R.string.settings_local_config_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = TingoTheme.colors.muted,
-        )
 
-        SettingsGroupTitle(stringResource(R.string.settings_group_device))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsCard(title = stringResource(R.string.settings_language), icon = Icons.Default.Settings) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppLanguage.entries.forEach { option ->
                     PillFilter(
                         label = when (option) {
@@ -133,195 +133,136 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            SelectionContainer {
-                Text(
-                    text = dataRoot,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TingoTheme.colors.text2,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                stringResource(R.string.settings_data_root_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = TingoTheme.colors.muted,
-            )
+        SettingsCard(title = stringResource(R.string.settings_group_recording), icon = TingoIcons.Mic) {
+            AutoStopSection(minutes = models.autoStopSilenceMin, onSelect = onSaveAutoStopSilence)
+            SettingsDivider()
+            AutoProcessingToggle(stringResource(R.string.auto_transcribe), models.autoTranscribe, onSaveAutoTranscribe)
+            AutoProcessingToggle(stringResource(R.string.auto_minutes), models.autoMinutes, onSaveAutoMinutes)
         }
 
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        models.storage?.let { stats ->
-            StorageSection(
-                stats = stats,
-                onCleanupLeftovers = onCleanupLeftovers,
-                onCleanupAudio = onCleanupAudio,
-                cleanupBusy = models.audioCleanupBusy,
-                cleanupResult = models.audioCleanup,
-                cleanupDays = models.audioCleanupDays,
-                cleanupArchivedOnly = models.audioCleanupArchivedOnly,
-            )
-            HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-        }
-
-        SettingsGroupTitle(stringResource(R.string.settings_group_minutes))
-        LlmServiceSection(
-            config = models.llmConfig,
-            addressInvalid = models.llmAddressInvalid,
-            onSave = onSaveLlmConfig,
-            modelList = models.models,
-            onFetchModels = onFetchModels,
-            english = language == AppLanguage.EN,
-        )
-
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
-
-        // 跨会议术语表：桌面在纪要里给每个术语一个"加进热词"，这里集中成一处，
-        // 用户不必翻遍每场会议去找自己该加什么词
-        if (models.glossary.isNotEmpty()) {
-            GlossarySection(terms = models.glossary, words = models.hotwords, onAdd = onAddHotword)
-        }
-
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        SettingsGroupTitle(stringResource(R.string.settings_group_recording))
-        AutoStopSection(minutes = models.autoStopSilenceMin, onSelect = onSaveAutoStopSilence)
-        AutoProcessingToggle(stringResource(R.string.auto_transcribe), models.autoTranscribe, onSaveAutoTranscribe)
-        AutoProcessingToggle(stringResource(R.string.auto_minutes), models.autoMinutes, onSaveAutoMinutes)
-
-        MinutesLanguageSection(
-            language = models.minutesLanguage,
-            onSelect = onSaveMinutesLanguage,
-        )
-
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        // 引导走完就不再自动弹；想再看一遍得有个入口（桌面放在"运行环境"里）
-        if (onResumeOnboarding != null) {
-            // 还没走完的人（去填 Key 时把引导关掉了）需要一条"接着走"的路，
-            // 否则只能从第一步重看四屏——桌面端这种情况直接跳回大模型那一步
-            PillButton(
-                label = stringResource(R.string.settings_resume_onboarding),
-                onClick = onResumeOnboarding,
-                kind = PillKind.Primary,
-            )
-        }
-
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        SettingsGroupTitle(stringResource(R.string.settings_group_recognition))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            Text(
-                stringResource(R.string.settings_models_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = TingoTheme.colors.muted,
-            )
-            ModelRow(
-                label = stringResource(R.string.settings_models_asr),
-                group = models.asr,
-                onDelete = onDeleteAsrModels,
-            )
+        SettingsCard(title = stringResource(R.string.settings_group_recognition), icon = Icons.Default.Search) {
+            Text(stringResource(R.string.settings_models_desc), style = MaterialTheme.typography.bodySmall, color = TingoTheme.colors.muted)
+            ModelRow(label = stringResource(R.string.settings_models_asr), group = models.asr, onDelete = onDeleteAsrModels)
             models.modelInstall?.let { fraction ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        stringResource(R.string.settings_models_installing),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Text(stringResource(R.string.settings_models_installing), style = MaterialTheme.typography.bodySmall)
+                    LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                 }
             }
             if (models.deleteFailed) {
-                Text(
-                    stringResource(R.string.settings_models_delete_failed),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TingoTheme.colors.red,
-                )
+                Text(stringResource(R.string.settings_models_delete_failed), style = MaterialTheme.typography.bodySmall, color = TingoTheme.colors.red)
             }
         }
 
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            Text(
-                stringResource(R.string.settings_library_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = TingoTheme.colors.muted,
+        SettingsCard(title = stringResource(R.string.settings_group_minutes), icon = Icons.Default.Edit) {
+            LlmServiceSection(
+                config = models.llmConfig,
+                addressInvalid = models.llmAddressInvalid,
+                onSave = onSaveLlmConfig,
+                modelList = models.models,
+                onFetchModels = onFetchModels,
+                english = language == AppLanguage.EN,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton(
-                    label = stringResource(R.string.settings_library_backup),
-                    onClick = onBackupLibrary,
-                    enabled = !libraryBusy,
-                )
-                PillButton(
-                    label = stringResource(R.string.settings_library_restore),
-                    onClick = onRestoreLibrary,
-                    kind = PillKind.Ghost,
-                    enabled = !libraryBusy,
-                )
-            }
-            libraryResult?.let { result ->
-                Text(
-                    text = when (result) {
-                        is LibraryOpResult.BackedUp -> stringResource(R.string.settings_library_backed_up, result.meetings)
-                        is LibraryOpResult.Restored -> stringResource(
-                            R.string.settings_library_restored,
-                            result.restored,
-                            result.skipped,
-                            result.rejected,
-                        )
-                        LibraryOpResult.Failed -> stringResource(R.string.settings_library_failed)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (result == LibraryOpResult.Failed) TingoTheme.colors.red else TingoTheme.colors.muted,
-                )
+            SettingsDivider()
+            MinutesLanguageSection(language = models.minutesLanguage, onSelect = onSaveMinutesLanguage)
+            SettingsDivider()
+            HotwordsSection(words = models.hotwords, failed = models.hotwordsFailed, onSave = onSaveHotwords)
+            if (models.glossary.isNotEmpty()) {
+                SettingsDivider()
+                GlossarySection(terms = models.glossary, words = models.hotwords, onAdd = onAddHotword)
             }
         }
 
-        HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
+        SettingsCard(title = stringResource(R.string.settings_group_device), icon = Icons.AutoMirrored.Filled.List) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
+                SelectionContainer {
+                    Text(
+                        text = dataRoot,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TingoTheme.colors.text2,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Text(stringResource(R.string.settings_data_root_desc), style = MaterialTheme.typography.bodySmall, color = TingoTheme.colors.muted)
+            }
+            models.storage?.let { stats ->
+                SettingsDivider()
+                StorageSection(
+                    stats = stats,
+                    onCleanupLeftovers = onCleanupLeftovers,
+                    onCleanupAudio = onCleanupAudio,
+                    cleanupBusy = models.audioCleanupBusy,
+                    cleanupResult = models.audioCleanup,
+                    cleanupDays = models.audioCleanupDays,
+                    cleanupArchivedOnly = models.audioCleanupArchivedOnly,
+                )
+            }
+            SettingsDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.settings_library), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
+                Text(stringResource(R.string.settings_library_desc), style = MaterialTheme.typography.bodySmall, color = TingoTheme.colors.muted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton(label = stringResource(R.string.settings_library_backup), onClick = onBackupLibrary, enabled = !libraryBusy)
+                    PillButton(label = stringResource(R.string.settings_library_restore), onClick = onRestoreLibrary, kind = PillKind.Ghost, enabled = !libraryBusy)
+                }
+                libraryResult?.let { result ->
+                    Text(
+                        text = when (result) {
+                            is LibraryOpResult.BackedUp -> stringResource(R.string.settings_library_backed_up, result.meetings)
+                            is LibraryOpResult.Restored -> stringResource(R.string.settings_library_restored, result.restored, result.skipped, result.rejected)
+                            LibraryOpResult.Failed -> stringResource(R.string.settings_library_failed)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (result == LibraryOpResult.Failed) TingoTheme.colors.red else TingoTheme.colors.muted,
+                    )
+                }
+            }
+        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            Text(
-                stringResource(R.string.settings_engine_version, engineVersion),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            PillButton(
-                label = stringResource(R.string.settings_check_updates),
-                onClick = onOpenReleases,
-                kind = PillKind.Ghost,
-            )
+        SettingsCard(title = stringResource(R.string.settings_about), icon = Icons.Default.Settings) {
+            Text(stringResource(R.string.settings_engine_version, engineVersion), style = MaterialTheme.typography.bodyMedium, color = TingoTheme.colors.text2)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton(label = stringResource(R.string.settings_check_updates), onClick = onOpenReleases, kind = PillKind.Ghost)
+                PillButton(label = stringResource(R.string.settings_replay_onboarding), onClick = onReplayOnboarding, kind = PillKind.Ghost)
+                if (onResumeOnboarding != null) {
+                    PillButton(label = stringResource(R.string.settings_resume_onboarding), onClick = onResumeOnboarding, kind = PillKind.Primary)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SettingsGroupTitle(title: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+private fun SettingsCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+    val colors = TingoTheme.colors
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth().clip(shape).background(colors.card).border(TingoDimens.hairline, colors.line, shape).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(width = 3.dp, height = 18.dp).background(TingoTheme.colors.blue, TingoDimens.pillShape))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-            color = TingoTheme.colors.text,
-            modifier = Modifier.semantics { heading() },
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier.size(40.dp).background(colors.blueSoft, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = colors.blue, modifier = Modifier.size(21.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                color = colors.text,
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+        content()
     }
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.lineSoft)
 }
 
 @Composable
@@ -809,7 +750,7 @@ private fun AutoStopSection(minutes: Int, onSelect: (Int) -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = colors.muted,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0, 5, 10, 30).forEach { option ->
                 PillFilter(
                     label = if (option == 0) {
@@ -840,7 +781,7 @@ private fun MinutesLanguageSection(language: String, onSelect: (String) -> Unit)
             style = MaterialTheme.typography.bodySmall,
             color = colors.muted,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
                 MinutesLanguage.AUTO to R.string.settings_minutes_language_auto,
                 MinutesLanguage.ZH to R.string.settings_minutes_language_zh,
