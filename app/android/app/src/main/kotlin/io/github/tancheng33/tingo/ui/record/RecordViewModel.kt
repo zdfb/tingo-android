@@ -22,6 +22,7 @@ import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.tasks.TaskCenter
 import io.github.tancheng33.tingo.ui.tasks.TaskKind
 import io.github.tancheng33.tingo.recording.WavWriter
+import io.github.tancheng33.tingo.transcription.LiveSpeakerReclusterer
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +121,7 @@ class RecordViewModel(
     data class LiveEntry(val key: Long, val text: String, val speaker: Int?)
     private var nextLiveEntryKey = 0L
     private val speakerLock = Any()
-    private val speakerCenters = mutableListOf<FloatArray>()
+    private val liveSpeakerReclusterer = LiveSpeakerReclusterer()
     private val _liveEntries = mutableStateListOf<LiveEntry>()
     val liveEntries: List<LiveEntry> get() = _liveEntries
     private val _liveTranscriptIncomplete = MutableStateFlow(false)
@@ -355,7 +356,7 @@ class RecordViewModel(
         val factory = liveTranscriber ?: return
         _liveEntries.clear()
         _liveTranscriptIncomplete.value = false
-        synchronized(speakerLock) { speakerCenters.clear() }
+        synchronized(speakerLock) { liveSpeakerReclusterer.clear() }
         val session = ++liveSession
         val loader = LiveLoader(session)
         live = loader
@@ -366,25 +367,14 @@ class RecordViewModel(
     private fun appendLiveSentence(session: Int, text: String, embedding: FloatArray) {
         synchronized(speakerLock) {
             if (liveSession != session) return
-            val norm = kotlin.math.sqrt(embedding.sumOf { it.toDouble() * it.toDouble() })
-            val speaker = if (embedding.isEmpty() || !norm.isFinite() || norm < 1e-8) null else {
-                val unit = FloatArray(embedding.size) { (embedding[it] / norm).toFloat() }
-                val scores = speakerCenters.map { center ->
-                    if (center.size != unit.size) -1.0 else center.indices.sumOf { center[it].toDouble() * unit[it] }
-                }
-                val best = scores.indices.maxByOrNull { scores[it] }
-                if (best != null && scores[best] >= 0.72) {
-                    val center = speakerCenters[best]
-                    val merged = FloatArray(unit.size) { center[it] * 0.8f + unit[it] * 0.2f }
-                    val length = kotlin.math.sqrt(merged.sumOf { it.toDouble() * it.toDouble() })
-                    speakerCenters[best] = FloatArray(merged.size) { (merged[it] / length).toFloat() }
-                    best + 1
-                } else if (speakerCenters.size < 15) {
-                    speakerCenters.add(unit)
-                    speakerCenters.size
-                } else null
-            }
-            _liveEntries.add(LiveEntry(nextLiveEntryKey++, text, speaker))
+            val updated = liveSpeakerReclusterer.add(nextLiveEntryKey++, text, embedding)
+            _liveEntries.clear()
+            var lastSpeaker: Int? = null
+            _liveEntries.addAll(updated.map { item ->
+                val speaker = item.speaker ?: lastSpeaker
+                if (speaker != null) lastSpeaker = speaker
+                LiveEntry(item.key, item.text, speaker)
+            })
         }
     }
 

@@ -3,6 +3,8 @@ package io.github.tancheng33.tingo.ui.detail
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -12,6 +14,8 @@ import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.components.PillTabs
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -53,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -525,6 +530,7 @@ private fun FishboneCard(
     var expanded by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(fishbone.problem, style = MaterialTheme.typography.titleSmall)
+        FishboneDiagram(fishbone = fishbone, transcript = transcript)
         Text(
             text = if (summary.withoutEvidence > 0) {
                 stringResource(
@@ -608,6 +614,64 @@ private fun FishboneCard(
                 }
                 HorizontalDivider()
             }
+        }
+    }
+}
+
+/** 手机端鱼骨图总览；分支详情仍由下面的证据列表负责展开。 */
+@Composable
+private fun FishboneDiagram(
+    fishbone: Fishbone,
+    transcript: io.github.tancheng33.tingo.engine.Transcript?,
+) {
+    val colors = TingoTheme.colors
+    val branches = fishbone.branches.filter { it.title.isNotBlank() }
+    val branchColors = branches.map { branch ->
+        when (FishboneGrounding.ground(branch.refs, transcript).level) {
+            FishboneGrounding.Level.NONE -> colors.red
+            FishboneGrounding.Level.WEAK -> colors.amber
+            FishboneGrounding.Level.OK -> colors.green
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.card, TingoDimens.cardShape)
+            .border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.cardShape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.fillMaxWidth().height(104.dp)) {
+            Canvas(Modifier.fillMaxSize()) {
+                val y = size.height * 0.52f
+                val start = size.width * 0.08f
+                val end = size.width * 0.92f
+                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(start, y), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y - 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y + 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                branches.take(6).forEachIndexed { index, _ ->
+                    val x = start + (end - start) * ((index + 1).toFloat() / (branches.take(6).size + 1))
+                    val upper = index % 2 == 0
+                    val branchY = if (upper) y - 32.dp.toPx() else y + 32.dp.toPx()
+                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY), 2.dp.toPx(), StrokeCap.Round)
+                    drawCircle(branchColors[index], radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY))
+                }
+                drawCircle(colors.blue, radius = 8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(end, y))
+            }
+            Box(
+                modifier = Modifier.align(Alignment.CenterEnd).background(colors.blueSoft, TingoDimens.controlShape).padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(fishbone.problem, style = MaterialTheme.typography.labelMedium, color = colors.blue, maxLines = 2)
+            }
+        }
+        branches.take(6).forEachIndexed { index, branch ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(8.dp).background(branchColors[index], CircleShape))
+                Text(branch.title, style = MaterialTheme.typography.labelMedium, color = colors.text2, maxLines = 1)
+            }
+        }
+        if (branches.size > 6) {
+            Text("+${branches.size - 6}", style = MaterialTheme.typography.labelSmall, color = colors.muted)
         }
     }
 }

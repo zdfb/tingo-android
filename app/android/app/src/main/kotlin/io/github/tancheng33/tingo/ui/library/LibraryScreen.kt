@@ -111,6 +111,7 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
+    onTagChange: (String?) -> Unit = {},
     /** 点击搜索命中：打开会议并跳到该毫秒 */
     onOpenAtHit: (String, ULong) -> Unit = { _, _ -> },
     onUnreadableClick: (MeetingCard) -> Unit = {},
@@ -149,6 +150,7 @@ fun LibraryScreen(
             modifier = modifier,
             onQueryChange = onQueryChange,
             onArchivedOnlyChange = onArchivedOnlyChange,
+            onTagChange = onTagChange,
             onShowTrash = manage.onShowTrash,
             countLabel = countLabel,
             content = content,
@@ -201,6 +203,9 @@ fun LibraryScreen(
                 onQueryChange = onQueryChange,
                 archivedOnly = state.archivedOnly,
                 onArchivedOnlyChange = onArchivedOnlyChange,
+                selectedTag = state.selectedTag,
+                availableTags = state.availableTags,
+                onTagChange = onTagChange,
                 onShowTrash = manage.onShowTrash,
                 countLabel = if (state.items.size == state.totalCount) {
                     stringResource(R.string.library_count, state.totalCount)
@@ -273,6 +278,7 @@ private fun DefaultLibraryScaffold(
     modifier: Modifier,
     onQueryChange: (String) -> Unit,
     onArchivedOnlyChange: (Boolean) -> Unit,
+    onTagChange: (String?) -> Unit,
     onShowTrash: () -> Unit,
     countLabel: String?,
     content: @Composable () -> Unit,
@@ -283,6 +289,9 @@ private fun DefaultLibraryScaffold(
             onQueryChange = onQueryChange,
             archivedOnly = false,
             onArchivedOnlyChange = onArchivedOnlyChange,
+            selectedTag = null,
+            availableTags = emptyList(),
+            onTagChange = onTagChange,
             onShowTrash = onShowTrash,
             countLabel = countLabel,
         )
@@ -304,6 +313,9 @@ private fun LibraryHeader(
     onQueryChange: (String) -> Unit,
     archivedOnly: Boolean,
     onArchivedOnlyChange: (Boolean) -> Unit,
+    selectedTag: String?,
+    availableTags: List<String>,
+    onTagChange: (String?) -> Unit,
     countLabel: String?,
     onShowTrash: () -> Unit,
 ) {
@@ -363,6 +375,24 @@ private fun LibraryHeader(
                         .fillMaxWidth()
                         .semantics { contentDescription = searchLabel },
                 )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (availableTags.isNotEmpty()) {
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    PillFilter(
+                        label = stringResource(R.string.library_all_tags),
+                        selected = selectedTag == null,
+                        onClick = { onTagChange(null) },
+                    )
+                    availableTags.forEach { tag ->
+                        PillFilter(label = tag, selected = selectedTag == tag, onClick = { onTagChange(tag) })
+                    }
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

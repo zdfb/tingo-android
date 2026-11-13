@@ -37,6 +37,8 @@ sealed interface LibraryUiState {
         val unreadableCount: Int,
         val query: String = "",
         val archivedOnly: Boolean = false,
+        val selectedTag: String? = null,
+        val availableTags: List<String> = emptyList(),
         /** 多选中的会议 id；非空时界面显示批量操作条 */
         val selection: Set<String> = emptySet(),
         /** 搜索命中：空表示"这次搜索没有命中"而不是"没在搜索" */
@@ -79,6 +81,7 @@ class LibraryViewModel(
     private var lastSnapshot: List<MeetingCard>? = null
     private var query: String = ""
     private var archivedOnly: Boolean = false
+    private var selectedTag: String? = null
 
     /** 最近一次写操作的失败原因；界面据此给出提示，而不是静默失败。 */
     private val _lastError = MutableStateFlow<FailureKind?>(null)
@@ -388,12 +391,19 @@ class LibraryViewModel(
         lastSnapshot?.let { _state.value = render(it) }
     }
 
+    fun onTagChange(tag: String?) {
+        selectedTag = tag
+        lastSnapshot?.let { _state.value = render(it) }
+    }
+
     private fun render(snapshot: List<MeetingCard>): LibraryUiState {
         val all = snapshot
         if (all.isEmpty()) return LibraryUiState.Empty
 
         val visible = all.filter { card ->
-            (!archivedOnly || card.archived) && matchesQuery(card, query)
+            (!archivedOnly || card.archived) &&
+                (selectedTag == null || selectedTag in card.tags) &&
+                matchesQuery(card, query)
         }
         return LibraryUiState.Content(
             items = visible,
@@ -401,6 +411,8 @@ class LibraryViewModel(
             unreadableCount = all.count { it.unreadable },
             query = query,
             archivedOnly = archivedOnly,
+            selectedTag = selectedTag,
+            availableTags = all.flatMap { it.tags }.distinct().sorted(),
             selection = selection,
             hits = hits,
             expandedTerms = expandedTerms,

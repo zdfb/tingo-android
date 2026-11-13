@@ -81,6 +81,7 @@
     <string name="library_unreadable">Unreadable</string>
     <string name="library_search_hint">Search title, summary or tag</string>
     <string name="library_filter_archived">Archived only</string>
+    <string name="library_all_tags">All tags</string>
     <string name="library_count">%1$d meetings</string>
     <string name="library_count_filtered">Showing %1$d of %2$d</string>
     <string name="detail_select_hint">Pick a meeting on the left</string>

@@ -572,6 +572,7 @@ fun TingoRoot(
                         onRefresh = libraryViewModel::refresh,
                         onQueryChange = libraryViewModel::onQueryChange,
                         onArchivedOnlyChange = libraryViewModel::onArchivedOnlyChange,
+                        onTagChange = libraryViewModel::onTagChange,
                         onUnreadableClick = { card ->
                             unreadablePath = container.meetingDir(card.id).absolutePath
                         },

@@ -81,6 +81,7 @@
     <string name="library_unreadable">不可读</string>
     <string name="library_search_hint">搜索标题、总结或标签</string>
     <string name="library_filter_archived">只看归档</string>
+    <string name="library_all_tags">全部标签</string>
     <string name="library_count">%1$d 场会议</string>
     <string name="library_count_filtered">筛选出 %1$d / %2$d 场</string>
     <string name="detail_select_hint">从左侧选一场会议</string>

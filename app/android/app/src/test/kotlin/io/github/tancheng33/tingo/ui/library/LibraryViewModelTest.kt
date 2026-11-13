@@ -133,6 +133,26 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun tagFilterCombinesWithArchiveAndExposesAvailableTags() = runTest(dispatcher) {
+        val vm = viewModel(
+            FakeEnginePort(onScan = {
+                listOf(
+                    summary("product", tags = listOf("产品")),
+                    summary("archived", tags = listOf("产品", "归档"), archived = true),
+                )
+            }),
+        )
+        advanceUntilIdle()
+
+        vm.onTagChange("产品")
+        vm.onArchivedOnlyChange(true)
+        val content = vm.state.value as LibraryUiState.Content
+        assertEquals(listOf("archived"), content.items.map { it.id })
+        assertEquals(listOf("产品", "归档"), content.availableTags)
+        assertEquals("产品", content.selectedTag)
+    }
+
+    @Test
     fun filtersSurviveRefresh() = runTest(dispatcher) {
         // 从详情返回后用户期望筛选还在：refresh 不能把条件重置掉
         val vm = viewModel(FakeEnginePort(onScan = { listOf(summary("live"), summary("old", archived = true)) }))
