@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tancheng33.tingo.settings.AppLanguage
 import io.github.tancheng33.tingo.ui.settings.SettingsScreen
@@ -17,6 +18,35 @@ import org.junit.Rule
 import org.junit.Test
 
 class SettingsScreenTest {
+    @Test
+    fun updateEntryOpensReleases() {
+        var opened = false
+        compose.setContent {
+            TingoTheme {
+                SettingsScreen(
+                    language = AppLanguage.ZH, engineVersion = "test", dataRoot = "/data/tingo",
+                    onLanguageChange = {}, onSaveMinutesLanguage = {}, onOpenReleases = { opened = true },
+                )
+            }
+        }
+        compose.onNodeWithText(context.getString(R.string.settings_check_updates)).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(true, opened) }
+    }
+    @Test
+    fun automaticProcessingDefaultsCanBeChanged() {
+        var transcribe: Boolean? = null
+        compose.setContent {
+            TingoTheme {
+                SettingsScreen(
+                    language = AppLanguage.ZH, engineVersion = "test", dataRoot = "/data/tingo",
+                    onLanguageChange = {}, onSaveMinutesLanguage = {},
+                    onSaveAutoTranscribe = { transcribe = it },
+                )
+            }
+        }
+        compose.onNodeWithText(context.getString(R.string.auto_transcribe)).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(false, transcribe) }
+    }
 
     @get:Rule
     val compose = createComposeRule()

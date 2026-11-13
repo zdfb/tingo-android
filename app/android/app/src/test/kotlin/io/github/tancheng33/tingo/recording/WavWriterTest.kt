@@ -10,6 +10,20 @@ import org.junit.Test
 
 class WavWriterTest {
 
+    @Test
+    fun padsStereoTrackToRecordingPositionWithoutOverwritingAudio() {
+        val file = tempFile()
+        WavWriter(file, 48_000, channels = 2).use { writer ->
+            writer.padSilenceToDuration(250)
+            writer.append(byteArrayOf(1, 2, 3, 4))
+            writer.padSilenceToDuration(100)
+            assertEquals(48_004L, writer.dataBytes)
+        }
+        val bytes = file.readBytes()
+        assertTrue(bytes.copyOfRange(44, 48_044).all { it == 0.toByte() })
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4), bytes.copyOfRange(48_044, 48_048))
+    }
+
     private fun tempFile(): File = Files.createTempFile("tingo-wav", ".wav").toFile().apply { delete() }
 
     private fun le32(bytes: ByteArray, offset: Int): Int =

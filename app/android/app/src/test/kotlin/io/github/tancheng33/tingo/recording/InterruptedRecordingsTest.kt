@@ -10,6 +10,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InterruptedRecordingsTest {
+    @Test
+    fun repairedMeetingRemainsAvailableForRecoveryUntilAcknowledged() {
+        val meetings = root()
+        val meeting = File(meetings, "2026-11-01_0900_复盘")
+        halfWritten(meeting, 1600)
+
+        InterruptedRecordings.repairUnder(meetings)
+        assertEquals(listOf(meeting.name), InterruptedRecordings.pendingRecoveryUnder(meetings))
+        InterruptedRecordings.repairUnder(meetings)
+        assertEquals(listOf(meeting.name), InterruptedRecordings.pendingRecoveryUnder(meetings))
+        InterruptedRecordings.acknowledge(meetings, meeting.name)
+        assertTrue(InterruptedRecordings.pendingRecoveryUnder(meetings).isEmpty())
+    }
 
     private fun root(): File = Files.createTempDirectory("tingo-repair").toFile()
 

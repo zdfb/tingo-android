@@ -34,7 +34,7 @@ class WavWriter(
     private var closed = false
 
     /** 追加一段 PCM（16 bit little-endian、单声道）。 */
-    fun append(pcm: ByteArray, length: Int = pcm.size) {
+    @Synchronized fun append(pcm: ByteArray, length: Int = pcm.size) {
         require(!closed) { "wav 已关闭" }
         require(length % BYTES_PER_SAMPLE == 0) { "PCM 字节数必须是 $BYTES_PER_SAMPLE 的整数倍" }
         out.seek(HEADER_SIZE + dataBytes)
@@ -43,15 +43,31 @@ class WavWriter(
     }
 
     /** 录音时长（毫秒），由已写入的字节数换算，不依赖系统时钟。 */
-    fun durationMs(): Long = dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE * channels)
+    @Synchronized fun durationMs(): Long = dataBytes * 1000 / (sampleRate.toLong() * BYTES_PER_SAMPLE * channels)
+
+    /** Insert silence until this track reaches a shared recording timeline position. */
+    @Synchronized fun padSilenceToDuration(targetMs: Long) {
+        val targetFrames = targetMs.coerceAtLeast(0) * sampleRate / 1000
+        val currentFrames = dataBytes / (BYTES_PER_SAMPLE * channels)
+        var remainingBytes = (targetFrames - currentFrames).coerceAtLeast(0) * BYTES_PER_SAMPLE * channels
+        val silence = ByteArray(64 * 1024)
+        while (remainingBytes > 0) {
+            val count = minOf(remainingBytes, silence.size.toLong()).toInt()
+            append(silence, count)
+            remainingBytes -= count
+        }
+    }
 
     /** 回填长度字段并关闭；重复调用无副作用（进程被杀后由恢复流程再调一次）。 */
-    override fun close() {
+    @Synchronized override fun close() {
         if (closed) return
         closed = true
-        out.seek(0)
-        out.write(header(dataBytes))
-        out.close()
+        try {
+            out.seek(0)
+            out.write(header(dataBytes))
+        } finally {
+            out.close()
+        }
     }
 
     private fun header(dataBytes: Long): ByteArray {

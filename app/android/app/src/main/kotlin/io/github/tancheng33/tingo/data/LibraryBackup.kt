@@ -51,6 +51,22 @@ object LibraryBackup {
                         out.closeEntry()
                     }
             }
+            val audioTrash = File(meetingsRoot, ".audio-trash")
+            audioTrash.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { dir ->
+                dir.listFiles()?.filter { it.isFile }?.forEach { file ->
+                    out.putNextEntry(ZipEntry(".audio-trash/${dir.name}/${file.name}"))
+                    file.inputStream().use { it.copyTo(out) }
+                    out.closeEntry()
+                }
+            }
+            val meetingTrash = File(meetingsRoot, ".trash")
+            meetingTrash.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { dir ->
+                dir.walkTopDown().filter { it.isFile }.forEach { file ->
+                    out.putNextEntry(ZipEntry(".trash/${dir.name}/${file.relativeTo(dir).invariantSeparatorsPath}"))
+                    file.inputStream().use { it.copyTo(out) }
+                    out.closeEntry()
+                }
+            }
         }
         return meetings.size
     }
@@ -75,13 +91,55 @@ object LibraryBackup {
         overwrite: Boolean = false,
     ): RestoreReport {
         meetingsRoot.mkdirs()
+        val stage = File(meetingsRoot, ".restore-${java.util.UUID.randomUUID()}")
+        check(stage.mkdir()) { "无法创建恢复目录" }
+        try {
+            val report = restoreInto(open, stage, meetingsRoot, overwrite)
+            stage.listFiles().orEmpty().forEach { staged ->
+                if (staged.name == ".trash" || staged.name == ".audio-trash") {
+                    val targetRoot = File(meetingsRoot, staged.name)
+                    check(targetRoot.mkdirs() || targetRoot.isDirectory)
+                    staged.listFiles().orEmpty().forEach { item ->
+                        installRestored(item, File(targetRoot, item.name), meetingsRoot, overwrite)
+                    }
+                } else {
+                    installRestored(staged, File(meetingsRoot, staged.name), meetingsRoot, overwrite)
+                }
+            }
+            return report
+        } finally {
+            stage.deleteRecursively()
+        }
+    }
+
+    private fun installRestored(staged: File, target: File, root: File, overwrite: Boolean) {
+        check(target.canonicalPath.startsWith(root.canonicalPath + File.separator)) { "恢复路径不安全" }
+        if (target.exists()) {
+            check(overwrite) { "恢复期间出现同名会议" }
+            check(staged.copyRecursively(target, overwrite = true)) { "无法恢复会议" }
+        } else {
+            check(staged.renameTo(target)) { "无法恢复会议" }
+        }
+    }
+
+    private fun restoreInto(
+        open: () -> java.io.InputStream,
+        meetingsRoot: File,
+        destinationRoot: File,
+        overwrite: Boolean,
+    ): RestoreReport {
         val restored = mutableListOf<String>()
         val skipped = mutableSetOf<String>()
+        val skippedTrash = mutableSetOf<String>()
         val rejected = mutableListOf<String>()
 
         // 恢复前就存在的会议才需要"跳过"判断；恢复过程中刚建出来的目录不算
-        val existing = meetings(meetingsRoot).map { it.name }.toSet()
+        val existing = meetings(destinationRoot).map { it.name }.toSet()
         val handled = mutableSetOf<String>()
+        val existingAudioTrash = File(destinationRoot, ".audio-trash").listFiles()
+            ?.filter { it.isDirectory }?.map { it.name }?.toSet().orEmpty()
+        val existingMeetingTrash = File(destinationRoot, ".trash").listFiles()
+            ?.filter { it.isDirectory }?.map { it.name }?.toSet().orEmpty()
 
         val source = java.io.PushbackInputStream(java.io.BufferedInputStream(open()), 4)
         // 先看魔数：空会议库的备份是一个"只有目录尾记录"的合法 zip（PK\x05\x06），
@@ -101,9 +159,53 @@ object LibraryBackup {
                 val entry = input.nextEntry ?: break
                 if (entry.isDirectory) continue
                 val segments = entry.name.split('/', '\\').filter { it.isNotEmpty() }
-                // 只认"一层会议目录/文件"的结构；`..`、绝对路径、层级过深一律拒绝
-                val unsafe = segments.size != 2 || segments.any { it == "." || it == ".." } ||
-                    entry.name.startsWith("/") || entry.name.contains(':')
+                if (segments.size == 3 && segments[0] == ".audio-trash" &&
+                    !entry.name.startsWith("/") && !entry.name.contains(':') &&
+                    segments[1].isNotBlank() && !segments[1].startsWith(".") &&
+                    segments.none { it == "." || it == ".." }
+                ) {
+                    val id = segments[1]
+                    if (!overwrite && (id in existingAudioTrash || id in existing)) {
+                        skippedTrash += id
+                        continue
+                    }
+                    val trashRoot = File(meetingsRoot, ".audio-trash")
+                    val target = File(File(trashRoot, id), segments[2])
+                    if (!target.canonicalPath.startsWith(trashRoot.canonicalPath + File.separator) ||
+                        !target.canonicalPath.startsWith(meetingsRoot.canonicalPath + File.separator) ||
+                        !safeDestination(target, meetingsRoot, destinationRoot)) {
+                        rejected += entry.name
+                        continue
+                    }
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { out -> input.copyTo(out) }
+                    continue
+                }
+                if (segments.size >= 3 && segments[0] == ".trash" &&
+                    !entry.name.startsWith("/") && !entry.name.startsWith("\\") && !entry.name.contains(':') &&
+                    segments[1].isNotBlank() && !segments[1].startsWith(".") &&
+                    segments.none { it == "." || it == ".." }
+                ) {
+                    val id = segments[1]
+                    if (!overwrite && (id in existingMeetingTrash || id in existing)) {
+                        skippedTrash += id
+                        continue
+                    }
+                    val trashRoot = File(meetingsRoot, ".trash")
+                    val target = segments.drop(2).fold(File(trashRoot, id)) { parent, name -> File(parent, name) }
+                    if (!target.canonicalPath.startsWith(trashRoot.canonicalPath + File.separator) ||
+                        !target.canonicalPath.startsWith(meetingsRoot.canonicalPath + File.separator) ||
+                        !safeDestination(target, meetingsRoot, destinationRoot)) {
+                        rejected += entry.name
+                        continue
+                    }
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { out -> input.copyTo(out) }
+                    continue
+                }
+                // 恢复子目录，同时拒绝隐藏的顶层目录、绝对路径和路径穿越。
+                val unsafe = segments.size < 2 || segments[0].startsWith(".") || segments.any { it == "." || it == ".." } ||
+                    entry.name.startsWith("/") || entry.name.startsWith("\\") || entry.name.contains(':')
                 if (unsafe) {
                     rejected += entry.name
                     continue
@@ -115,13 +217,15 @@ object LibraryBackup {
                     continue
                 }
                 if (meetingId in skipped) continue
-                meetingDir.mkdirs()
-                val target = File(meetingDir, segments[1])
+                val target = segments.drop(1).fold(meetingDir) { parent, name -> File(parent, name) }
                 // 再确认一次落点真的在会议目录里（不信任任何来自文件的路径）
-                if (!target.canonicalPath.startsWith(meetingDir.canonicalPath + File.separator)) {
+                if (!target.canonicalPath.startsWith(meetingDir.canonicalPath + File.separator) ||
+                    !target.canonicalPath.startsWith(meetingsRoot.canonicalPath + File.separator) ||
+                    !safeDestination(target, meetingsRoot, destinationRoot)) {
                     rejected += entry.name
                     continue
                 }
+                target.parentFile?.mkdirs()
                 target.outputStream().use { out -> input.copyTo(out) }
                 handled += meetingId
                 restored += meetingId
@@ -129,9 +233,14 @@ object LibraryBackup {
         }
         return RestoreReport(
             restored = restored.distinct(),
-            skipped = skipped.sorted(),
+            skipped = (skipped + skippedTrash).sorted(),
             rejected = rejected,
         )
+    }
+
+    private fun safeDestination(staged: File, stageRoot: File, destinationRoot: File): Boolean {
+        val destination = File(destinationRoot, staged.relativeTo(stageRoot).path)
+        return destination.canonicalPath.startsWith(destinationRoot.canonicalPath + File.separator)
     }
 
     /** zip 的三种开头：普通条目、空归档尾记录、跨卷条目。 */

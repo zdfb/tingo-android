@@ -49,6 +49,13 @@ class SharedPrefsStore(context: Context) : KeyValueStore {
  * 会议与引擎配置仍由引擎负责，放在这里只会有两个真相。
  */
 class AppSettings(private val store: KeyValueStore) {
+    var autoTranscribe: Boolean
+        get() = store.getString(KEY_AUTO_TRANSCRIBE) != "0"
+        set(value) = store.putString(KEY_AUTO_TRANSCRIBE, if (value) "1" else "0")
+
+    var autoMinutes: Boolean
+        get() = store.getString(KEY_AUTO_MINUTES) != "0"
+        set(value) = store.putString(KEY_AUTO_MINUTES, if (value) "1" else "0")
     var language: AppLanguage
         get() = AppLanguage.fromTag(store.getString(KEY_LANGUAGE))
         set(value) = store.putString(KEY_LANGUAGE, value.tag)
@@ -109,6 +116,8 @@ class AppSettings(private val store: KeyValueStore) {
         set(value) = store.putString(KEY_ONBOARD_STEP, value.coerceAtLeast(0).toString())
 
     private companion object {
+        const val KEY_AUTO_TRANSCRIBE = "auto_transcribe"
+        const val KEY_AUTO_MINUTES = "auto_minutes"
         const val KEY_MINUTES_LANGUAGE = "minutes_language"
         const val KEY_ONBOARD_STEP = "onboard_step"
         const val KEY_AUTO_STOP = "auto_stop_silence_min"

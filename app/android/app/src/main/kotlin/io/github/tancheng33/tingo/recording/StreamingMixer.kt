@@ -25,7 +25,10 @@ object StreamingMixer {
     fun mix(sources: List<File>, sink: WavWriter, chunkFrames: Int = CHUNK_FRAMES) {
         val tracks = mutableListOf<ChunkedTrack>()
         try {
-            sources.forEach { tracks += ChunkedTrack(it) }
+            sources.forEach {
+                validateTrack(it)
+                tracks += ChunkedTrack(it)
+            }
             while (true) {
                 val chunks = tracks.map { it.next(chunkFrames) }
                 if (chunks.all { it.isEmpty() }) break
@@ -40,6 +43,20 @@ object StreamingMixer {
             }
         } finally {
             tracks.forEach { it.close() }
+        }
+    }
+
+    private fun validateTrack(file: File) {
+        RandomAccessFile(file, "r").use { raf ->
+            val header = ByteArray(WavReader.HEADER_BYTES.toInt())
+            require(raf.read(header) == header.size) { "音轨头不完整：${file.name}" }
+            fun u16(offset: Int) = (header[offset].toInt() and 0xff) or ((header[offset + 1].toInt() and 0xff) shl 8)
+            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF" &&
+                String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "无效音轨：${file.name}" }
+            require(u16(20) == 1 && u16(22) in 1..2 && u16(34) == 16) { "不支持的音轨格式：${file.name}" }
+            val rate = (0..3).fold(0L) { value, i -> value or ((header[24 + i].toLong() and 0xff) shl (8 * i)) }
+            require(rate in 1..192_000) { "不支持的采样率：${file.name}" }
+            require((file.length() - WavReader.HEADER_BYTES) % (u16(22) * 2) == 0L) { "音轨数据不完整：${file.name}" }
         }
     }
 

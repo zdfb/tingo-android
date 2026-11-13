@@ -26,6 +26,11 @@ class LiveTranscriber(
     private val lock = Any()
     private var pending = FloatArray(0)
     private var closed = false
+    @Volatile private var sentenceWithSpeaker: ((String, FloatArray) -> Unit)? = null
+    @Volatile private var failureListener: () -> Unit = {}
+
+    fun setSentenceListener(listener: (String, FloatArray) -> Unit) { sentenceWithSpeaker = listener }
+    fun setFailureListener(listener: () -> Unit) { failureListener = listener }
     private val running = AtomicBoolean(false)
     private val worker = Thread(
         {
@@ -33,6 +38,8 @@ class LiveTranscriber(
             // 也不会因为 join 超时把模型永远留在内存里
             try {
                 loop()
+            } catch (_: Exception) {
+                failureListener()
             } finally {
                 runCatching { releaseModels() }
             }
@@ -49,13 +56,14 @@ class LiveTranscriber(
     }
 
     /** 采集线程调用：把样本排进缓冲，立刻返回。 */
-    fun offer(samples: FloatArray) {
-        if (!running.get()) return
-        synchronized(lock) {
-            if (closed) return
+    fun offer(samples: FloatArray): Boolean {
+        if (!running.get()) return false
+        return synchronized(lock) {
+            if (closed) return@synchronized false
             // 推理落后太多时宁可丢样本，也不能让录音线程等：录音是主线，实时文字是副产品
-            if (pending.size > MAX_PENDING_SAMPLES) return
+            if (samples.size > MAX_PENDING_SAMPLES - pending.size) return@synchronized false
             pending = pending + samples
+            true
         }
     }
 
@@ -112,7 +120,7 @@ class LiveTranscriber(
             val padded = if (remainder == 0) tail else tail + FloatArray(window - remainder)
             feedVad(padded)
         }
-        runCatching { asr.flush() }
+        runCatching { asr.flush() }.onFailure { failureListener() }
         drainSegments()
     }
 
@@ -120,7 +128,7 @@ class LiveTranscriber(
         var offset = 0
         while (offset + window <= samples.size) {
             runCatching { asr.acceptWindow(samples.copyOfRange(offset, offset + window)) }
-                .onFailure { return }
+                .onFailure { failureListener(); return }
             offset += window
         }
     }
@@ -131,8 +139,15 @@ class LiveTranscriber(
             val durationMs = speech.size * 1000L / sampleRate
             // 太短的一段大概率是噪声：与转写管线同一个门限，实时文字不该比最终结果更花
             if (durationMs < AsrModels.MIN_SPEECH_MS) continue
-            val text = runCatching { asr.recognize(speech) }.getOrDefault("").trim()
-            if (text.isNotEmpty()) onSentence(text)
+            val text = runCatching { asr.recognize(speech) }
+                .onFailure { failureListener() }.getOrDefault("").trim()
+            if (text.isNotEmpty()) {
+                val listener = sentenceWithSpeaker
+                if (listener == null) onSentence(text) else {
+                    val embedding = runCatching { asr.speakerEmbedding(speech) }.getOrDefault(FloatArray(0))
+                    listener(text, embedding)
+                }
+            }
         }
     }
 

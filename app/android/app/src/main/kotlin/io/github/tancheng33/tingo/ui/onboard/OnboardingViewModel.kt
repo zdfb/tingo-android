@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewModelScope
 
@@ -36,6 +37,9 @@ class OnboardingViewModel(
         val step: Step = Step.HELLO,
         /** 识别模型是否已就绪（Android 的模型是随包内置的，通常第一步就绿） */
         val modelReady: Boolean = false,
+        val modelDownloadFailed: Boolean = false,
+        val modelDownloading: Boolean = false,
+        val modelDownloadProgress: Float = 0f,
         val installingDemo: Boolean = false,
         val demoFailed: Boolean = false,
         /** 示例会议装好后交给外面跳转 */
@@ -75,6 +79,31 @@ class OnboardingViewModel(
 
     fun refreshModel() {
         _state.value = _state.value.copy(modelReady = catalog.files.all { store.isReady(it) })
+    }
+
+    fun downloadModels() {
+        if (_state.value.modelDownloading) return
+        _state.update { it.copy(modelDownloadFailed = false, modelDownloading = true, modelDownloadProgress = 0f) }
+        viewModelScope.launch(io) {
+            try {
+                val total = catalog.downloadBytes.coerceAtLeast(1)
+                var completed = 0L
+                for (file in catalog.files) {
+                    val base = completed
+                    if (store.download(file, onProgress = { progress ->
+                            _state.update { it.copy(modelDownloadProgress = ((base + progress.downloaded).toFloat() / total).coerceIn(0f, 1f)) }
+                        }).isFailure) {
+                        _state.update { it.copy(modelDownloadFailed = true) }
+                        return@launch
+                    }
+                    completed += file.downloadBytes
+                    _state.update { it.copy(modelDownloadProgress = (completed.toFloat() / total).coerceIn(0f, 1f)) }
+                }
+                refreshModel()
+            } finally {
+                _state.update { it.copy(modelDownloading = false) }
+            }
+        }
     }
 
     fun next() {
@@ -154,7 +183,7 @@ class OnboardingViewModel(
     fun restart() {
         settings.onboarded = false
         settings.onboardStep = 0
-        _state.value = UiState()
+        _state.update { UiState(modelDownloading = it.modelDownloading, modelDownloadProgress = it.modelDownloadProgress) }
         refreshModel()
     }
 }

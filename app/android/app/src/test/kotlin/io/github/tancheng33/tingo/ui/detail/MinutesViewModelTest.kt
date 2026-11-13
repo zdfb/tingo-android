@@ -100,6 +100,28 @@ class MinutesViewModelTest {
     )
 
     @Test
+    fun highlightsAreIncludedByDefaultAndCanBeExcluded() = runTest(dispatcher) {
+        val dir = meeting()
+        io.github.tancheng33.tingo.recording.RecordingHighlights.write(dir, listOf(500L))
+        val prompts = mutableListOf<String>()
+        val generator = object : MinutesGenerator {
+            override suspend fun generate(prompt: String, maxTokens: Int, onToken: (String) -> Unit): String {
+                prompts += prompt
+                return good
+            }
+        }
+        val vm = viewModel(dir, generator)
+        vm.start()
+        advanceUntilIdle()
+        assertTrue(prompts.last().contains("用户标记的重点"))
+        assertTrue(prompts.last().contains("复盘注册转化"))
+
+        vm.start(includeHighlights = false)
+        advanceUntilIdle()
+        assertTrue(!prompts.last().contains("用户标记的重点"))
+    }
+
+    @Test
     fun prepareMarksNotConfiguredWhenServiceIsMissing() = runTest(dispatcher) {
         val vm = viewModel(meeting(), FakeGenerator(good), configured = false)
 

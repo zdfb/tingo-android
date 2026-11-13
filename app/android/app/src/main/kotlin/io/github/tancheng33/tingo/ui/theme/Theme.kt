@@ -68,8 +68,8 @@ object TingoTheme {
 
 /** 桌面版用系统字体（PingFang / SF），Android 上就是系统默认字体；只调字重与字距。 */
 private val TingoTypography = Typography(
-    displayLarge = TextStyle(fontFamily = FontFamily.Default, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp),
-    headlineSmall = TextStyle(fontFamily = FontFamily.Default, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+    displayLarge = TextStyle(fontFamily = FontFamily.Default, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+    headlineSmall = TextStyle(fontFamily = FontFamily.Default, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
     titleMedium = TextStyle(fontFamily = FontFamily.Default, fontSize = 16.sp, fontWeight = FontWeight.Medium),
     titleSmall = TextStyle(fontFamily = FontFamily.Default, fontSize = TingoType.section, fontWeight = FontWeight.Medium),
     bodyLarge = TextStyle(fontFamily = FontFamily.Default, fontSize = TingoType.body, lineHeight = 22.sp),

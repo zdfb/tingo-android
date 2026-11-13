@@ -74,6 +74,8 @@ class AsrModels internal constructor(
 
     override fun recognize(samples: FloatArray): String = punctuate(recognize(samples, SAMPLE_RATE))
 
+    override fun speakerEmbedding(samples: FloatArray): FloatArray = embed(samples, SAMPLE_RATE)
+
     override fun close() {
         runCatching { vad.release() }
         runCatching { recognizer.release() }

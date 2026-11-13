@@ -14,10 +14,14 @@ import kotlin.concurrent.thread
  * 系统音轨的抽象：录音状态机只依赖这五个动作，单测与设备测试可以用假实现。
  */
 interface SystemAudioTrack {
+    fun setSamplesListener(listener: ((FloatArray) -> Unit)?) {}
+    fun alignTo(durationMs: Long) {}
     fun start(file: File)
+    fun startAligned(file: File, positionMs: () -> Long) = start(file)
     fun pause()
     fun resume()
     fun peakLevel(): Float
+    fun lastFailure(): Throwable? = null
     fun stop(): Long
 }
 
@@ -39,15 +43,26 @@ class SystemAudioCapture(
     private var writer: WavWriter? = null
     @Volatile private var running = false
     @Volatile private var paused = false
+    @Volatile private var failure: Throwable? = null
+    @Volatile private var captureEpoch = 0
 
     /** 抓到的最大振幅：会议软件禁止被抓时系统给的是**静音**而不是异常。 */
     @Volatile private var peak = 0f
     private var worker: Thread? = null
+    @Volatile private var samplesListener: ((FloatArray) -> Unit)? = null
+
+    override fun setSamplesListener(listener: ((FloatArray) -> Unit)?) {
+        samplesListener = listener
+    }
 
     /** 开始把系统声音写进 [file]；失败抛异常，由调用方转成界面提示。 */
     @RequiresApi(Build.VERSION_CODES.Q)
-    override fun start(file: File) {
+    override fun start(file: File) = startAligned(file) { 0L }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    override fun startAligned(file: File, positionMs: () -> Long) {
         peak = 0f
+        failure = null
         val config = AudioPlaybackCaptureConfiguration.Builder(projection)
             // 会议软件的对方声音一般走 MEDIA；GAME/UNKNOWN 一并收着，能多抓一点是一点
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -79,17 +94,21 @@ class SystemAudioCapture(
         writer = wav
         running = true
         recorder.startRecording()
+        wav.padSilenceToDuration(positionMs())
 
         worker = thread(name = "tingo-system-audio", isDaemon = true) {
             val buffer = ByteArray(bufferSize)
+            val converter = SystemPcmConverter()
             while (running) {
                 if (paused) {
                     // 暂停时不读：这一段声音不写进文件，恢复后与麦克风那一路对得上
                     Thread.sleep(20)
                     continue
                 }
+                val epoch = captureEpoch
                 val read = recorder.read(buffer, 0, buffer.size)
                 if (read > 0) {
+                    if (paused || epoch != captureEpoch) continue
                     var localPeak = 0f
                     var i = 0
                     while (i + 1 < read) {
@@ -99,9 +118,18 @@ class SystemAudioCapture(
                         i += 2
                     }
                     if (localPeak > peak) peak = localPeak
-                    runCatching { wav.append(buffer, read) }
-                } else if (read < 0) {
+                    val written = runCatching { wav.append(buffer, read) }
+                    if (written.isFailure) {
+                        failure = written.exceptionOrNull()
+                        running = false
+                        continue
+                    }
+                    samplesListener?.let { listener ->
+                        runCatching { listener(converter.convert(buffer, read)) }
+                    }
+                } else if (read < 0 && running && !paused && epoch == captureEpoch) {
                     // 读失败（通常是投影被系统收回）：停下来，别写垃圾数据
+                    failure = IllegalStateException("系统声音读取失败: $read")
                     running = false
                 }
             }
@@ -110,6 +138,11 @@ class SystemAudioCapture(
 
     /** 抓到的最大振幅（0..1）。持续为 0 说明对方的声音根本没被抓到。 */
     override fun peakLevel(): Float = peak
+    override fun lastFailure(): Throwable? = failure
+
+    override fun alignTo(durationMs: Long) {
+        writer?.padSilenceToDuration(durationMs)
+    }
 
     /**
      * 暂停：与麦克风同步，别让两路时间轴错开。
@@ -119,14 +152,16 @@ class SystemAudioCapture(
      */
     override fun pause() {
         paused = true
+        captureEpoch++
         runCatching { record?.stop() }
     }
 
     /** 继续采集。 */
     override fun resume() {
         if (!paused) return
+        captureEpoch++
+        runCatching { record?.startRecording() }.onFailure { failure = it }
         paused = false
-        runCatching { record?.startRecording() }
     }
 
     /** 结束并回填 wav 头；返回写入的毫秒数。 */
@@ -154,5 +189,25 @@ class SystemAudioCapture(
     companion object {
         /** 系统混音的常见采样率；混音时会降到识别链用的 16 kHz。 */
         const val CAPTURE_RATE = 48_000
+    }
+}
+
+/** Converts 48 kHz stereo PCM to 16 kHz mono while retaining phase across reads. */
+class SystemPcmConverter {
+    private var frameIndex = 0
+
+    fun convert(buffer: ByteArray, length: Int): FloatArray {
+        val result = ArrayList<Float>()
+        var offset = 0
+        while (offset + 3 < length) {
+            if (frameIndex == 0) {
+                val left = ((buffer[offset].toInt() and 0xff) or (buffer[offset + 1].toInt() shl 8)).toShort().toInt()
+                val right = ((buffer[offset + 2].toInt() and 0xff) or (buffer[offset + 3].toInt() shl 8)).toShort().toInt()
+                result.add((left + right) / 65536f)
+            }
+            frameIndex = (frameIndex + 1) % 3
+            offset += 4
+        }
+        return result.toFloatArray()
     }
 }

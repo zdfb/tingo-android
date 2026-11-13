@@ -24,21 +24,42 @@ object InterruptedRecordings {
      * `录音.wav`；进程被杀时留下的是前两个，所以它们才是这条恢复的主要对象。
      */
     private val REPAIRABLE_NAMES = listOf("mic.wav", "system.wav", "录音.wav")
+    private const val RECOVERY_NOTICE = ".recording-recovered"
 
-    fun repairUnder(meetingsRoot: File): Int {
-        val dirs = meetingsRoot.listFiles { file -> file.isDirectory } ?: return 0
+    fun markForRecovery(meetingDir: File) {
+        File(meetingDir, RECOVERY_NOTICE).writeText("1")
+    }
+
+    fun repairUnder(meetingsRoot: File): Int =
+        repairDirectories(meetingsRoot.listFiles { file -> file.isDirectory }?.toList().orEmpty())
+
+    fun repairDirectories(dirs: List<File>): Int {
         var repaired = 0
         dirs.forEach { dir ->
             REPAIRABLE_NAMES.forEach { name ->
                 val wav = File(dir, name)
                 if (wav.isFile && needsRepair(wav)) {
-                    runCatching { WavWriter.repair(wav) }.onSuccess { repaired++ }
+                    runCatching {
+                        // Write first so an interruption during repair cannot lose the notice.
+                        markForRecovery(dir)
+                        WavWriter.repair(wav)
+                    }.onSuccess { repaired++ }
                 }
             }
             // 混音写到一半被杀会留下 录音.wav.tmp：删掉，否则它既占空间又会混进归档
             dir.listFiles { file -> file.name.endsWith(".tmp") }?.forEach { it.delete() }
         }
         return repaired
+    }
+
+    fun pendingRecoveryUnder(meetingsRoot: File): List<String> =
+        meetingsRoot.listFiles { file -> file.isDirectory && File(file, RECOVERY_NOTICE).isFile }
+            ?.map { it.name }?.sorted().orEmpty()
+
+    fun acknowledge(meetingsRoot: File, meetingId: String) {
+        require(meetingId.isNotBlank() && meetingId != "." && meetingId != ".." &&
+            !meetingId.contains('/') && !meetingId.contains('\\'))
+        File(File(meetingsRoot, meetingId), RECOVERY_NOTICE).delete()
     }
 
     /**

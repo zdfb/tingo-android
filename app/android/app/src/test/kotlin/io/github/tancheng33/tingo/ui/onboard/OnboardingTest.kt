@@ -2,6 +2,8 @@ package io.github.tancheng33.tingo.ui.onboard
 
 import io.github.tancheng33.tingo.models.ModelCatalog
 import io.github.tancheng33.tingo.models.ModelStore
+import io.github.tancheng33.tingo.models.ModelFile
+import io.github.tancheng33.tingo.models.HttpFetcher
 import io.github.tancheng33.tingo.models.UrlFetcher
 import io.github.tancheng33.tingo.settings.AppSettings
 import io.github.tancheng33.tingo.settings.KeyValueStore
@@ -63,6 +65,118 @@ class OnboardingTest {
         probe = probe,
         io = dispatcher,
     )
+
+    @Test
+    fun downloadingTheRequiredModelMakesItReady() = runTest(dispatcher) {
+        val bytes = "model".toByteArray()
+        val file = ModelFile("asr", "asr.onnx", "https://example.test/model", bytes.size.toLong())
+        val fetcher = object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long) = HttpFetcher.FetchedStream(
+                bytes.inputStream(), resumed = false,
+            )
+        }
+        val vm = OnboardingViewModel(
+            settings = AppSettings(Store()),
+            store = ModelStore(Files.createTempDirectory("onboard-download").toFile(), fetcher),
+            catalog = ModelCatalog(listOf(file)),
+            demo = null,
+            io = dispatcher,
+        )
+
+        vm.downloadModels()
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.modelReady)
+    }
+
+    @Test
+    fun failedModelDownloadIsVisibleAndCanBeRetried() = runTest(dispatcher) {
+        val bytes = "model".toByteArray()
+        val file = ModelFile("asr", "asr.onnx", "https://example.test/model", bytes.size.toLong())
+        var online = false
+        val fetcher = object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long): HttpFetcher.FetchedStream {
+                if (!online) throw java.io.IOException("offline")
+                return HttpFetcher.FetchedStream(bytes.inputStream(), resumed = false)
+            }
+        }
+        val vm = OnboardingViewModel(
+            AppSettings(Store()), ModelStore(Files.createTempDirectory("onboard-retry").toFile(), fetcher),
+            ModelCatalog(listOf(file)), null, io = dispatcher,
+        )
+
+        vm.downloadModels()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.modelDownloadFailed)
+        assertFalse(vm.state.value.modelReady)
+
+        online = true
+        vm.downloadModels()
+        advanceUntilIdle()
+        assertFalse(vm.state.value.modelDownloadFailed)
+        assertTrue(vm.state.value.modelReady)
+    }
+
+    @Test
+    fun modelDownloadShowsBusyUntilItFinishes() = runTest(dispatcher) {
+        val bytes = "model".toByteArray()
+        val file = ModelFile("asr", "asr.onnx", "https://example.test/model", bytes.size.toLong())
+        val fetcher = object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long) = HttpFetcher.FetchedStream(bytes.inputStream(), false)
+        }
+        val vm = OnboardingViewModel(
+            AppSettings(Store()), ModelStore(Files.createTempDirectory("onboard-busy").toFile(), fetcher),
+            ModelCatalog(listOf(file)), null, io = dispatcher,
+        )
+
+        vm.downloadModels()
+        assertTrue(vm.state.value.modelDownloading)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.modelDownloading)
+        assertTrue(vm.state.value.modelReady)
+    }
+
+    @Test
+    fun modelDownloadReportsOverallProgress() = runTest(dispatcher) {
+        val bytes = "model".toByteArray()
+        val file = ModelFile("asr", "asr.onnx", "https://example.test/model", bytes.size.toLong())
+        val fetcher = object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long) = HttpFetcher.FetchedStream(bytes.inputStream(), false)
+        }
+        val vm = OnboardingViewModel(
+            AppSettings(Store()), ModelStore(Files.createTempDirectory("onboard-progress").toFile(), fetcher),
+            ModelCatalog(listOf(file)), null, io = dispatcher,
+        )
+
+        vm.downloadModels()
+        advanceUntilIdle()
+        assertEquals(1f, vm.state.value.modelDownloadProgress, 0.0001f)
+    }
+
+    @Test
+    fun restartingOnboardingDoesNotStartASecondDownload() = runTest(dispatcher) {
+        val bytes = "model".toByteArray()
+        val file = ModelFile("asr", "asr.onnx", "https://example.test/model", bytes.size.toLong())
+        var requests = 0
+        val fetcher = object : HttpFetcher {
+            override fun open(url: String, rangeStart: Long): HttpFetcher.FetchedStream {
+                requests++
+                return HttpFetcher.FetchedStream(bytes.inputStream(), false)
+            }
+        }
+        val vm = OnboardingViewModel(
+            AppSettings(Store()), ModelStore(Files.createTempDirectory("onboard-restart").toFile(), fetcher),
+            ModelCatalog(listOf(file)), null, io = dispatcher,
+        )
+
+        vm.downloadModels()
+        vm.restart()
+        assertTrue(vm.state.value.modelDownloading)
+        vm.downloadModels()
+        advanceUntilIdle()
+        assertEquals(1, requests)
+        assertTrue(vm.state.value.modelReady)
+    }
 
     @Test
     fun showsOnlyForANewUserWithAnEmptyLibrary() {

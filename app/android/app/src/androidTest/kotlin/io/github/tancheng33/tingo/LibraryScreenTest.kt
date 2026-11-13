@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.engine.FailureKind
+import io.github.tancheng33.tingo.engine.TrashItem
 import io.github.tancheng33.tingo.ui.library.LibraryScreen
 import io.github.tancheng33.tingo.ui.library.LibraryManageActions
 import io.github.tancheng33.tingo.ui.library.LibraryUiState
@@ -21,6 +22,27 @@ import org.junit.Rule
 import org.junit.Test
 
 class LibraryScreenTest {
+    @Test
+    fun audioTrashOffersRestoreAndConfirmsPermanentDeletion() {
+        var restored: String? = null
+        var purged: String? = null
+        compose.setContent {
+            TingoTheme {
+                LibraryScreen(
+                    state = LibraryUiState.Empty, onOpenMeeting = {}, onRefresh = {},
+                    onQueryChange = {}, onArchivedOnlyChange = {}, trashVisible = true,
+                    audioTrash = listOf(TrashItem(id = "meeting-a", bytes = 2_000_000uL)),
+                    manage = LibraryManageActions(onRestoreAudio = { restored = it }, onPurgeAudio = { purged = it }),
+                )
+            }
+        }
+        compose.onNodeWithText("meeting-a").assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.library_trash_restore)).performClick()
+        compose.runOnIdle { assertEquals("meeting-a", restored) }
+        compose.onNodeWithText(context.getString(R.string.library_trash_purge)).performClick()
+        compose.onNodeWithText(context.getString(R.string.audio_trash_purge_title)).assertIsDisplayed()
+        compose.runOnIdle { assertEquals(null, purged) }
+    }
 
     @get:Rule
     val compose = createComposeRule()

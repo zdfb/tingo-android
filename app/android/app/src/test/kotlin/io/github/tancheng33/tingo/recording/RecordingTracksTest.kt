@@ -14,6 +14,24 @@ import org.junit.Test
  */
 class RecordingTracksTest {
 
+    @Test
+    fun concurrentMixRequestsProduceOneReadableRecording() {
+        val meeting = dir()
+        wav(File(meeting, "mic.wav"), 160_000)
+        val start = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
+        try {
+            val results = (1..4).map {
+                pool.submit { start.await(); RecordingTracks.ensureMixed(meeting) }
+            }
+            start.countDown()
+            results.forEach { it.get() }
+            assertEquals(File(meeting, "录音.wav"), RecordingTracks.find(meeting))
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
     private fun dir(): File = Files.createTempDirectory("tracks").toFile()
 
     /** 写一个头里长度与文件大小一致的 wav（"完整"的判据）。 */

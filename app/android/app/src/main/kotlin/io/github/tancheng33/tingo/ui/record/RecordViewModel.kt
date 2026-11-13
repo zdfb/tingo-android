@@ -3,13 +3,16 @@ package io.github.tancheng33.tingo.ui.record
 import androidx.lifecycle.ViewModel
 import io.github.tancheng33.tingo.R
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.mutableStateListOf
 import io.github.tancheng33.tingo.importing.AudioDecoder
 import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.LiveTranscriber
+import io.github.tancheng33.tingo.recording.InterruptedRecordings
 import io.github.tancheng33.tingo.recording.MicRecorder
 import io.github.tancheng33.tingo.recording.RecordingSession
 import io.github.tancheng33.tingo.recording.RecordingTracks
+import io.github.tancheng33.tingo.recording.RecordingHighlights
 import io.github.tancheng33.tingo.recording.SilenceWatcher
 import io.github.tancheng33.tingo.recording.WavTrim
 import io.github.tancheng33.tingo.recording.RecordingKeepAlive
@@ -76,6 +79,7 @@ class RecordViewModel(
      * 是因为每次录音都要新建一份——上一次的 VAD 状态不能带进下一场会。
      */
     private val liveTranscriber: ((onSentence: (String) -> Unit) -> LiveTranscriber)? = null,
+    private val modelReady: () -> Boolean = { true },
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /**
      * 计时协程跑在哪个作用域。默认是 ViewModel 的，测试里换成 runTest 的 backgroundScope——
@@ -90,6 +94,11 @@ class RecordViewModel(
     private val session = RecordingSession()
     private val _state = MutableStateFlow<RecordUiState>(RecordUiState.Idle)
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
+    @Volatile private var completionListener: (RecordUiState.Finished) -> Unit = {}
+
+    fun setCompletionListener(listener: (RecordUiState.Finished) -> Unit) {
+        completionListener = listener
+    }
 
     /**
      * 系统声音那一路的状态。
@@ -108,11 +117,88 @@ class RecordViewModel(
      * 只留最近几条：这是"看得见还在干活"的反馈，不是最终转写；详细内容录完写进
      * `transcript.json`。留着全部会让界面越来越卡，也会让人误以为可以直接编辑。
      */
-    private val _liveLines = MutableStateFlow<List<String>>(emptyList())
-    val liveLines: StateFlow<List<String>> = _liveLines.asStateFlow()
+    data class LiveEntry(val key: Long, val text: String, val speaker: Int?)
+    private var nextLiveEntryKey = 0L
+    private val speakerLock = Any()
+    private val speakerCenters = mutableListOf<FloatArray>()
+    private val _liveEntries = mutableStateListOf<LiveEntry>()
+    val liveEntries: List<LiveEntry> get() = _liveEntries
+    private val _liveTranscriptIncomplete = MutableStateFlow(false)
+    val liveTranscriptIncomplete: StateFlow<Boolean> = _liveTranscriptIncomplete.asStateFlow()
+    private val _highlights = MutableStateFlow<List<Long>>(emptyList())
+    val highlights: StateFlow<List<Long>> = _highlights.asStateFlow()
+    private val _highlightSaveFailed = MutableStateFlow(false)
+    val highlightSaveFailed: StateFlow<Boolean> = _highlightSaveFailed.asStateFlow()
 
-    @Volatile
-    private var live: LiveTranscriber? = null
+    fun markHighlight() {
+        if (_state.value !is RecordUiState.Recording && _state.value !is RecordUiState.Paused) return
+        val dir = currentDir ?: return
+        val next = _highlights.value + session.elapsedMs(clock())
+        val result = runCatching { RecordingHighlights.write(dir, next) }
+        _highlightSaveFailed.value = result.isFailure
+        if (result.isSuccess) _highlights.value = next
+    }
+
+    private var live: LiveLoader? = null
+    private var systemLive: LiveLoader? = null
+
+    /** Buffer audio while the model loads without blocking the capture thread. */
+    private inner class LiveLoader(private val sessionId: Int) {
+        private val lock = Any()
+        private val pending = ArrayDeque<FloatArray>()
+        private var pendingSamples = 0
+        private var transcriber: LiveTranscriber? = null
+        private var closed = false
+
+        fun offer(samples: FloatArray) = synchronized(lock) {
+            if (closed) return@synchronized
+            val active = transcriber
+            if (active != null) {
+                if (!active.offer(samples) && liveSession == sessionId) _liveTranscriptIncomplete.value = true
+            }
+            else if (pendingSamples + samples.size <= LiveTranscriber.MAX_PENDING_SAMPLES) {
+                pending.addLast(samples.copyOf())
+                pendingSamples += samples.size
+            } else if (liveSession == sessionId) _liveTranscriptIncomplete.value = true
+        }
+
+        fun load(factory: ((String) -> Unit) -> LiveTranscriber) {
+            Thread({
+                val created = runCatching { factory { text -> appendLiveSentence(sessionId, text, FloatArray(0)) } }
+                    .getOrElse {
+                        synchronized(lock) {
+                            if (!closed && liveSession == sessionId) _liveTranscriptIncomplete.value = true
+                            closed = true
+                            pending.clear()
+                            pendingSamples = 0
+                        }
+                        return@Thread
+                    }
+                synchronized(lock) {
+                    created.setSentenceListener { text, embedding -> appendLiveSentence(sessionId, text, embedding) }
+                    created.setFailureListener {
+                        if (liveSession == sessionId) _liveTranscriptIncomplete.value = true
+                    }
+                    // Even a cancelled load must start its worker so it releases native models.
+                    created.start()
+                    if (closed) created.close() else {
+                        transcriber = created
+                        pending.forEach { if (!created.offer(it)) _liveTranscriptIncomplete.value = true }
+                    }
+                    pending.clear()
+                    pendingSamples = 0
+                }
+            }, "tingo-live-model-loader").apply { isDaemon = true; start() }
+        }
+
+        fun close() = synchronized(lock) {
+            closed = true
+            pending.clear()
+            pendingSamples = 0
+            transcriber?.close()
+            transcriber = null
+        }
+    }
 
     /**
      * 实时转写的"场次号"。
@@ -218,9 +304,21 @@ class RecordViewModel(
     private var currentDir: File? = null
     private var systemAudio: SystemAudioTrack? = null
     private var ticker: kotlinx.coroutines.Job? = null
+    fun prepareNewMeeting() {
+        if (_state.value is RecordUiState.Finished) _state.value = RecordUiState.Idle
+    }
+    private val finalizations = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    suspend fun awaitFinalization(meetingId: String) {
+        finalizations[meetingId]?.join()
+    }
 
     fun start() {
-        if (_state.value is RecordUiState.Recording) return
+        if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) return
+        if (!modelReady()) {
+            _state.value = RecordUiState.Failed(R.string.err_model_required)
+            return
+        }
         // 录音是"写进去就收不回来"的操作：空间不够就明说，别让用户录到一半被 ENOSPC 打断。
         // 16 kHz 单声道约 115 MB/小时，双轨（48 kHz 立体声）约 690 MB/小时，留 500 MB 兜底。
         val free = runCatching { meetingsRoot.usableSpace }.getOrDefault(Long.MAX_VALUE)
@@ -229,6 +327,8 @@ class RecordViewModel(
             return
         }
         val dir = File(meetingsRoot, newMeetingId())
+        _highlights.value = emptyList()
+        _highlightSaveFailed.value = false
         // 原始音轨先各写各的，结束时合成 录音.wav——和桌面版的文件布局一致
         val file = File(dir, MIC_TRACK)
         try {
@@ -239,7 +339,6 @@ class RecordViewModel(
             _state.value = RecordUiState.Failed(R.string.err_mic_unavailable, e.message)
             return
         }
-        startLiveTranscription()
         currentDir = dir
         silence.reset()
         silence.silenceMinutes = autoStopSilenceMin()
@@ -247,28 +346,46 @@ class RecordViewModel(
         _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
         session.start(clock())
         _state.value = RecordUiState.Recording(0, 0f)
+        startLiveTranscription()
         startTicker()
     }
 
     /** 开一场录音就换一份实时转写：VAD 与识别流的状态不能跨场复用。 */
     private fun startLiveTranscription() {
         val factory = liveTranscriber ?: return
-        val mic = capture as? MicRecorder ?: return // 只有真实麦克风有样本回调
-        _liveLines.value = emptyList()
+        _liveEntries.clear()
+        _liveTranscriptIncomplete.value = false
+        synchronized(speakerLock) { speakerCenters.clear() }
         val session = ++liveSession
-        val created = runCatching {
-            factory { sentence ->
-                // 上一场的推理线程可能还在收尾：它的句子不该灌进这一场
-                if (liveSession != session) return@factory
-                // 回调在推理线程上：`update` 是原子的读改写；手写
-                // "value = value + s" 会让并发回调互相覆盖（丢句、顺序乱）
-                _liveLines.update { lines -> (lines + sentence).takeLast(LIVE_LINES_SHOWN) }
+        val loader = LiveLoader(session)
+        live = loader
+        capture.setSamplesListener { samples -> loader.offer(samples) }
+        loader.load(factory)
+    }
+
+    private fun appendLiveSentence(session: Int, text: String, embedding: FloatArray) {
+        synchronized(speakerLock) {
+            if (liveSession != session) return
+            val norm = kotlin.math.sqrt(embedding.sumOf { it.toDouble() * it.toDouble() })
+            val speaker = if (embedding.isEmpty() || !norm.isFinite() || norm < 1e-8) null else {
+                val unit = FloatArray(embedding.size) { (embedding[it] / norm).toFloat() }
+                val scores = speakerCenters.map { center ->
+                    if (center.size != unit.size) -1.0 else center.indices.sumOf { center[it].toDouble() * unit[it] }
+                }
+                val best = scores.indices.maxByOrNull { scores[it] }
+                if (best != null && scores[best] >= 0.72) {
+                    val center = speakerCenters[best]
+                    val merged = FloatArray(unit.size) { center[it] * 0.8f + unit[it] * 0.2f }
+                    val length = kotlin.math.sqrt(merged.sumOf { it.toDouble() * it.toDouble() })
+                    speakerCenters[best] = FloatArray(merged.size) { (merged[it] / length).toFloat() }
+                    best + 1
+                } else if (speakerCenters.size < 15) {
+                    speakerCenters.add(unit)
+                    speakerCenters.size
+                } else null
             }
-        }.getOrNull() ?: return
-        // 先挂上引用再启动：反过来的话第一句可能因为"还没挂上"被丢掉
-        live = created
-        created.start()
-        mic.onSamples = { samples -> created.offer(samples) }
+            _liveEntries.add(LiveEntry(nextLiveEntryKey++, text, speaker))
+        }
     }
 
     /**
@@ -276,14 +393,16 @@ class RecordViewModel(
      *
      * `close()` 只置标志、不等线程（模型由推理线程自己退出时释放），所以
      * 停止、放弃、被中断、离开录音页四条路径都可以直接调它，不会冻住界面。
-     * 场次号在这里推进：之后旧线程再吐出的话不会被当成这一场的。
+     * 下一场开始时推进场次号，允许当前录音最后一批识别结果完成。
      */
     private fun stopLiveTranscription() {
-        (capture as? MicRecorder)?.onSamples = null
-        val transcriber = live ?: return
+        capture.setSamplesListener(null)
+        systemAudio?.setSamplesListener(null)
+        val transcriber = live
         live = null
-        liveSession++
-        transcriber.close()
+        transcriber?.close()
+        systemLive?.close()
+        systemLive = null
     }
 
     /**
@@ -298,10 +417,17 @@ class RecordViewModel(
             runCatching { capture.stop() }
             return
         }
-        runCatching { capture.start(File(dir, SYSTEM_TRACK)) }
+        runCatching { capture.startAligned(File(dir, SYSTEM_TRACK)) { this.capture.durationMs() } }
             .onSuccess {
                 systemAudio = capture
+                if (_state.value is RecordUiState.Paused) capture.pause()
                 _systemAudioStatus.value = SystemAudioStatus.ACTIVE
+                liveTranscriber?.let { factory ->
+                    val loader = LiveLoader(liveSession)
+                    systemLive = loader
+                    capture.setSamplesListener { samples -> loader.offer(samples) }
+                    loader.load(factory)
+                }
             }
             .onFailure {
                 // 抓不到系统声音不影响录音：麦克风那一路继续，界面提示一句
@@ -326,6 +452,7 @@ class RecordViewModel(
 
     fun resume() {
         if (_state.value !is RecordUiState.Paused) return
+        runCatching { systemAudio?.alignTo(capture.durationMs()) }
         session.resume(clock())
         capture.resume()
         runCatching { systemAudio?.resume() }
@@ -352,13 +479,14 @@ class RecordViewModel(
             // 先让采集线程收尾（它会再交最后一批样本），再关实时转写：
             // 顺序反了最后几百毫秒的话就永远进不了实时文字
             val micDuration = capture.stop()
-            stopLiveTranscription()
             systemAudio?.let { runCatching { it.stop() } }
+            stopLiveTranscription()
             systemAudio = null
             _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
             // 采集线程中途死掉（磁盘满、写入被关闭）：文件已写下的部分还在，
             // 但必须告诉用户"这次录音提前中断了"，不能让计时器继续装作一切正常
             capture.lastFailure()?.let { failure ->
+                runCatching { InterruptedRecordings.markForRecovery(dir) }
                 session.fail(failure.message ?: "录音中断")
                 _state.value = RecordUiState.Failed(R.string.err_stop_failed, failure.message)
                 mergeInBackground(dir)
@@ -367,16 +495,25 @@ class RecordViewModel(
             }
             micDuration
         } catch (e: Exception) {
+            runCatching { InterruptedRecordings.markForRecovery(dir) }
+            systemAudio?.let { runCatching { it.stop() } }
+            stopLiveTranscription()
+            systemAudio = null
+            _systemAudioStatus.value = SystemAudioStatus.NOT_ATTEMPTED
+            currentDir = null
+            mergeInBackground(dir)
             session.fail(e.message ?: "结束录音失败")
             _state.value = RecordUiState.Failed(R.string.err_stop_failed, e.message)
             return
         }
         session.finish(clock())
         currentDir = null
-        _state.value = RecordUiState.Finished(dir.name, duration)
         // 自动结束：先截掉静音的尾巴，再混音。两件事必须在同一个协程里按顺序做，
         // 否则混音可能读到"正在被截短"的文件，混出来的长度就说不准了
         mergeInBackground(dir, keepMs)
+        val finished = RecordUiState.Finished(dir.name, duration)
+        _state.value = finished
+        runCatching { completionListener(finished) }
     }
 
     /**
@@ -385,7 +522,7 @@ class RecordViewModel(
      * @param keepMs 自动结束时只保留到这一刻：先截两路原始音轨，再混音
      */
     private fun mergeInBackground(dir: File, keepMs: Long? = null) {
-        viewModelScope.launch(io) {
+        val job = viewModelScope.launch(io, start = kotlinx.coroutines.CoroutineStart.LAZY) {
             if (keepMs != null) {
                 listOf(MIC_TRACK, SYSTEM_TRACK).forEach { name ->
                     runCatching { WavTrim.trimTo(File(dir, name), keepMs) }
@@ -393,6 +530,9 @@ class RecordViewModel(
             }
             runCatching { RecordingTracks.ensureMixed(dir) }
         }
+        finalizations[dir.name] = job
+        job.invokeOnCompletion { finalizations.remove(dir.name, job) }
+        job.start()
     }
 
     /**
@@ -406,6 +546,7 @@ class RecordViewModel(
         if (current !is RecordUiState.Recording && current !is RecordUiState.Paused) return
         ticker?.cancel()
         ticker = null
+        currentDir?.let { runCatching { InterruptedRecordings.markForRecovery(it) } }
         runCatching { capture.stop() }
         // 中断同样是"这一场到此为止"：实时转写的线程与模型要一起收掉
         stopLiveTranscription()
@@ -431,7 +572,10 @@ class RecordViewModel(
         // 这里必须同步收尾——onCleared 时 viewModelScope 已经取消，异步的 close 不会执行
         stopLiveTranscription()
         if (_state.value is RecordUiState.Recording || _state.value is RecordUiState.Paused) {
+            currentDir?.let { runCatching { InterruptedRecordings.markForRecovery(it) } }
             runCatching { capture.stop() }
+            systemAudio?.let { runCatching { it.stop() } }
+            systemAudio = null
             currentDir?.let { mergeInBackground(it) }
             _state.value = RecordUiState.Idle
             RecordingKeepAlive.publish(null)
@@ -462,6 +606,10 @@ class RecordViewModel(
      */
     private fun checkSystemAudioSilence() {
         val capture = systemAudio ?: return
+        if (capture.lastFailure() != null) {
+            _systemAudioStatus.value = SystemAudioStatus.MISSING
+            return
+        }
         val elapsed = session.elapsedMs(clock())
         if (elapsed < SILENCE_CHECK_MS) return
         val hasSound = capture.peakLevel() > SILENCE_THRESHOLD
@@ -479,6 +627,10 @@ class RecordViewModel(
             while (isActive) {
                 val s = _state.value
                 if (s is RecordUiState.Recording) {
+                    if (capture.lastFailure() != null) {
+                        onInterrupted()
+                        return@launch
+                    }
                     // 两路取大的：只有对方说话（自己不吭声）时也不能算静音
                     val level = maxOf(capture.level(), runCatching { systemAudio?.peakLevel() ?: 0f }.getOrDefault(0f))
                     val elapsed = session.elapsedMs(clock())
@@ -518,7 +670,6 @@ class RecordViewModel(
         /** 开始录音前至少要有这么多空间（约 20 分钟双轨录音）。 */
         const val MIN_FREE_BYTES = 500L * 1024 * 1024
         /** 界面上留几条实时句子 */
-        const val LIVE_LINES_SHOWN = 3
         /** 录这么久之后检查系统音轨有没有内容。 */
         const val SILENCE_CHECK_MS = 5_000L
         /** 低于这个振幅就当没抓到（16 bit 满量程 1.0）。 */

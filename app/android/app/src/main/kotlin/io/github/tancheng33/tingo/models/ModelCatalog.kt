@@ -13,7 +13,12 @@ data class ModelFile(
     val url: String,
     val bytes: Long,
     val sha256: String? = null,
-)
+    val sourceBytes: Long? = null,
+    val sourceSha256: String? = null,
+    val transform: String? = null,
+) {
+    val downloadBytes: Long get() = sourceBytes ?: bytes
+}
 
 /**
  * 随 APK 打包的模型清单。
@@ -31,6 +36,9 @@ class ModelCatalog(val files: List<ModelFile>) {
     val totalBytes: Long
         get() = files.sumOf { it.bytes }
 
+    val downloadBytes: Long
+        get() = files.sumOf { it.downloadBytes }
+
     companion object {
         /** 解析 `assets/models.json`；字段缺失或类型不对就报错，不做"猜"。 */
         fun parse(json: String): ModelCatalog {
@@ -44,6 +52,9 @@ class ModelCatalog(val files: List<ModelFile>) {
                     url = o.getString("url"),
                     bytes = o.getLong("bytes"),
                     sha256 = o.optString("sha256").takeIf { it.isNotBlank() },
+                    sourceBytes = if (o.has("source_bytes")) o.getLong("source_bytes") else null,
+                    sourceSha256 = o.optString("source_sha256").takeIf { it.isNotBlank() },
+                    transform = o.optString("transform").takeIf { it.isNotBlank() },
                 )
             }
             return ModelCatalog(files)

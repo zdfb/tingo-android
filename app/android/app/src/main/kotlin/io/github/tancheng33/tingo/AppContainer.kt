@@ -24,6 +24,7 @@ import io.github.tancheng33.tingo.models.AssetModelBundle
 import io.github.tancheng33.tingo.models.ModelBundle
 import io.github.tancheng33.tingo.models.ModelInstaller
 import java.io.File
+import kotlinx.coroutines.withContext
 
 /**
  * 手动依赖容器：只有一个进程级实例，由 [TingoApplication] 持有。
@@ -32,6 +33,100 @@ import java.io.File
  */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
+
+    private val recordingScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate,
+    )
+
+    private val transcriptionTasks = mutableMapOf<String, io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel>()
+    private val minutesTasks = mutableMapOf<String, io.github.tancheng33.tingo.ui.detail.MinutesViewModel>()
+
+    @Synchronized
+    fun transcriptionFor(id: String): io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel =
+        transcriptionTasks.getOrPut(id) {
+            io.github.tancheng33.tingo.ui.detail.TranscriptionViewModel(
+                transcriber = io.github.tancheng33.tingo.transcription.TranscriptionPipeline(models, catalog),
+                store = models, catalog = catalog, meetingDir = meetingDir(id),
+                ensureBundled = ::installBundledModels, tasks = tasks,
+            )
+        }
+
+    @Synchronized
+    fun minutesFor(id: String): io.github.tancheng33.tingo.ui.detail.MinutesViewModel =
+        minutesTasks.getOrPut(id) {
+            io.github.tancheng33.tingo.ui.detail.MinutesViewModel(
+                serviceFactory = {
+                    io.github.tancheng33.tingo.minutes.MinutesService(
+                        generator = io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator(
+                            configProvider = { settings.llm },
+                            client = io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient(),
+                        ),
+                        glossary = { language -> engine.minutesGlossary(language) },
+                        languageSetting = { settings.minutesLanguage },
+                    )
+                },
+                isConfigured = { settings.llm.isConfigured }, meetingDir = meetingDir(id), tasks = tasks,
+                saveMinutes = { text -> engine.saveMinutes(id, text) },
+            )
+        }
+
+    private val autoProcessor by lazy {
+        io.github.tancheng33.tingo.recording.AutoProcessor(
+            recordingScope,
+            transcribe = { id ->
+                recordingController.viewModel.awaitFinalization(id)
+                val vm = transcriptionFor(id)
+                vm.start()
+                val result = vm.awaitCompletion()
+                result is io.github.tancheng33.tingo.ui.detail.TranscriptionUiState.Done
+            },
+            minutes = { id ->
+                val noMinutes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { engine.readMeeting(id, uiLanguage()).minutesText.isNullOrBlank() }
+                        .getOrDefault(false)
+                }
+                if (noMinutes) {
+                    val vm = minutesFor(id)
+                    vm.start()
+                    vm.awaitCompletion()
+                }
+            },
+            onStarted = {
+                runCatching { io.github.tancheng33.tingo.recording.ProcessingService.start(appContext) }
+                    .onFailure {
+                        val texts = io.github.tancheng33.tingo.settings.AppLocale.wrap(appContext, settings.language)
+                        toasts.show(texts.getString(R.string.processing_service_start_failed), error = true)
+                    }
+            },
+            onFinished = { io.github.tancheng33.tingo.recording.ProcessingService.stop(appContext) },
+        )
+    }
+
+    val recordingController: io.github.tancheng33.tingo.recording.RecordingController by lazy {
+        val vm = io.github.tancheng33.tingo.ui.record.RecordViewModel(
+            capture = io.github.tancheng33.tingo.recording.MicRecorder(),
+            meetingsRoot = File(dataRoot, "meetings"),
+            stopService = { io.github.tancheng33.tingo.recording.RecordingService.stop(appContext) },
+            autoStopSilenceMin = { settings.autoStopSilenceMin },
+            importing = io.github.tancheng33.tingo.importing.AudioImport(
+                engine = engine,
+                transcriber = io.github.tancheng33.tingo.transcription.TranscriptionPipeline(models, catalog),
+                cacheDir = File(appContext.cacheDir, "imports").apply { mkdirs() },
+            ),
+            tasks = tasks,
+            modelReady = { catalog.files.all { models.isReady(it) } },
+            liveTranscriber = { onSentence ->
+                val asr = io.github.tancheng33.tingo.transcription.AsrModels.open(models, catalog)
+                io.github.tancheng33.tingo.recording.LiveTranscriber(asr, asr::close, onSentence = onSentence)
+            },
+        )
+        io.github.tancheng33.tingo.recording.RecordingController(
+            vm, recordingScope, stopService = {
+                io.github.tancheng33.tingo.recording.RecordingService.stop(appContext)
+            },
+            onCompleted = autoProcessor::submit,
+        )
+    }
 
     val settings = AppSettings(SharedPrefsStore(appContext))
 
@@ -71,7 +166,10 @@ class AppContainer(context: Context) {
     val catalog: ModelCatalog = ModelCatalog.parse(
         appContext.assets.open("models.json").bufferedReader().use { it.readText() },
     )
-    val models: ModelStore = ModelStore(File(dataRoot, "models"), UrlFetcher())
+    val models: ModelStore = ModelStore(
+        File(dataRoot, "models"), UrlFetcher(),
+        paraformerMetadata = appContext.assets.open("paraformer-metadata.bin").use { it.readBytes() },
+    )
 
     /** 内置模型包（`assets/models/`）。 */
     private val bundle: ModelBundle = AssetModelBundle(appContext.assets)
@@ -123,9 +221,21 @@ class AppContainer(context: Context) {
      *
      * 放到后台线程做：会议多的时候要逐个读文件头，不该卡启动。
      */
+    private val _recoveredRecordings = kotlinx.coroutines.flow.MutableStateFlow<List<String>>(emptyList())
+    val recoveredRecordings: kotlinx.coroutines.flow.StateFlow<List<String>> = _recoveredRecordings
+
+    fun acknowledgeRecoveredRecording(id: String) {
+        InterruptedRecordings.acknowledge(File(dataRoot, "meetings"), id)
+        _recoveredRecordings.value = _recoveredRecordings.value.filterNot { it == id }
+    }
+
     fun repairInterruptedRecordingsOnStart() {
+        val root = File(dataRoot, "meetings")
+        // Snapshot before the UI can create another recording directory.
+        val dirs = root.listFiles { file -> file.isDirectory }?.toList().orEmpty()
         kotlin.concurrent.thread(name = "tingo-repair", isDaemon = true) {
-            runCatching { InterruptedRecordings.repairUnder(File(dataRoot, "meetings")) }
+            runCatching { InterruptedRecordings.repairDirectories(dirs) }
+            _recoveredRecordings.value = InterruptedRecordings.pendingRecoveryUnder(root)
         }
     }
 

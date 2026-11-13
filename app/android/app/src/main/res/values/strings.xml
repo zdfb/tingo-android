@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="record_workspace_active">录音中</string>
+    <string name="record_workspace_paused">已暂停</string>
+    <string name="record_workspace_listening">正在听，识别出的文字会显示在这里</string>
+    <string name="record_discard_confirm">放弃后将删除这次录音，无法恢复。确定放弃吗？</string>
+    <string name="err_audio_mix_failed">双路录音合成失败，尚未开始转写。录音文件已保留，请检查存储空间或稍后重试。</string>
+    <string name="record_new_meeting">开始新会议</string>
+    <string name="record_live_incomplete">实时文字可能不完整，录音仍在保存。结束后可重新转写完整录音。</string>
+    <string name="settings_check_updates">查看版本更新</string>
+    <string name="settings_updates_open_failed">无法打开更新页面，请检查浏览器设置</string>
+    <string name="processing_channel">会议处理</string>
+    <string name="processing_notification_title">正在处理会议</string>
+    <string name="processing_notification_body">正在转写或生成纪要，点按查看进度</string>
+    <string name="processing_service_start_failed">无法启动后台处理服务。处理会继续，但切到后台后可能中断；可在会议详情中重新处理。</string>
+    <string name="recording_recovered_title">发现中断的录音</string>
+    <string name="recording_recovered_body">“%1$s”上次录音未正常结束。已尽力修复已保存的音频，你可以打开会议继续转写和整理。</string>
+    <string name="recording_recovered_open">打开会议</string>
+    <string name="record_provisional_speaker">临时说话人 %1$d</string>
+    <string name="record_speaker_unknown">说话人未知</string>
+    <string name="record_speaker_provisional_hint">说话人编号为临时结果，最终转写可能变化</string>
+    <string name="record_highlight_save_failed">重点标记未能保存，录音仍在继续</string>
+    <string name="settings_llm_address_invalid">请输入公网 HTTPS 服务地址</string>
+    <string name="auto_transcribe">录音结束后自动转写</string>
+    <string name="auto_minutes">转写完成后自动生成纪要</string>
     <string name="app_name">听过</string>
 
     <!-- 导航 -->
@@ -45,7 +68,9 @@
     <!-- 录音占位（录音能力在后续变更中实现） -->
 
     <!-- 会议列表 -->
-    <string name="library_title">会议·记录</string>
+    <string name="library_title">会议记录</string>
+    <string name="library_loading">正在整理你的会议</string>
+    <string name="library_empty_kicker">你的会议空间</string>
     <string name="library_empty">还没有会议</string>
     <string name="library_empty_body">开一场会，或者导入已有的录音。</string>
     <string name="library_start_recording">开始录音</string>
@@ -60,6 +85,8 @@
     <string name="library_count_filtered">筛选出 %1$d / %2$d 场</string>
     <string name="detail_select_hint">从左侧选一场会议</string>
     <string name="record_idle_hint">准备好后点开始，会议音频只存在本机。</string>
+    <string name="record_signature">把重要的对话，留在本机</string>
+    <string name="record_options">本次会议设置</string>
     <string name="record_permission_denied">没有麦克风权限，无法录音。可以在系统设置里开启。</string>
     <string name="record_start">开始录音</string>
     <string name="record_pause">暂停</string>
@@ -85,6 +112,7 @@
     <string name="detail_export">导出并分享</string>
     <string name="err_no_recording">这场会议没有可转写的录音</string>
     <string name="err_model_download_failed">模型下载失败：%1$s</string>
+    <string name="err_model_required">请先在新手引导中下载识别模型，再开始录音。</string>
     <string name="err_transcribe_failed">转写失败：%1$s</string>
     <string name="err_no_transcript">这场会议还没有转写，先生成转写</string>
     <string name="err_minutes_rejected">模型没有按要求输出：%1$s</string>
@@ -105,7 +133,7 @@
     <string name="record_system_audio_label">同时录下会议软件的声音</string>
     <string name="record_system_audio_hint">用于录对方说话声。多数会议软件禁止被抓，抓不到时只录本机麦克风。</string>
     <string name="record_system_audio_unsupported">Android 10 以下没有系统内录能力，只能录麦克风</string>
-    <string name="record_system_audio_missing">没抓到会议软件的声音（对方多半禁止了内录），本次只有麦克风</string>
+    <string name="record_system_audio_missing">系统声音暂未捕获或已中断，麦克风仍在录音</string>
     <string name="record_system_audio_denied">未授予屏幕录制权限，本次只录麦克风</string>
     <string name="detail_export_bundle">导出归档（录音、转写、纪要）</string>
     <string name="player_play">播放</string>
@@ -149,7 +177,7 @@
     <string name="library_batch_tag">加标签</string>
     <string name="library_batch_tag_title">给选中的会议加标签</string>
     <string name="library_batch_delete_audio">删音频</string>
-    <string name="library_batch_delete_audio_body">选中会议的录音会被删除，无法恢复；转写和纪要保留，但以后不能回听。</string>
+    <string name="library_batch_delete_audio_body">录音将移入回收站，保留 30 天；转写和纪要保留。</string>
     <string name="library_batch_partial">%1$d 场没能处理完，其余已完成</string>
     <string name="library_search_expanded">也按这些词找：%1$s</string>
     <string name="library_hit_in_minutes">纪要正文命中</string>
@@ -215,9 +243,23 @@
     <string name="onboard_point_record_body">腾讯会议、飞书、Zoom 里对方的声音都能录</string>
     <string name="onboard_point_source_title">结论有出处</string>
     <string name="onboard_point_source_body">纪要每条都能点回录音原话</string>
-    <string name="onboard_model_ready">已就绪：模型随应用内置，不需要下载</string>
-    <string name="onboard_model_missing">识别模型缺失：在设置 → 模型里重新安装</string>
+    <string name="onboard_model_ready">识别模型已就绪</string>
+    <string name="onboard_model_missing">开始录音前请下载 Paraformer 识别模型</string>
     <string name="onboard_model_body">识别全程离线，录音不会上传。</string>
+    <string name="onboard_model_size">下载大小：约 %1$d MiB</string>
+    <string name="settings_group_device">设备与存储</string>
+    <string name="settings_group_minutes">纪要与术语</string>
+    <string name="settings_group_recording">录音与处理</string>
+    <string name="settings_group_recognition">语音识别</string>
+    <string name="onboard_model_download">下载识别模型</string>
+    <string name="onboard_model_confirm">确认下载</string>
+    <string name="onboard_model_confirm_body">需要下载约 %1$d MiB。使用移动网络时会消耗流量；中断后可继续下载。</string>
+    <string name="onboard_model_downloading">正在下载…</string>
+    <string name="onboard_model_progress">下载进度：%1$d%%</string>
+    <string name="record_mark_highlight">标记重点</string>
+    <string name="record_highlights">已标记</string>
+    <string name="detail_include_highlights">生成纪要时纳入重点标记</string>
+    <string name="onboard_model_download_failed">下载失败，请检查网络后重试。</string>
     <string name="onboard_perm_mic">麦克风</string>
     <string name="onboard_perm_granted">已授权</string>
     <string name="onboard_perm_ask_later">第一次录音时会请求</string>
@@ -265,17 +307,17 @@
     <string name="settings_resume_onboarding">继续新手引导</string>
     <string name="settings_cleanup_audio">清理旧音频…</string>
     <string name="settings_cleanup_audio_running">清理中…</string>
-    <string name="settings_cleanup_audio_hint">只删录音，转写、纪要和导出都保留。删掉后这场会议就不能回听了。</string>
+    <string name="settings_cleanup_audio_hint">录音移入回收站并保留 30 天，期间仍占用空间；转写、纪要和导出保留。</string>
     <string name="settings_cleanup_audio_all">不限日期</string>
     <string name="settings_cleanup_audio_days">%1$d 天前</string>
     <string name="settings_cleanup_audio_archived_only">仅已归档</string>
     <string name="settings_cleanup_audio_title">删除旧音频？</string>
-    <string name="settings_cleanup_audio_body">会删掉 %1$d 天前的会议录音。转写与纪要保留，但这些会议不能再回听，也无法撤销。</string>
-    <string name="settings_cleanup_audio_body_all">会删掉所有会议的录音。转写与纪要保留，但不能再回听，也无法撤销。</string>
+    <string name="settings_cleanup_audio_body">%1$d 天前的会议录音将移入回收站，保留 30 天。</string>
+    <string name="settings_cleanup_audio_body_all">所有会议的录音将移入回收站，保留 30 天。</string>
     <string name="settings_cleanup_audio_body_archived">只处理已归档的会议。</string>
     <string name="settings_cleanup_audio_confirm">删除音频</string>
-    <string name="settings_cleanup_audio_done">已清理 %1$d 场会议的音频，释放 %2$s</string>
-    <string name="settings_cleanup_audio_partial">已清理 %1$d 场（%2$s），另有 %3$d 个文件没能删掉（可能正被占用）</string>
+    <string name="settings_cleanup_audio_done">已将 %1$d 场会议的录音移入回收站（%2$s）</string>
+    <string name="settings_cleanup_audio_partial">已移入 %1$d 场（%2$s），另有 %3$d 场未能处理</string>
     <string name="settings_cleanup_audio_none">没有符合条件的旧音频</string>
     <string name="settings_cleanup_audio_failed">旧音频没清理成功：可能文件正被占用，稍后再试</string>
     <string name="settings_minutes_language">纪要语言</string>
@@ -292,7 +334,11 @@
     <string name="detail_fishbone_quotes">引用 %1$d 段 · %2$d 字</string>
     <string name="detail_delete_audio">只删录音</string>
     <string name="detail_delete_audio_confirm_title">删除这场会议的录音？</string>
-    <string name="detail_delete_audio_confirm_body">录音会被删除，无法恢复；转写和纪要保留，以后就不能回听了。</string>
+    <string name="detail_delete_audio_confirm_body">录音将移入回收站，保留 30 天，期间仍占用空间；转写和纪要保留。</string>
     <string name="detail_save_and_regenerate">保存并重新生成纪要</string>
-    <string name="detail_audio_deleted">录音已删除，腾出 %1$d MB</string>
+    <string name="detail_audio_deleted">录音已移入回收站</string>
+    <string name="audio_trash_description">录音保留 30 天，保留期间仍占用空间</string>
+    <string name="audio_trash_item">录音 · %1$d MB</string>
+    <string name="audio_trash_purge_title">彻底删除录音？</string>
+    <string name="audio_trash_purge_body">删除后无法恢复，会议文字和纪要不受影响。</string>
 </resources>

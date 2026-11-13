@@ -5,12 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -30,15 +33,14 @@ import io.github.tancheng33.tingo.recording.CaptureProbeResult
 import io.github.tancheng33.tingo.ui.components.PillButton
 import io.github.tancheng33.tingo.ui.components.PillKind
 import io.github.tancheng33.tingo.ui.components.TingoPageTitle
+import io.github.tancheng33.tingo.ui.components.TingoConfirmDialog
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
 /**
  * 新手引导：五步，每步都能跳过。
  *
- * 与桌面 `welcome.ts` 同一套步骤与文案口径（认识 Tingo → 识别模型 → 录音权限 →
- * 大模型 → 示例会议）。差别在于内容：手机的识别模型是随包内置的，
- * 所以第二步通常是"已就绪"，而不是"下载 2 GB"。
+ * 包含认识 Tingo、识别模型、录音权限、大模型和示例会议五步。
  */
 @Composable
 fun OnboardingScreen(
@@ -56,6 +58,8 @@ fun OnboardingScreen(
     onSkip: () -> Unit,
     onInstallDemo: () -> Unit,
     onOpenSettings: () -> Unit,
+    onDownloadModels: () -> Unit = {},
+    modelSizeBytes: Long = 0,
     modifier: Modifier = Modifier,
 ) {
     val colors = TingoTheme.colors
@@ -77,7 +81,7 @@ fun OnboardingScreen(
         ) {
             when (state.step) {
                 OnboardingViewModel.Step.HELLO -> Welcome()
-                OnboardingViewModel.Step.MODEL -> ModelStep(ready = state.modelReady)
+                OnboardingViewModel.Step.MODEL -> ModelStep(state = state, modelSizeBytes = modelSizeBytes, onDownload = onDownloadModels)
                 OnboardingViewModel.Step.PERMISSION -> PermissionStep(
                     micGranted = micGranted,
                     systemAudioSupported = systemAudioSupported,
@@ -115,44 +119,24 @@ fun OnboardingScreen(
     }
 }
 
-/** 顶部的步骤指示：走过的打勾、当前的高亮。 */
-@OptIn(ExperimentalLayoutApi::class)
+/** 用固定宽度的进度轨道显示步骤，避免窄屏上换行挤占内容。 */
 @Composable
 private fun StepBar(steps: List<OnboardingViewModel.Step>, index: Int) {
     val colors = TingoTheme.colors
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        steps.forEachIndexed { position, step ->
-            val done = position < index
-            val now = position == index
-            Row(
-                modifier = Modifier
-                    .clip(TingoDimens.pillShape)
-                    .background(if (now) colors.blueSoft else colors.seg)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(if (now) colors.blue else colors.card, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (done) "✓" else (position + 1).toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (now) colors.onBlack else if (done) colors.green else colors.muted,
-                    )
-                }
-                Text(
-                    text = label(step),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (now) colors.blue else colors.muted,
-                )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            steps.forEachIndexed { position, _ ->
+                Box(Modifier.weight(1f).height(4.dp).clip(TingoDimens.pillShape)
+                    .background(if (position <= index) colors.blue else colors.line))
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("${'$'}{(index + 1).coerceAtLeast(0)} / ${'$'}{steps.size}", style = MaterialTheme.typography.labelMedium, color = colors.muted)
+            if (index == 0 && steps.size > 1) {
+                Text(label(steps[1]), style = MaterialTheme.typography.labelMedium, color = colors.muted)
             }
         }
     }
@@ -216,19 +200,47 @@ private fun Point(title: String, body: String) {
 }
 
 @Composable
-private fun ModelStep(ready: Boolean) {
+private fun ModelStep(state: OnboardingViewModel.UiState, modelSizeBytes: Long, onDownload: () -> Unit) {
     val colors = TingoTheme.colors
+    var confirmDownload by remember { mutableStateOf(false) }
     TingoPageTitle(text = stringResource(R.string.onboard_step_model))
     Text(
-        text = stringResource(if (ready) R.string.onboard_model_ready else R.string.onboard_model_missing),
+        text = stringResource(if (state.modelReady) R.string.onboard_model_ready else R.string.onboard_model_missing),
         style = MaterialTheme.typography.bodyMedium,
-        color = if (ready) colors.green else colors.red,
+        color = if (state.modelReady) colors.green else colors.red,
     )
     Text(
         stringResource(R.string.onboard_model_body),
         style = MaterialTheme.typography.bodySmall,
         color = colors.muted,
     )
+    if (!state.modelReady && modelSizeBytes > 0) {
+        Text(
+            stringResource(R.string.onboard_model_size, (modelSizeBytes + 1_048_575) / 1_048_576),
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.text2,
+        )
+    }
+    if (!state.modelReady) {
+        if (state.modelDownloading) {
+            Text(stringResource(R.string.onboard_model_progress, (state.modelDownloadProgress * 100).toInt()))
+        }
+        if (state.modelDownloadFailed) Text(stringResource(R.string.onboard_model_download_failed), color = colors.red)
+        PillButton(
+            label = stringResource(if (state.modelDownloading) R.string.onboard_model_downloading else R.string.onboard_model_download),
+            onClick = { confirmDownload = true },
+            enabled = !state.modelDownloading,
+        )
+    }
+    if (confirmDownload) {
+        TingoConfirmDialog(
+            title = stringResource(R.string.onboard_model_download),
+            body = stringResource(R.string.onboard_model_confirm_body, (modelSizeBytes + 1_048_575) / 1_048_576),
+            confirmLabel = stringResource(R.string.onboard_model_confirm),
+            onConfirm = { confirmDownload = false; onDownload() },
+            onDismiss = { confirmDownload = false },
+        )
+    }
 }
 
 @Composable

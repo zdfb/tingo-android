@@ -78,7 +78,7 @@ class MinutesViewModel(
         }
     }
 
-    fun start() {
+    fun start(includeHighlights: Boolean = true) {
         if (job?.isActive == true) return
         if (!isConfigured()) {
             _state.value = MinutesUiState.NotConfigured
@@ -98,6 +98,7 @@ class MinutesViewModel(
                 val file = service.generate(
                     transcript,
                     meetingDir,
+                    includeHighlights = includeHighlights,
                     // 长会议会分段提炼：把进度写进状态，界面才不是一块不动的"生成中"
                     onStage = { stage -> _state.value = MinutesUiState.Generating(stage) },
                     saveFinal = saveMinutes ?: { text -> service.write(meetingDir, text); Unit },
@@ -131,10 +132,14 @@ class MinutesViewModel(
     /** 取消：立刻回到"可再次点击"的状态，别让界面在取消后还挂着"生成中"。 */
     fun cancel() {
         job?.cancel()
-        job = null
         // 取消也是一次结束：不撤掉，首页会挂着一件永远不会再动的活
         tasks?.finish(RunningTask.keyOf(TaskKind.MINUTES, meetingDir.name))
         _state.value = MinutesUiState.Idle
+    }
+
+    suspend fun awaitCompletion(): MinutesUiState {
+        job?.join()
+        return state.value
     }
 
     /** 会议标题：去掉目录名的时间前缀（与首页"进行中"、会议库显示的是同一个名字）。 */

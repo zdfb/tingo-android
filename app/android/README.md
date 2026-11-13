@@ -1,5 +1,7 @@
 # Tingo for Android
 
+> v0.5.4 更新：最低支持 Android 10（API 29），应用 ID 为 `io.github.zdfb.tingo`。APK 不内置语音模型，首次使用需确认下载。以下 v0.5.2 的截图、录屏和测试记录仅作为历史资料；当前版本的完整真机自动化测试尚未通过。
+
 听过（Tingo）的 Android 客户端。**当前进度：录音（含尽力而为的系统内录与边录边出字）、离线转写
 （说话人聚类与桌面同一套谱聚类）、远端 API 纪要生成（鱼骨图逐条核对原文）、回听播放、
 搜索/归档/删除/只删录音/导出、设置页、新手引导与示例会议都已可用**。
@@ -68,8 +70,6 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/30.0.16248370
 
 ./gradlew :app:assembleDebug            # 产出 app/build/outputs/apk/debug/app-debug.apk
-# 没有内置模型（300+ MB，不进仓库）时加 -PtingoSkipBundledModels=true 才能出包
-./gradlew :app:assembleDebug -PtingoSkipBundledModels=true
 ./gradlew :app:testDebugUnitTest        # JVM 单测（仓库、ViewModel、工具函数、权限清单）
 ./gradlew :app:connectedDebugAndroidTest # 设备级测试（需已连接设备或模拟器）
 ```
@@ -111,7 +111,11 @@ io.github.tancheng33.tingo.ModelDownloadInstrumentedTest
 
 只想构一个 ABI 加快迭代：`./gradlew :app:assembleDebug -PtingoRustAbis=arm64-v8a`。
 
-**语音模型随 APK 内置，且与桌面端同一份**：ModelScope 的 Paraformer-large **量化（int8）**
+### v0.5.2 历史模型打包记录
+
+以下内容描述 v0.5.2 的模型打包方式，不适用于 v0.5.4。v0.5.4 根据 `app/src/main/assets/models.json` 下载并校验模型。
+
+ModelScope 的 Paraformer-large **量化（int8）**
 模型（238 MB）+ CT-Transformer 标点 **int8**（76 MB）+ CAM++ 声纹（28 MB，fp32，桌面端同样是这一份）
 + Silero VAD（0.6 MB，fp32）。识别与标点都是 int8 量化版，声纹与 VAD 上游只提供 fp32，
 桌面端也用这两个，所以两边一致。

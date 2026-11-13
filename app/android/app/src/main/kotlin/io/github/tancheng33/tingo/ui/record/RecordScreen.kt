@@ -12,8 +12,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.TextStyle
@@ -34,6 +41,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -98,6 +107,14 @@ fun RecordScreen(
     onStop: () -> Unit,
     onDiscard: () -> Unit,
     onOpenMeeting: (String) -> Unit,
+    onNewMeeting: () -> Unit = {},
+    onMarkHighlight: () -> Unit = {},
+    highlightSaveFailed: Boolean = false,
+    highlights: List<Long> = emptyList(),
+    autoTranscribe: Boolean = true,
+    onAutoTranscribeChange: (Boolean) -> Unit = {},
+    autoMinutes: Boolean = true,
+    onAutoMinutesChange: (Boolean) -> Unit = {},
     /** 用户是否勾选"同时录下会议软件的声音" */
     systemAudioEnabled: Boolean = false,
     onSystemAudioChange: (Boolean) -> Unit = {},
@@ -107,6 +124,8 @@ fun RecordScreen(
     systemAudioDenied: Boolean = false,
     /** 边录边转的最近几句（只有麦克风那一路）；空表示没有实时文字 */
     liveLines: List<String> = emptyList(),
+    liveEntries: List<RecordViewModel.LiveEntry> = emptyList(),
+    liveTranscriptIncomplete: Boolean = false,
     /** 最近几场会议：桌面端侧栏的"最近"在手机上落在录制页下方 */
     recent: List<MeetingCard> = emptyList(),
     onOpenRecent: (String) -> Unit = {},
@@ -144,24 +163,45 @@ fun RecordScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    if (state is RecordUiState.Recording || state is RecordUiState.Paused) {
+        RecordingWorkspace(
+            state = state, lines = liveLines, entries = liveEntries,
+            incomplete = liveTranscriptIncomplete, highlightSaveFailed = highlightSaveFailed,
+            highlights = highlights,
+            systemAudioMissing = systemAudioMissing, notificationsDenied = notificationsDenied,
+            onPause = onPause, onResume = onResume, onStop = onStop,
+            onMark = onMarkHighlight, onDiscard = onDiscard, modifier = modifier,
+        )
+        return
+    }
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         horizontalAlignment = Alignment.Start,
     ) {
         TingoPageTitle(text = stringResource(R.string.nav_record))
-        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
             when (state) {
                 RecordUiState.Idle -> Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 ) {
-                    Text(
-                        text = stringResource(R.string.record_idle_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TingoTheme.colors.muted,
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(TingoTheme.colors.blueSoft, TingoDimens.cardShape)
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RecordingSignature()
+                        Text(
+                            text = stringResource(R.string.record_idle_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TingoTheme.colors.text2,
+                        )
+                        PillButton(label = stringResource(R.string.record_start), onClick = onStart)
+                    }
                     WarningLine(
                         text = stringResource(R.string.record_permission_denied),
                         visible = permissionDenied,
@@ -172,16 +212,25 @@ fun RecordScreen(
                         visible = systemAudioDenied,
                         emphasis = true,
                     )
-                    // 系统内录开关：之前写完忘了渲染，等于用户根本没有这个选项
+                    Text(
+                        text = stringResource(R.string.record_options),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TingoTheme.colors.text,
+                    )
                     SystemAudioToggle(
                         enabled = systemAudioEnabled,
                         supported = android.os.Build.VERSION.SDK_INT >= SystemAudioSupport.MIN_SDK,
                         onChange = onSystemAudioChange,
                     )
-                    PillButton(
-                        label = stringResource(R.string.record_start),
-                        onClick = onStart,
-                    )
+                    Column(
+                        Modifier.fillMaxWidth().background(TingoTheme.colors.card, TingoDimens.cardShape)
+                            .border(BorderStroke(TingoDimens.hairline, TingoTheme.colors.line), TingoDimens.cardShape)
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    ) {
+                        ProcessingToggle(stringResource(R.string.auto_transcribe), autoTranscribe, onAutoTranscribeChange)
+                        HorizontalDivider(color = TingoTheme.colors.lineSoft)
+                        ProcessingToggle(stringResource(R.string.auto_minutes), autoMinutes, onAutoMinutesChange, autoTranscribe)
+                    }
                     if (autoStoppedAfter != null) {
                         // 自动停录要说明白：否则用户回来看见"没在录"会以为应用崩了
                         Text(
@@ -199,51 +248,7 @@ fun RecordScreen(
                     RecentAndStatus(recent = recent, statusRows = statusRows, onOpenRecent = onOpenRecent)
                 }
 
-                is RecordUiState.Recording -> Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    TimerText(clockOf(state.elapsedMs.toULong()))
-                    LevelBar(level = state.level)
-                    // 边录边转：显示最近几句，让"在录、也在识别"看得见。
-                    // 只显示不编辑：最终以录完后写进 transcript.json 的转写为准
-                    if (liveLines.isNotEmpty()) {
-                        LiveLinesPanel(liveLines = liveLines)
-                    }
-                    WarningLine(
-                        text = stringResource(R.string.record_system_audio_missing),
-                        visible = systemAudioMissing,
-                        emphasis = true,
-                    )
-                    // 只在真的在录的时候提：没有通知权限时状态栏看不到进度，用户会以为没在录
-                    WarningLine(
-                        text = stringResource(R.string.record_notification_denied),
-                        visible = notificationsDenied,
-                        emphasis = false,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
-                        PillButton(label = stringResource(R.string.record_pause), onClick = onPause, kind = PillKind.Ghost)
-                        PillButton(label = stringResource(R.string.record_stop), onClick = onStop)
-                    }
-                    DiscardLink(onClick = onDiscard)
-                }
-
-                is RecordUiState.Paused -> Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    TimerText(clockOf(state.elapsedMs.toULong()))
-                    Text(
-                        text = stringResource(R.string.record_paused_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TingoTheme.colors.muted,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
-                        PillButton(label = stringResource(R.string.record_resume), onClick = onResume)
-                        PillButton(label = stringResource(R.string.record_stop), onClick = onStop)
-                    }
-                    DiscardLink(onClick = onDiscard)
-                }
+                is RecordUiState.Recording, is RecordUiState.Paused -> Unit
 
                 is RecordUiState.Finished -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -262,6 +267,11 @@ fun RecordScreen(
                     PillButton(
                         label = stringResource(R.string.record_open_meeting),
                         onClick = { onOpenMeeting(state.meetingId) },
+                    )
+                    PillButton(
+                        label = stringResource(R.string.record_new_meeting),
+                        onClick = onNewMeeting,
+                        kind = PillKind.Ghost,
                     )
                 }
 
@@ -300,6 +310,45 @@ fun RecordScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProcessingToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    Row(
+        modifier = Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
+    }
+}
+
+/** Brand signature for the record entry: a quiet waveform instead of a generic empty page. */
+@Composable
+private fun RecordingSignature() {
+    val colors = TingoTheme.colors
+    Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Canvas(Modifier.size(width = 124.dp, height = 42.dp)) {
+            val bars = floatArrayOf(0.28f, 0.55f, 0.82f, 0.48f, 1f, 0.62f, 0.36f, 0.7f, 0.92f, 0.5f, 0.3f)
+            val gap = size.width / (bars.size + 1)
+            bars.forEachIndexed { index, value ->
+                val x = gap * (index + 1)
+                val half = size.height * value / 2f
+                drawLine(
+                    color = if (index == bars.size / 2) colors.blue else colors.blue.copy(alpha = 0.45f),
+                    start = androidx.compose.ui.geometry.Offset(x, size.height / 2f - half),
+                    end = androidx.compose.ui.geometry.Offset(x, size.height / 2f + half),
+                    strokeWidth = 5.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.record_signature),
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.text,
+        )
     }
 }
 
@@ -419,82 +468,6 @@ private fun WarningLine(text: String, visible: Boolean, emphasis: Boolean) {
             .background(if (emphasis) colors.red.copy(alpha = 0.08f) else colors.seg, TingoDimens.controlShape)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )
-}
-
-@Composable
-private fun DiscardLink(onClick: () -> Unit) {
-    val colors = TingoTheme.colors
-    Text(
-        text = stringResource(R.string.record_discard),
-        style = MaterialTheme.typography.labelLarge,
-        color = colors.faint,
-        modifier = Modifier.clickable(onClick = onClick).padding(8.dp),
-    )
-}
-
-/**
- * 录音中的实时文字。
- *
- * 只放最近几条、并且标明"还在识别"：这不是最终转写（说话人要等录完聚类），
- * 让人误以为可以在这里改字是最容易踩的坑。
- */
-@Composable
-private fun LiveLinesPanel(liveLines: List<String>) {
-    val colors = TingoTheme.colors
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        liveLines.forEach { line ->
-            Text(
-                text = line,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.text2,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            text = stringResource(R.string.record_live_hint),
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.muted,
-        )
-    }
-}
-
-/** 计时：大号、字距收紧、等宽数字，读秒不跳。 */
-@Composable
-private fun TimerText(text: String) {
-    val colors = TingoTheme.colors
-    Text(
-        text = text,
-        style = TextStyle(
-            fontSize = 52.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = (-1.2).sp,
-            fontFeatureSettings = "tnum",
-        ),
-        color = colors.text,
-    )
-}
-
-/** 电平：一根细条，安静时不晃眼。 */
-@Composable
-private fun LevelBar(level: Float) {
-    val colors = TingoTheme.colors
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(4.dp)
-            .background(colors.seg, TingoDimens.pillShape),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(level.coerceIn(0f, 1f))
-                .background(colors.blue, TingoDimens.pillShape),
-        )
-    }
 }
 
 /**

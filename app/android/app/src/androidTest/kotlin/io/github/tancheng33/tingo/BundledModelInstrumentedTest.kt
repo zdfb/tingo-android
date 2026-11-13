@@ -10,18 +10,13 @@ import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import io.github.tancheng33.tingo.transcription.WavReader
+import io.github.tancheng33.tingo.testing.ModelDownloads
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * 随 APK 内置的识别模型到底能不能用。
- *
- * 别的识别测试都是"自己下载模型"，跑通只能证明下载的模型可用；用户装完 APK 用的是
- * `assets/models/` 解包出来的那一份——换模型（比如换成桌面端同一份量化模型）时
- * 这条测试才是真正的把关：解包 → 加载 → 认出内容。
- */
+/** 验证实际下载的模型能加载并识别示例音频。 */
 @RunWith(AndroidJUnit4::class)
 class BundledModelInstrumentedTest {
 
@@ -29,9 +24,9 @@ class BundledModelInstrumentedTest {
     private val context = instrumentation.targetContext
 
     @Test
-    fun bundledModelRecognizesTheSampleClip() {
+    fun downloadedModelRecognizesTheSampleClip() {
         val container = AppContainer(context)
-        assertTrue("内置模型没能解包（开发时先跑 fetch-models-offline.sh）", container.installBundledModels())
+        ModelDownloads.ensure(container.models, container.catalog.files)
 
         val catalog = container.catalog
         val store = container.models
@@ -71,7 +66,7 @@ class BundledModelInstrumentedTest {
             android.util.Log.i("TingoBundledModel", "raw=$raw")
             android.util.Log.i("TingoBundledModel", "punctuated=$punctuated")
 
-            assertTrue("识别结果为空：内置模型可能没解包好", raw.isNotBlank())
+            assertTrue("识别结果为空：下载的模型可能不可用", raw.isNotBlank())
             assertTrue("识别结果与音频内容不符：$raw", raw.contains("注册") || raw.contains("转化"))
         } finally {
             recognizer.release()

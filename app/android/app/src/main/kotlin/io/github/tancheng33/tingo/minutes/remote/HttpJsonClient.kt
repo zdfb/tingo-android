@@ -40,8 +40,17 @@ class UrlHttpJsonClient(
     override fun get(url: String, headers: Map<String, String>): String = send("GET", url, headers, null)
 
     private fun send(method: String, url: String, headers: Map<String, String>, body: String?): String {
+        if (!io.github.tancheng33.tingo.settings.publicHttpsAddress(url)) {
+            throw HttpJsonClient.Unreachable("模型服务需要公网 HTTPS 地址")
+        }
         val connection = try {
+            val host = URL(url).host
+            val addresses = java.net.InetAddress.getAllByName(host)
+            if (addresses.isEmpty() || addresses.any { !io.github.tancheng33.tingo.settings.isPublicAddress(it) }) {
+                throw HttpJsonClient.Unreachable("模型服务地址不能指向本地网络")
+            }
             (URL(url).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
                 requestMethod = method
                 connectTimeout = connectTimeoutMs
                 readTimeout = readTimeoutMs

@@ -7,6 +7,7 @@
     <!-- 录音期间挂前台服务，避免切后台／锁屏被系统回收；通知权限只用于这条状态通知 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- 录会议软件的声音：需要屏幕录制授权 + mediaProjection 类型的前台服务（Android 14 起必须） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -38,6 +39,11 @@
             android:name=".recording.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone|mediaProjection"
+            android:stopWithTask="false" />
+        <service
+            android:name=".recording.ProcessingService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
         <!-- 导出的纪要放在 cache/exports，只把这个子目录授权给分享面板 -->

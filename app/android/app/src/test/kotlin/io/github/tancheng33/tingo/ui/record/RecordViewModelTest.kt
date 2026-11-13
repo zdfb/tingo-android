@@ -3,6 +3,9 @@ package io.github.tancheng33.tingo.ui.record
 import io.github.tancheng33.tingo.R
 import io.github.tancheng33.tingo.recording.AudioCapture
 import io.github.tancheng33.tingo.recording.WavWriter
+import io.github.tancheng33.tingo.recording.LiveTranscriber
+import io.github.tancheng33.tingo.recording.SystemAudioTrack
+import io.github.tancheng33.tingo.transcription.LiveAsr
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
@@ -24,18 +27,295 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordViewModelTest {
+    @Test
+    fun stopFailureStillStopsSystemTrackAndPreservesRecoveryNotice() = runTest(dispatcher) {
+        val root = root()
+        val mic = FakeCapture()
+        val system = FakeSystemTrack()
+        val vm = RecordViewModel(mic, root, io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        vm.attachSystemAudio(system)
+        mic.stopFailure = IllegalStateException("close failed")
+        vm.stop()
+        assertTrue(vm.state.value is RecordUiState.Failed)
+        assertEquals(1, system.stopped)
+        assertEquals(listOf(mic.started!!.parentFile!!.name), io.github.tancheng33.tingo.recording.InterruptedRecordings.pendingRecoveryUnder(root))
+    }
+    @Test
+    fun microphoneFailureStopsRecordingAndPreservesRecoveryNotice() = runTest(dispatcher) {
+        val root = root()
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root, io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        capture.failure = IllegalStateException("microphone disconnected")
+        advanceTimeBy(400)
+        runCurrent()
+        assertTrue(vm.state.value is RecordUiState.Failed)
+        assertEquals(1, capture.stopped)
+        assertEquals(listOf(capture.started!!.parentFile!!.name), io.github.tancheng33.tingo.recording.InterruptedRecordings.pendingRecoveryUnder(root))
+    }
+    @Test
+    fun startingWhilePausedDoesNotReplaceRecording() = runTest(dispatcher) {
+        val root = root()
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root, io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        vm.pause()
+        val first = capture.started
+        vm.start()
+        assertEquals(first, capture.started)
+        assertTrue(vm.state.value is RecordUiState.Paused)
+        assertEquals(1, root.listFiles()!!.size)
+        vm.stop()
+    }
+    @Test
+    fun quickNewMeetingDoesNotLosePreviousCompletion() = runTest(dispatcher) {
+        val vm = RecordViewModel(FakeCapture(), root(), io = dispatcher, scope = { backgroundScope })
+        val completed = mutableListOf<io.github.tancheng33.tingo.recording.RecordingController.CompletedRecording>()
+        val controller = io.github.tancheng33.tingo.recording.RecordingController(vm, backgroundScope, {}, completed::add)
+        controller.configureNextRecording(transcribe = true, minutes = false)
+        vm.start()
+        vm.stop()
+        val firstId = (vm.state.value as RecordUiState.Finished).meetingId
+        vm.prepareNewMeeting()
+        controller.configureNextRecording(transcribe = false, minutes = false)
+        vm.start()
+        runCurrent()
+        assertEquals(listOf(firstId), completed.map { it.meetingId })
+        assertTrue(completed.single().transcribe)
+        vm.stop()
+        controller.close()
+    }
+    @Test
+    fun finishedMeetingCanReturnToNewRecordingSetup() = runTest(dispatcher) {
+        val vm = RecordViewModel(FakeCapture(), root(), io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        vm.stop()
+        assertTrue(vm.state.value is RecordUiState.Finished)
+        vm.prepareNewMeeting()
+        assertEquals(RecordUiState.Idle, vm.state.value)
+    }
+    @Test
+    fun systemAudioFailureIsShownWhileMicrophoneKeepsRecording() = runTest(dispatcher) {
+        val mic = FakeCapture()
+        val system = FakeSystemTrack()
+        val vm = RecordViewModel(mic, root(), io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        vm.attachSystemAudio(system)
+        system.failure = IllegalStateException("capture stopped")
+        advanceTimeBy(400)
+        runCurrent()
+        assertEquals(RecordViewModel.SystemAudioStatus.MISSING, vm.systemAudioStatus.value)
+        assertTrue(vm.state.value is RecordUiState.Recording)
+        assertEquals(0, mic.stopped)
+        vm.stop()
+    }
+
+    @Test
+    fun systemTrackIsAlignedWhenAttachedLateAndAfterPause() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val system = FakeSystemTrack()
+        val vm = RecordViewModel(capture, root(), io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        capture.emit(ByteArray(32_000))
+        vm.attachSystemAudio(system)
+        assertEquals(1_000L, system.startedAtMs)
+
+        vm.pause()
+        vm.resume()
+        assertEquals(listOf(1_000L), system.alignedAtMs)
+        vm.stop()
+    }
+    @Test
+    fun failedLiveModelLoadingWarnsWithoutStoppingRecording() = runTest(dispatcher) {
+        val vm = RecordViewModel(FakeCapture(), root(), io = dispatcher, scope = { backgroundScope },
+            liveTranscriber = { throw IllegalStateException("model failed") })
+        vm.start()
+        val deadline = System.nanoTime() + 2_000_000_000L
+        while (!vm.liveTranscriptIncomplete.value && System.nanoTime() < deadline) Thread.sleep(10)
+        assertTrue(vm.liveTranscriptIncomplete.value)
+        assertTrue(vm.state.value is RecordUiState.Recording)
+        vm.stop()
+    }
+    @Test
+    fun processingKeepsForegroundLeaseUntilMinutesFinish() = runTest(dispatcher) {
+        val events = mutableListOf<String>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val processor = io.github.tancheng33.tingo.recording.AutoProcessor(
+            backgroundScope,
+            transcribe = { true },
+            minutes = { release.await() },
+            onStarted = { events.add("start") },
+            onFinished = { events.add("stop") },
+        )
+        processor.submit(io.github.tancheng33.tingo.recording.RecordingController.CompletedRecording("meeting", true, true))
+        runCurrent()
+        assertEquals(listOf("start"), events)
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("start", "stop"), events)
+    }
+    @Test
+    fun processingWaitsUntilAutomaticSilenceTrimIsComplete() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root(), io = dispatcher, scope = { backgroundScope })
+        vm.start()
+        capture.emit(ByteArray(32_000 * 2))
+        vm.stop(keepMs = 1_000)
+        val id = (vm.state.value as RecordUiState.Finished).meetingId
+        vm.awaitFinalization(id)
+        val audio = io.github.tancheng33.tingo.recording.RecordingTracks.find(capture.started!!.parentFile)!!
+        assertEquals(1_000L, io.github.tancheng33.tingo.transcription.WavReader.format(audio).durationMs)
+    }
+    @Test
+    fun completedRecordingStartsTranscriptionThenMinutesWithoutScreen() = runTest(dispatcher) {
+        val events = mutableListOf<String>()
+        val processor = io.github.tancheng33.tingo.recording.AutoProcessor(
+            backgroundScope,
+            transcribe = { id -> events.add("transcribe:$id"); true },
+            minutes = { id -> events.add("minutes:$id") },
+        )
+        val vm = RecordViewModel(FakeCapture(), root(), io = dispatcher, scope = { backgroundScope })
+        val controller = io.github.tancheng33.tingo.recording.RecordingController(vm, backgroundScope, {}, processor::submit)
+        controller.configureNextRecording(transcribe = true, minutes = true)
+        vm.start()
+        runCurrent()
+        vm.stop()
+        runCurrent()
+        val id = (vm.state.value as RecordUiState.Finished).meetingId
+        assertEquals(listOf("transcribe:$id", "minutes:$id"), events)
+        controller.close()
+    }
+
+    @Test
+    fun failedAutomaticTranscriptionDoesNotGenerateMinutes() = runTest(dispatcher) {
+        val events = mutableListOf<String>()
+        val processor = io.github.tancheng33.tingo.recording.AutoProcessor(
+            backgroundScope,
+            transcribe = { events.add("transcribe"); false },
+            minutes = { events.add("minutes") },
+        )
+        processor.submit(io.github.tancheng33.tingo.recording.RecordingController.CompletedRecording("meeting", true, true))
+        runCurrent()
+        assertEquals(listOf("transcribe"), events)
+    }
+    @Test
+    fun backgroundCompletionUsesTheChoicesForThatRecording() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root(), io = dispatcher, scope = { backgroundScope })
+        val completed = mutableListOf<io.github.tancheng33.tingo.recording.RecordingController.CompletedRecording>()
+        val controller = io.github.tancheng33.tingo.recording.RecordingController(vm, backgroundScope, {}, completed::add)
+        controller.configureNextRecording(transcribe = true, minutes = false)
+        vm.start()
+        runCurrent()
+        io.github.tancheng33.tingo.recording.RecordingKeepAlive.onStopRequested()
+        runCurrent()
+        assertEquals(1, completed.size)
+        assertEquals(true, completed.single().transcribe)
+        assertEquals(false, completed.single().minutes)
+        controller.close()
+    }
+    @Test
+    fun notificationCanStopRecordingWithoutAVisibleScreen() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root(), io = dispatcher, scope = { backgroundScope })
+        val controller = io.github.tancheng33.tingo.recording.RecordingController(vm, backgroundScope, {})
+        vm.start()
+        runCurrent()
+        io.github.tancheng33.tingo.recording.RecordingKeepAlive.onStopRequested()
+        assertTrue(vm.state.value is RecordUiState.Finished)
+        assertEquals(1, capture.stopped)
+        controller.close()
+    }
+    @Test
+    fun clearingRecordingViewModelStopsBothAudioTracks() = runTest(dispatcher) {
+        val mic = FakeCapture()
+        val system = FakeSystemTrack()
+        val vm = RecordViewModel(mic, root(), io = dispatcher, scope = { backgroundScope })
+        val store = androidx.lifecycle.ViewModelStore()
+        val provider = androidx.lifecycle.ViewModelProvider.create(store, object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = vm as T
+        })
+        provider[RecordViewModel::class.java]
+        vm.start()
+        vm.attachSystemAudio(system)
+        store.clear()
+        assertEquals(1, mic.stopped)
+        assertEquals(1, system.stopped)
+    }
+    @Test
+    fun recordingStartsWithoutWaitingForLiveModelLoading() = runTest(dispatcher) {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val returned = java.util.concurrent.CountDownLatch(1)
+        val released = java.util.concurrent.CountDownLatch(1)
+        val vm = RecordViewModel(FakeCapture(), root(), io = dispatcher, scope = { backgroundScope },
+            liveTranscriber = { callback ->
+                entered.countDown()
+                release.await()
+                LiveTranscriber(asr = FakeLiveAsr("文本"), releaseModels = { released.countDown() }, onSentence = callback)
+            })
+        val starter = Thread { vm.start(); returned.countDown() }
+        starter.start()
+        try {
+            assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue("录音开始不能等待模型加载", returned.await(1, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(vm.state.value is RecordUiState.Recording)
+            vm.stop()
+        } finally {
+            release.countDown()
+            starter.join(2000)
+        }
+        assertTrue("结束录音后加载完成的模型应被释放", released.await(2, java.util.concurrent.TimeUnit.SECONDS))
+    }
+    @Test
+    fun liveSpeakerNumbersAreSharedAcrossAudioTracks() = runTest(dispatcher) {
+        val mic = FakeCapture()
+        val system = FakeSystemTrack()
+        var index = 0
+        val vm = RecordViewModel(mic, root(), io = dispatcher, scope = { backgroundScope },
+            liveTranscriber = { callback ->
+                val speaker = ++index
+                val asr = object : LiveAsr {
+                    var ready = false
+                    override fun acceptWindow(window: FloatArray) { ready = true }
+                    override fun hasSegment() = ready
+                    override fun popSegment(): FloatArray { ready = false; return FloatArray(16000) }
+                    override fun flush() = Unit
+                    override fun recognize(samples: FloatArray) = "音轨$speaker"
+                    override fun speakerEmbedding(samples: FloatArray) = floatArrayOf(1f, 0f)
+                }
+                LiveTranscriber(asr = asr, onSentence = callback)
+            })
+        vm.start()
+        vm.attachSystemAudio(system)
+        mic.emitSamples(FloatArray(512))
+        system.emitSamples(FloatArray(512))
+        val deadline = System.nanoTime() + 3_000_000_000L
+        while (vm.liveEntries.size < 2 && System.nanoTime() < deadline) Thread.sleep(20)
+        assertEquals(listOf(1, 1), vm.liveEntries.map { it.speaker })
+        vm.stop()
+    }
 
     private val dispatcher = StandardTestDispatcher()
     private var now = 0L
 
     private class FakeCapture(private val durationMs: Long = 1_000) : AudioCapture {
+        var failure: Throwable? = null
+        override fun lastFailure(): Throwable? = failure
         var started: File? = null
         var pauses = 0
         var resumes = 0
         var stopped = 0
         var failWith: Exception? = null
+        var stopFailure: Exception? = null
+        private var listener: ((FloatArray) -> Unit)? = null
+        override fun setSamplesListener(listener: ((FloatArray) -> Unit)?) { this.listener = listener }
+        fun emitSamples(samples: FloatArray) { listener?.invoke(samples) }
 
         private var writer: WavWriter? = null
+        override fun durationMs(): Long = writer?.durationMs() ?: durationMs
 
         override fun start(file: File) {
             failWith?.let { throw it }
@@ -56,6 +336,7 @@ class RecordViewModelTest {
             stopped++
             writer?.close()
             writer = null
+            stopFailure?.let { throw it }
             return durationMs
         }
 
@@ -75,6 +356,115 @@ class RecordViewModelTest {
 
     private fun TestScope.viewModel(capture: FakeCapture, root: File = root()) =
         RecordViewModel(capture, root, clock = { now }, io = dispatcher, scope = { backgroundScope })
+
+    @Test
+    fun recordingRequiresTheSpeechModel() = runTest(dispatcher) {
+        val capture = FakeCapture()
+        val vm = RecordViewModel(capture, root(), modelReady = { false }, io = dispatcher, scope = { backgroundScope })
+
+        vm.start()
+
+        assertEquals(R.string.err_model_required, (vm.state.value as RecordUiState.Failed).reasonRes)
+        assertNull(capture.started)
+    }
+
+    @Test
+    fun failedHighlightSaveKeepsRecordingRunning() = runTest(dispatcher) {
+        val root = root()
+        val vm = viewModel(FakeCapture(), root)
+        vm.start()
+        val meeting = root.listFiles()!!.single()
+        File(meeting, "highlights.json").mkdir()
+        vm.markHighlight()
+        assertTrue(vm.state.value is RecordUiState.Recording)
+        assertTrue(vm.highlights.value.isEmpty())
+        assertTrue(vm.highlightSaveFailed.value)
+        vm.stop()
+    }
+
+    @Test
+    fun recordingMarkersPersistAtElapsedTimeExcludingPauses() = runTest(dispatcher) {
+        val root = root()
+        val vm = viewModel(FakeCapture(), root)
+        vm.start()
+        now = 2_000
+        vm.markHighlight()
+        vm.pause()
+        now = 10_000
+        vm.markHighlight()
+        vm.resume()
+        now = 11_000
+        vm.markHighlight()
+        vm.stop()
+
+        assertEquals(listOf(2_000L, 2_000L, 3_000L), vm.highlights.value)
+        val meeting = root.listFiles()!!.single()
+        assertEquals(listOf(2_000L, 2_000L, 3_000L), io.github.tancheng33.tingo.recording.RecordingHighlights.read(meeting))
+    }
+
+    @Test
+    fun bothAudioTracksProduceLiveSentences() = runTest(dispatcher) {
+        val mic = FakeCapture()
+        val system = FakeSystemTrack()
+        var created = 0
+        val vm = RecordViewModel(
+            mic, root(), io = dispatcher, scope = { backgroundScope },
+            liveTranscriber = { callback ->
+                val label = if (++created == 1) "mic" else "system"
+                LiveTranscriber(asr = FakeLiveAsr(label), onSentence = callback)
+            },
+        )
+        vm.start()
+        vm.attachSystemAudio(system)
+        mic.emitSamples(FloatArray(4096) { 0.5f })
+        system.emitSamples(FloatArray(4096) { 0.5f })
+        val deadline = System.nanoTime() + 3_000_000_000L
+        while (vm.liveEntries.size < 2 && System.nanoTime() < deadline) Thread.sleep(20)
+        assertTrue(vm.liveEntries.map { it.text }.containsAll(listOf("mic", "system")))
+        vm.stop()
+    }
+
+    @Test
+    fun systemSamplesKeepTheirPositionAcrossCaptureChunks() {
+        val converter = io.github.tancheng33.tingo.recording.SystemPcmConverter()
+        val pcm = byteArrayOf(
+            0, 16, 0, 16, 0, 32, 0, 32, 0, 48, 0, 48,
+            0, 64, 0, 64, 0, 80, 0, 80, 0, 96, 0, 96,
+        )
+        val first = converter.convert(pcm.copyOfRange(0, 8), 8)
+        val second = converter.convert(pcm.copyOfRange(8, 24), 16)
+        assertEquals(1, first.size)
+        assertEquals(1, second.size)
+        assertEquals(0.125f, first[0], 0.0001f)
+        assertEquals(0.5f, second[0], 0.0001f)
+    }
+
+    private class FakeSystemTrack : SystemAudioTrack {
+        var stopped = 0
+        var failure: Throwable? = null
+        var startedAtMs = -1L
+        val alignedAtMs = mutableListOf<Long>()
+        override fun lastFailure(): Throwable? = failure
+        private var listener: ((FloatArray) -> Unit)? = null
+        override fun setSamplesListener(listener: ((FloatArray) -> Unit)?) { this.listener = listener }
+        fun emitSamples(samples: FloatArray) { listener?.invoke(samples) }
+        override fun start(file: File) {}
+        override fun startAligned(file: File, positionMs: () -> Long) { startedAtMs = positionMs() }
+        override fun alignTo(durationMs: Long) { alignedAtMs += durationMs }
+        override fun pause() {}
+        override fun resume() {}
+        override fun peakLevel() = 0.5f
+        override fun stop(): Long { stopped++; return 0L }
+    }
+
+    private class FakeLiveAsr(private val text: String) : LiveAsr {
+        private var available = false
+        override fun acceptWindow(window: FloatArray) { available = true }
+        override fun hasSegment() = available
+        override fun popSegment(): FloatArray { available = false; return FloatArray(4000) }
+        override fun flush() {}
+        override fun recognize(samples: FloatArray) = text
+    }
 
     @Test
     fun startCreatesMeetingDirectoryAndRecordingFile() = runTest(dispatcher) {
@@ -219,6 +609,7 @@ class RecordViewModelTest {
         val meeting = root.listFiles()!!.single()
         assertTrue(meeting.isDirectory)
         assertEquals(1, capture.stopped)
+        assertEquals(listOf(meeting.name), io.github.tancheng33.tingo.recording.InterruptedRecordings.pendingRecoveryUnder(root))
     }
 
     @Test

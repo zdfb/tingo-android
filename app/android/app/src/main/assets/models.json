@@ -1,5 +1,5 @@
 {
-  "note": "端侧转写所需的全部模型（与桌面端同一份：Paraformer-large int8 + CT-Transformer 标点 int8 + CAM++ 声纹 + Silero VAD）。文件随 APK 内置（assets/models/），首次启动解包到应用目录；这里记的体积与 sha256 就是内置文件的指纹。",
+  "note": "端侧转写所需模型按需下载；Paraformer 和词表下载后转换并校验。",
   "files": [
     {
       "id": "paraformer",
@@ -7,6 +7,9 @@
       "url": "https://modelscope.cn/models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx/resolve/master/model_quant.onnx",
       "bytes": 238402431,
       "sha256": "0c0ddea629ad749096c8a6561bfe70b033ea7a387673ea37076545efb35354fe",
+      "source_bytes": 238380216,
+      "source_sha256": "c3a06538f867c8e3d9bb9c9e1b44b126a50d732862f6c428b1b5896ee9be65c5",
+      "transform": "paraformer-metadata",
       "note": "与桌面端同一份：ModelScope Paraformer-large 量化版，打包前用 engine 的 prepare_paraformer 补过元数据"
     },
     {
@@ -15,6 +18,9 @@
       "url": "https://modelscope.cn/models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx/resolve/master/tokens.json",
       "bytes": 75756,
       "sha256": "59aba8873a2ed1e122c25fee421e25f283b63290efbde85c1f01a853d83cb6e6",
+      "source_bytes": 93676,
+      "source_sha256": "2b20c2b12572d682afff84ce1c8d560f67b8b32a4c1f21567411d141ed352127",
+      "transform": "tokens-json",
       "note": "由桌面端 tokens.json 展开成 \"符号 编号\"，须与 paraformer 配套"
     },
     {

@@ -5,8 +5,8 @@
 <p align="center"><b>Every meeting, heard.</b><br>Record meetings on Android, transcribe them on device, and trace each conclusion back to the original words.</p>
 
 <p align="center">
-  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.2"><img src="https://img.shields.io/badge/version-v0.5.2-2457ff" alt="v0.5.2"></a>
-  <img src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white" alt="Android 8.0+">
+  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4"><img src="https://img.shields.io/badge/version-v0.5.4-2457ff" alt="v0.5.4"></a>
+  <img src="https://img.shields.io/badge/Android-10%2B-3ddc84?logo=android&logoColor=white" alt="Android 10+">
   <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT license">
   <a href="README.md"><img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-555" alt="中文 README"></a>
 </p>
@@ -44,11 +44,11 @@ System audio capture uses Android MediaProjection / Audio Playback Capture and r
 
 ## Download and install
 
-1. Download `Tingo-Android-v0.5.2-debug.apk` from [v0.5.2 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.2).
+1. Download `Tingo-Android-v0.5.4-debug.apk` from [v0.5.4 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4).
 2. When Android prompts you, allow your browser or file manager to install apps, then continue.
-3. Grant microphone access when you start recording. Follow the system prompt if you want to capture meeting app audio.
+3. Confirm the Paraformer model download on first use and grant microphone access when recording. Follow the system prompt to capture system audio.
 
-This is a test build distributed as an installable debug APK. The package is about 412 MiB. Minimum supported version: Android 8.0 (API 26).
+v0.5.4 is a debug-signed test build, approximately 108 MiB, requiring Android 10 (API 29) or later. Its new application ID does not migrate data from the previous app. Full device automation has not passed yet.
 
 ### Minutes service and privacy
 
@@ -56,7 +56,7 @@ Speech recognition and speaker separation run on device. To generate minutes, th
 
 ## Build from source
 
-Requires JDK 21, Android SDK 37, NDK 30, Rust, and `cargo-ndk`. Speech models are bundled in the APK; a full build is about 412 MiB.
+Requires JDK 21, Android SDK 37, NDK 30, Rust, and `cargo-ndk`. Speech models are downloaded on first use; the APK is about 108 MiB.
 
 ```bash
 cd app/android

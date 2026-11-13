@@ -26,6 +26,65 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TranscriptionViewModelTest {
+    @Test
+    fun failedDualTrackMixDoesNotTranscribeOnlyTheMicrophone() = runTest(dispatcher) {
+        val dir = meeting(withWav = false)
+        io.github.tancheng33.tingo.recording.WavWriter(File(dir, "mic.wav"), 16_000).apply {
+            append(ByteArray(3_200)); close()
+        }
+        val system = File(dir, "system.wav")
+        io.github.tancheng33.tingo.recording.WavWriter(system, 48_000, channels = 2).apply {
+            append(ByteArray(3_200)); close()
+        }
+        java.io.RandomAccessFile(system, "rw").use { it.seek(0); it.writeByte(0) }
+        val store = ModelStore(Files.createTempDirectory("tingo-m").toFile(), FakeFetcher(1_000))
+        store.download(catalog().files.single())
+        val transcriber = FakeTranscriber()
+        val vm = viewModel(dir, transcriber, store)
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(0, transcriber.calls)
+        assertTrue(vm.state.value is TranscriptionUiState.Failed)
+    }
+    @Test
+    fun automaticTranscriptionDoesNotDownloadMissingModel() = runTest(dispatcher) {
+        val store = ModelStore(Files.createTempDirectory("tingo-m").toFile(), FakeFetcher(1_000))
+        val transcriber = FakeTranscriber()
+        val vm = viewModel(meeting(), transcriber, store)
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(1_000L, (vm.state.value as TranscriptionUiState.NeedModels).missingBytes)
+        assertEquals(0, transcriber.calls)
+        assertTrue(!store.isReady(catalog().files.single()))
+    }
+    @Test
+    fun recognitionFailureKeepsDownloadedModels() = runTest(dispatcher) {
+        val store = ModelStore(Files.createTempDirectory("tingo-m").toFile(), FakeFetcher(1_000))
+        val model = catalog().files.single()
+        store.download(model)
+        val transcriber = FakeTranscriber(fail = true)
+        val vm = viewModel(meeting(), transcriber, store)
+        vm.start()
+        advanceUntilIdle()
+        assertEquals(1, transcriber.calls)
+        assertTrue("识别失败不应删除或重新下载模型", store.isReady(model))
+        assertTrue(vm.state.value is TranscriptionUiState.Failed)
+    }
+    @Test
+    fun canceledTranscriptionCanBeAwaitedByBackgroundProcessing() = runTest(dispatcher) {
+        val store = ModelStore(Files.createTempDirectory("tingo-m").toFile(), FakeFetcher(1_000))
+        store.download(catalog().files.single())
+        val transcriber = object : Transcriber {
+            override suspend fun transcribe(wav: File, outputDir: File, onProgress: (Float) -> Unit): Transcript {
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+        val vm = viewModel(meeting(), transcriber, store)
+        vm.start()
+        testScheduler.runCurrent()
+        vm.cancel()
+        assertEquals(TranscriptionUiState.Idle, vm.awaitCompletion())
+    }
 
     private val dispatcher = StandardTestDispatcher()
 
@@ -115,7 +174,7 @@ class TranscriptionViewModelTest {
         val transcriber = FakeTranscriber()
         val vm = viewModel(meeting(), transcriber, store)
 
-        vm.start()
+        vm.start(allowDownload = true)
         advanceUntilIdle()
 
         val state = vm.state.value as TranscriptionUiState.Done
@@ -133,7 +192,7 @@ class TranscriptionViewModelTest {
         val transcriber = FakeTranscriber()
         val vm = viewModel(meeting(), transcriber, store)
 
-        vm.start()
+        vm.start(allowDownload = true)
         advanceUntilIdle()
 
         val state = vm.state.value as TranscriptionUiState.Failed

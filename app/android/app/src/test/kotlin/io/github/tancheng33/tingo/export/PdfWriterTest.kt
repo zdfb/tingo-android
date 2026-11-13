@@ -11,6 +11,12 @@ import org.junit.Test
  * 那是给模型的元数据，不是给人看的内容。`.docx` 已经这么处理，PDF 不能两样。
  */
 class PdfWriterTest {
+    @Test
+    fun fishboneProducesDiagramAndPreservesBranchDetails() {
+        val items = rows("```fishbone\n{\"problem\":\"延迟\",\"branches\":[{\"title\":\"网络\",\"detail\":\"带宽不足\"}]}\n```")
+        assertTrue(items.any { it.diagram != null })
+        assertTrue(items.any { it.text.contains("带宽不足") })
+    }
 
     private fun rows(markdown: String, title: String = "周会") = PdfWriter.rows(markdown, title, "2026-11-08 09:00")
 

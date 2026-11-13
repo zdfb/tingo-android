@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import io.github.tancheng33.tingo.engine.AbiCheck
 import io.github.tancheng33.tingo.settings.AppLocale
 import io.github.tancheng33.tingo.settings.AppSettings
@@ -49,10 +52,17 @@ class MainActivity : ComponentActivity() {
         // targetSdk 35+ 已经是强制边到边：这里只需要把系统栏避让做对（见 setContent 里的 safeDrawing）
 
         setContent {
+            val darkTheme = isSystemInDarkTheme()
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
             // calculateWindowSizeClass 是 @Composable，必须在组合内计算
             // 规格：小于 840dp 单栏，840dp 起双栏——正好是 Expanded 的下界，所以只认 Expanded。
             val wide = calculateWindowSizeClass(this@MainActivity).widthSizeClass == WindowWidthSizeClass.Expanded
-            TingoTheme {
+            TingoTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     // 系统栏/刘海/手势条的避让在这里统一处理一次：
                     // 各页面不再各自算 padding，双栏与单栏也不会出现两种结果

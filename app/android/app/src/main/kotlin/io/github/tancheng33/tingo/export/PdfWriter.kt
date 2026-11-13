@@ -28,13 +28,14 @@ object PdfWriter {
         val indent: Float = 0f,
         val before: Float = 0f,
         val after: Float = 2f,
+        val diagram: List<Int>? = null,
     )
 
     /**
      * Markdown → 待排行。
      *
      * 代码块按 `.docx` 同样的取舍：`terms` 丢掉（给模型的，不是给人看的）、
-     * `fishbone` 退化成"问题 + 分支"的文字；行内加粗只保留文字，不把星号印到纸上。
+     * `fishbone` 绘制示意图并保留问题和分支文字；行内加粗只保留文字。
      */
     internal fun rows(markdown: String, title: String, meta: String): List<Row> {
         val out = mutableListOf<Row>()
@@ -78,16 +79,21 @@ object PdfWriter {
         return out
     }
 
-    /** 代码块的排法；`terms` 丢弃，`fishbone` 退化成文字，其余原样。 */
+    /** 代码块的排法；`terms` 丢弃，`fishbone` 绘制示意图，其余原样。 */
     private fun fenceRows(language: String, block: String): List<Row> {
         val text = block.trim()
         if (text.isEmpty()) return emptyList()
         return when (language) {
             "terms" -> emptyList()
             "fishbone" -> {
-                val spec = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return emptyList()
+                val spec = runCatching { org.json.JSONObject(text) }.getOrNull()
+                    ?: return text.lines().map { Row(it, 10f, indent = 8f) }
                 val rows = mutableListOf(Row(spec.optString("problem"), 11f, bold = true, after = 2f))
                 val branches = spec.optJSONArray("branches")
+                val count = branches?.length() ?: 0
+                (0 until count).chunked(6).forEach { group ->
+                    rows += Row("", 10f, diagram = group.map { it + 1 }, before = 6f, after = 8f)
+                }
                 for (i in 0 until (branches?.length() ?: 0)) {
                     val branch = branches!!.optJSONObject(i)
                     val detail = branch?.optString("detail").orEmpty()
@@ -96,7 +102,7 @@ object PdfWriter {
                     } else {
                         "${branch?.optString("title")}：$detail"
                     }
-                    rows += Row("• $line", 11f, indent = 12f, after = 1f)
+                    rows += Row("${i + 1}. $line", 11f, indent = 12f, after = 1f)
                 }
                 rows
             }
@@ -115,6 +121,20 @@ object PdfWriter {
         var page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
         var y = MARGIN
         for (item in rows) {
+            val diagram = item.diagram
+            if (diagram != null) {
+                val height = 116f
+                if (y + item.before + height + item.after > PAGE_HEIGHT - MARGIN) {
+                    document.finishPage(page)
+                    pageNumber++
+                    page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
+                    y = MARGIN
+                }
+                y += item.before
+                drawFishbone(page.canvas, y, diagram)
+                y += height + item.after
+                continue
+            }
             val paint = paintFor(item)
             val lines = wrap(item.text, paint, CONTENT_WIDTH - item.indent)
             val needed = item.before + lines.size * paint.textSize * 1.5f + item.after
@@ -126,6 +146,12 @@ object PdfWriter {
             }
             y += item.before
             lines.forEach { text ->
+                if (y + paint.textSize * 1.5f > PAGE_HEIGHT - MARGIN) {
+                    document.finishPage(page)
+                    pageNumber++
+                    page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
+                    y = MARGIN
+                }
                 y += paint.textSize
                 if (text.isNotEmpty()) page.canvas.drawText(text, MARGIN + item.indent, y, paint)
                 y += paint.textSize * 0.5f
@@ -139,6 +165,28 @@ object PdfWriter {
         } finally {
             // 原生文档不释放会一直占内存；中途抛异常时也要关
             document.close()
+        }
+    }
+
+    private fun drawFishbone(canvas: android.graphics.Canvas, top: Float, branches: List<Int>) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF365BC7.toInt()
+            strokeWidth = 1.5f
+            textSize = 10f
+        }
+        val start = MARGIN + 18f
+        val end = PAGE_WIDTH - MARGIN - 18f
+        val middle = top + 58f
+        canvas.drawLine(start, middle, end, middle, paint)
+        canvas.drawLine(end - 10f, middle - 7f, end, middle, paint)
+        canvas.drawLine(end - 10f, middle + 7f, end, middle, paint)
+        branches.forEachIndexed { index, number ->
+            val column = index / 2
+            val x = start + 70f + column * 115f
+            val upper = index % 2 == 0
+            val outerY = middle + if (upper) -42f else 42f
+            canvas.drawLine(x - 30f, outerY, x, middle, paint)
+            canvas.drawText(number.toString(), x - 38f, outerY + if (upper) -3f else 12f, paint)
         }
     }
 

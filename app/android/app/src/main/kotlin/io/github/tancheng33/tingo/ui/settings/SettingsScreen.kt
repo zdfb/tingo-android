@@ -5,6 +5,7 @@ import io.github.tancheng33.tingo.engine.GlossaryTerm
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import io.github.tancheng33.tingo.minutes.remote.LlmPresets
@@ -15,9 +16,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -25,6 +28,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,12 +59,7 @@ import io.github.tancheng33.tingo.ui.components.TingoPageTitle
 import io.github.tancheng33.tingo.ui.theme.TingoDimens
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 
-/**
- * 设置页（地基版）：界面语言、会议库位置、引擎版本。
- *
- * 模型下载、说话人命名、导出与推送等条目会在各自的功能变更里补上；
- * 这里只放已经真正可用的设置，避免出现点了没反应的开关。
- */
+/** 设备、识别、纪要和会议库的设置。 */
 @Composable
 fun SettingsScreen(
     language: AppLanguage,
@@ -75,6 +76,8 @@ fun SettingsScreen(
     /** 没走完的引导：回到上次那一步接着走（桌面对应设置页的"回到新手引导"） */
     onResumeOnboarding: (() -> Unit)? = null,
     onSaveAutoStopSilence: (Int) -> Unit = {},
+    onSaveAutoTranscribe: (Boolean) -> Unit = {},
+    onSaveAutoMinutes: (Boolean) -> Unit = {},
     /** 纪要语言：auto 跟会议说的话走。没有默认值——漏接就是"点了没反应" */
     onSaveMinutesLanguage: (String) -> Unit,
     /** 清理残留文件（合成后遗留的音轨、part/tmp）；有可清理的内容时才给按钮 */
@@ -85,6 +88,7 @@ fun SettingsScreen(
     libraryResult: LibraryOpResult? = null,
     onBackupLibrary: () -> Unit = {},
     onRestoreLibrary: () -> Unit = {},
+    onOpenReleases: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -112,6 +116,7 @@ fun SettingsScreen(
             color = TingoTheme.colors.muted,
         )
 
+        SettingsGroupTitle(stringResource(R.string.settings_group_device))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -132,7 +137,15 @@ fun SettingsScreen(
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.settings_data_root), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
-            Text(dataRoot, style = MaterialTheme.typography.bodySmall)
+            SelectionContainer {
+                Text(
+                    text = dataRoot,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TingoTheme.colors.text2,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 stringResource(R.string.settings_data_root_desc),
                 style = MaterialTheme.typography.bodySmall,
@@ -155,8 +168,10 @@ fun SettingsScreen(
             HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
         }
 
+        SettingsGroupTitle(stringResource(R.string.settings_group_minutes))
         LlmServiceSection(
             config = models.llmConfig,
+            addressInvalid = models.llmAddressInvalid,
             onSave = onSaveLlmConfig,
             modelList = models.models,
             onFetchModels = onFetchModels,
@@ -175,7 +190,10 @@ fun SettingsScreen(
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
+        SettingsGroupTitle(stringResource(R.string.settings_group_recording))
         AutoStopSection(minutes = models.autoStopSilenceMin, onSelect = onSaveAutoStopSilence)
+        AutoProcessingToggle(stringResource(R.string.auto_transcribe), models.autoTranscribe, onSaveAutoTranscribe)
+        AutoProcessingToggle(stringResource(R.string.auto_minutes), models.autoMinutes, onSaveAutoMinutes)
 
         MinutesLanguageSection(
             language = models.minutesLanguage,
@@ -197,6 +215,7 @@ fun SettingsScreen(
 
         HorizontalDivider(thickness = TingoDimens.hairline, color = TingoTheme.colors.line)
 
+        SettingsGroupTitle(stringResource(R.string.settings_group_recognition))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.settings_models), style = MaterialTheme.typography.titleSmall, color = TingoTheme.colors.text)
             Text(
@@ -279,7 +298,40 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
             )
+            PillButton(
+                label = stringResource(R.string.settings_check_updates),
+                onClick = onOpenReleases,
+                kind = PillKind.Ghost,
+            )
         }
+    }
+}
+
+@Composable
+private fun SettingsGroupTitle(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.size(width = 3.dp, height = 18.dp).background(TingoTheme.colors.blue, TingoDimens.pillShape))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = TingoTheme.colors.text,
+            modifier = Modifier.semantics { heading() },
+        )
+    }
+}
+
+@Composable
+private fun AutoProcessingToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -341,6 +393,7 @@ private const val MB = 1_000_000L
 @Composable
 private fun LlmServiceSection(
     config: LlmConfig,
+    addressInvalid: Boolean,
     onSave: (LlmConfig) -> Unit,
     modelList: ModelListState?,
     onFetchModels: (LlmConfig) -> Unit,
@@ -391,6 +444,7 @@ private fun LlmServiceSection(
             placeholder = stringResource(R.string.settings_llm_base_url_hint),
             onValueChange = { baseUrl = it },
         )
+        if (addressInvalid) Text(stringResource(R.string.settings_llm_address_invalid), color = TingoTheme.colors.red)
         SettingsField(
             label = stringResource(R.string.settings_llm_api_key),
             value = apiKey,
@@ -428,7 +482,7 @@ private fun LlmServiceSection(
                 label = stringResource(R.string.action_save),
                 onClick = {
                     onSave(draft)
-                    saved = true
+                    saved = io.github.tancheng33.tingo.settings.publicHttpsAddress(draft.baseUrl) || draft.baseUrl.isBlank()
                 },
                 enabled = draft.isConfigured,
             )

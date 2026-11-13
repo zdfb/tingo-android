@@ -5,8 +5,8 @@
 <p align="center"><b>开过的会，都听过。</b><br>在 Android 手机上录下会议、本地转写，再把每条纪要结论对应回原话。</p>
 
 <p align="center">
-  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.2"><img src="https://img.shields.io/badge/版本-v0.5.2-2457ff" alt="v0.5.2"></a>
-  <img src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white" alt="Android 8.0+">
+  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4"><img src="https://img.shields.io/badge/版本-v0.5.4-2457ff" alt="v0.5.4"></a>
+  <img src="https://img.shields.io/badge/Android-10%2B-3ddc84?logo=android&logoColor=white" alt="Android 10+">
   <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT license">
   <a href="README.en.md"><img src="https://img.shields.io/badge/README-English-555" alt="English README"></a>
 </p>
@@ -44,11 +44,11 @@
 
 ## 下载与安装
 
-1. 从 [v0.5.2 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.2) 下载 `Tingo-Android-v0.5.2-debug.apk`。
+1. 从 [v0.5.4 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4) 下载 `Tingo-Android-v0.5.4-debug.apk`。
 2. 在 Android 提示时，允许当前文件管理器或浏览器安装应用，然后继续安装。
-3. 首次录音时授予麦克风权限；要录系统声音时，按提示开启系统录制授权。
+3. 首次使用时确认下载 Paraformer 及配套模型；录音时授予麦克风权限。录系统声音时，按提示开启系统录制授权。
 
-该版本面向测试，附件为可直接安装的 debug 构建，安装包约 412 MiB。最低支持 Android 8.0（API 26）。
+v0.5.4 为测试版，附件使用 debug 签名，安装包约 108 MiB。最低支持 Android 10（API 29）。本版采用独立包名，不迁移旧版数据。完整真机自动化测试尚未通过。
 
 ### 纪要服务与隐私
 
@@ -56,7 +56,7 @@
 
 ## 从源码构建
 
-需要 JDK 21、Android SDK 37、NDK 30、Rust 和 `cargo-ndk`。模型随 APK 打包，完整构建产物约 412 MiB。
+需要 JDK 21、Android SDK 37、NDK 30、Rust 和 `cargo-ndk`。模型不内置，首次使用时下载；构建产物约 108 MiB。
 
 ```bash
 cd app/android

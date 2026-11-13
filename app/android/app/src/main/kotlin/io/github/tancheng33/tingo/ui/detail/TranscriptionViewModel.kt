@@ -85,11 +85,11 @@ class TranscriptionViewModel(
             if (missing.isEmpty()) return@launch
             if (wavFile() == null) return@launch
             if (_state.value !is TranscriptionUiState.Idle) return@launch
-            _state.value = TranscriptionUiState.NeedModels(missingBytes = missing.sumOf { it.bytes })
+            _state.value = TranscriptionUiState.NeedModels(missingBytes = missing.sumOf { it.downloadBytes })
         }
     }
 
-    fun start() {
+    fun start(allowDownload: Boolean = false) {
         if (job?.isActive == true) return
         if (wavFile() == null) run {
             _state.value = TranscriptionUiState.Failed(R.string.err_no_recording)
@@ -99,6 +99,14 @@ class TranscriptionViewModel(
         job = viewModelScope.launch(io) {
             // 崩溃留下的会议只有原始音轨：在 IO 里合成一次，再交给识别链
             ensureMixedForTranscription()
+            // 系统音轨存在时，回退到麦克风会静默遗漏对方发言。
+            val systemTrack = File(meetingDir, "system.wav")
+            if (systemTrack.isFile && systemTrack.length() > 44 &&
+                RecordingTracks.find(meetingDir)?.name != RecordingTracks.MIXED
+            ) {
+                _state.value = TranscriptionUiState.Failed(R.string.err_audio_mix_failed)
+                return@launch
+            }
             // 模型随 APK 内置：先解包，只有包里没有时才需要下载
             runCatching { ensureBundled() }
             val wav = wavFile() ?: run {
@@ -107,14 +115,16 @@ class TranscriptionViewModel(
             }
             try {
                 val missing = catalog.files.filterNot { store.isReady(it) }
-                // 规格要求：校验失败要能重下。文件坏了（引擎报错）就作废再试一次
-                var retried = false
                 // 先试内置包：离线设备上"删了模型只能联网重下"会直接卡死
                 if (missing.isNotEmpty()) runCatching { ensureBundled() }
                 val stillMissing = catalog.files.filterNot { store.isReady(it) }
                 if (stillMissing.isNotEmpty()) {
+                    if (!allowDownload) {
+                        _state.value = TranscriptionUiState.NeedModels(stillMissing.sumOf { it.downloadBytes })
+                        return@launch
+                    }
                     var downloaded = 0L
-                    val total = stillMissing.sumOf { it.bytes }.coerceAtLeast(1)
+                    val total = stillMissing.sumOf { it.downloadBytes }.coerceAtLeast(1)
                     for (file in stillMissing) {
                         val base = downloaded
                         val result = store.download(
@@ -131,32 +141,15 @@ class TranscriptionViewModel(
                             )
                             return@launch
                         }
-                        downloaded += file.bytes
+                        downloaded += file.downloadBytes
                     }
                 }
                 val key = RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name)
                 tasks?.start(key, meetingDir.name, meetingTitle(), TaskKind.TRANSCRIBE, 0f)
                 _state.value = TranscriptionUiState.Running(0f)
-                val transcript = try {
-                    transcriber.transcribe(wav, meetingDir) { fraction ->
-                        tasks?.progress(key, fraction)
-                        _state.value = TranscriptionUiState.Running(fraction)
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    if (retried) throw e
-                    // 模型文件可能损坏：作废后重下一次，仍失败才报错
-                    retried = true
-                    catalog.files.forEach { store.invalidate(it) }
-                    catalog.files.forEach { file ->
-                        val redownload = store.download(file)
-                        if (redownload.isFailure) throw e
-                    }
-                    transcriber.transcribe(wav, meetingDir) { fraction ->
-                        tasks?.progress(key, fraction)
-                        _state.value = TranscriptionUiState.Running(fraction)
-                    }
+                val transcript = transcriber.transcribe(wav, meetingDir) { fraction ->
+                    tasks?.progress(key, fraction)
+                    _state.value = TranscriptionUiState.Running(fraction)
                 }
                 tasks?.finish(key)
                 _state.value = TranscriptionUiState.Done(transcript)
@@ -176,9 +169,13 @@ class TranscriptionViewModel(
 
     fun cancel() {
         job?.cancel()
-        job = null
         // 取消也是一次结束：不撤掉，首页会挂着一件永远不会再动的活
         tasks?.finish(RunningTask.keyOf(TaskKind.TRANSCRIBE, meetingDir.name))
+    }
+
+    suspend fun awaitCompletion(): TranscriptionUiState {
+        job?.join()
+        return state.value
     }
 
     /** 会议标题：去掉目录名的时间前缀（与首页"进行中"、会议库显示的是同一个名字）。 */

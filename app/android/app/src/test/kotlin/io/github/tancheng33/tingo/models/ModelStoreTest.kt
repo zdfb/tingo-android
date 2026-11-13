@@ -129,6 +129,63 @@ class ModelStoreTest {
     }
 
     @Test
+    fun truncatedResponseKeepsPartialForResume() {
+        val root = dir()
+        val first = ModelStore(root, FakeFetcher(payload.copyOfRange(0, 4_000))).download(model())
+
+        assertTrue(first.isFailure)
+        assertEquals(4_000L, File(root, "model.int8.onnx").length())
+        val fetcher = FakeFetcher(payload)
+        assertTrue(ModelStore(root, fetcher).download(model()).isSuccess)
+        assertEquals(listOf(4_000L), fetcher.requests)
+    }
+
+    @Test
+    fun downloadsAndConvertsJsonTokenList() {
+        val raw = "[\"hello\",\"world\"]".toByteArray()
+        val file = ModelFile(
+            id = "tokens", fileName = "tokens.txt", url = "https://example.invalid/tokens.json",
+            bytes = 16, sourceBytes = raw.size.toLong(), transform = "tokens-json",
+        )
+        val store = ModelStore(dir(), FakeFetcher(raw))
+
+        assertTrue(store.download(file).isSuccess)
+        assertEquals("hello 0\nworld 1\n", store.fileFor(file).readText())
+        assertTrue(store.isReady(file))
+    }
+
+    @Test
+    fun downloadsAndPreparesParaformerModel() {
+        val raw = "model".toByteArray()
+        val metadata = "metadata".toByteArray()
+        val file = ModelFile(
+            id = "paraformer", fileName = "model.onnx", url = "https://example.invalid/model",
+            bytes = 13, sourceBytes = raw.size.toLong(), transform = "paraformer-metadata",
+        )
+        val store = ModelStore(dir(), FakeFetcher(raw), paraformerMetadata = metadata)
+
+        assertTrue(store.download(file).isSuccess)
+        assertEquals("modelmetadata", store.fileFor(file).readText())
+        assertTrue(store.isReady(file))
+    }
+
+    @Test
+    fun deletingModelsRemovesInterruptedTransformedDownload() {
+        val raw = "[\"hello\",\"world\"]".toByteArray()
+        val file = ModelFile(
+            id = "tokens", fileName = "tokens.txt", url = "https://example.invalid/tokens.json",
+            bytes = 16, sourceBytes = raw.size.toLong(), transform = "tokens-json",
+        )
+        val root = dir()
+        val store = ModelStore(root, FakeFetcher(raw, failAfter = 4))
+        assertTrue(store.download(file).isFailure)
+        store.deleteAll(ModelCatalog(listOf(file)))
+        val fetcher = FakeFetcher(raw)
+        assertTrue(ModelStore(root, fetcher).download(file).isSuccess)
+        assertEquals(listOf(0L), fetcher.requests)
+    }
+
+    @Test
     fun readyAndUsedBytesTrackManifestFiles() {
         val root = dir()
         val store = ModelStore(root, FakeFetcher(payload))

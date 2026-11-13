@@ -1,5 +1,7 @@
 package io.github.tancheng33.tingo.ui.settings
 
+import io.github.tancheng33.tingo.settings.publicHttpsAddress
+
 import io.github.tancheng33.tingo.engine.AudioCleanup
 import io.github.tancheng33.tingo.minutes.MinutesLanguage
 import io.github.tancheng33.tingo.engine.GlossaryTerm
@@ -79,6 +81,9 @@ sealed interface LibraryOpResult {
 
 data class SettingsUiState(
     val loading: Boolean = true,
+    val autoTranscribe: Boolean = true,
+    val autoMinutes: Boolean = true,
+    val llmAddressInvalid: Boolean = false,
     val asr: ModelGroup = ModelGroup(),
     /** 纪要用的模型服务配置；默认全空 */
     val llmConfig: LlmConfig = LlmConfig(),
@@ -151,6 +156,16 @@ class SettingsViewModel(
 
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+
+    fun saveAutoTranscribe(enabled: Boolean) {
+        settings.autoTranscribe = enabled
+        _state.value = _state.value.copy(autoTranscribe = enabled)
+    }
+
+    fun saveAutoMinutes(enabled: Boolean) {
+        settings.autoMinutes = enabled
+        _state.value = _state.value.copy(autoMinutes = enabled)
+    }
 
     init {
         // 首启解包 700 MB 模型要几十秒：把进度接到设置页，用户才知道不是在发呆
@@ -229,6 +244,11 @@ class SettingsViewModel(
 
     /** 拉取表单里那份配置的模型列表（OpenAI 兼容是 `GET {base}/v1/models`）。 */
     fun fetchModels(config: LlmConfig) {
+        if (!publicHttpsAddress(config.baseUrl)) {
+            _state.value = _state.value.copy(llmAddressInvalid = true)
+            return
+        }
+        _state.value = _state.value.copy(llmAddressInvalid = false)
         _state.value = _state.value.copy(models = ModelListState.Loading)
         viewModelScope.launch(io) {
             val next = try {
@@ -248,8 +268,12 @@ class SettingsViewModel(
 
     /** 保存模型服务配置；空字段保持为空由界面负责提示，这里不做静默纠正。 */
     fun saveLlmConfig(config: LlmConfig) {
+        if (config.baseUrl.isNotBlank() && !publicHttpsAddress(config.baseUrl)) {
+            _state.value = _state.value.copy(llmAddressInvalid = true)
+            return
+        }
         settings.llm = config
-        _state.value = _state.value.copy(llmConfig = settings.llm)
+        _state.value = _state.value.copy(llmConfig = settings.llm, llmAddressInvalid = false)
     }
 
     /** 把整库写进 [open] 给出的流（SAF 的 `OutputStream` 可以直接接）。 */
@@ -308,6 +332,8 @@ class SettingsViewModel(
                 glossary = glossary,
                 onboarded = settings.onboarded,
                 autoStopSilenceMin = settings.autoStopSilenceMin,
+                autoTranscribe = settings.autoTranscribe,
+                autoMinutes = settings.autoMinutes,
                 minutesLanguage = settings.minutesLanguage,
             )
         } catch (e: Exception) {

@@ -21,4 +21,6 @@ interface LiveAsr {
 
     /** 识别一段人声（已加标点）。 */
     fun recognize(samples: FloatArray): String
+
+    fun speakerEmbedding(samples: FloatArray): FloatArray = FloatArray(0)
 }

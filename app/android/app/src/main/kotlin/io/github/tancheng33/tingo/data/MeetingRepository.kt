@@ -68,6 +68,9 @@ class MeetingRepository(
     suspend fun restoreFromTrash(id: String) = withContext(io) { engine.restoreFromTrash(id) }
 
     suspend fun listTrash(): List<TrashItem> = withContext(io) { engine.listTrash() }
+    suspend fun listAudioTrash(): List<TrashItem> = withContext(io) { engine.listAudioTrash() }
+    suspend fun restoreAudioFromTrash(id: String) = withContext(io) { engine.restoreAudioFromTrash(id) }
+    suspend fun purgeAudioTrash(id: String): ULong = withContext(io) { engine.purgeAudioTrash(id) }
 
     suspend fun purgeTrash(id: String): ULong = withContext(io) { engine.purgeTrash(id) }
 

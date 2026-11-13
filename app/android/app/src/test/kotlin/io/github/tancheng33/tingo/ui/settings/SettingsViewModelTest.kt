@@ -24,6 +24,49 @@ import org.junit.Test
 
 /** 设置页的模型占用与删除：数字要准，删掉要真的腾出空间。 */
 class SettingsViewModelTest {
+    @Test
+    fun modelServiceRejectsLocalAndNonHttpsAddresses() = runTest(dispatcher) {
+        val settings = AppSettings(InMemoryStore())
+        val vm = viewModel(store(), catalog(1), settings)
+        advanceUntilIdle()
+        vm.saveLlmConfig(LlmConfig(baseUrl = "https://api.example.com", apiKey = "key", model = "model"))
+        vm.saveLlmConfig(LlmConfig(baseUrl = "http://api.example.com", apiKey = "key", model = "model"))
+        assertEquals("https://api.example.com", settings.llm.baseUrl)
+        vm.saveLlmConfig(LlmConfig(baseUrl = "https://192.168.1.2", apiKey = "key", model = "model"))
+        assertEquals("https://api.example.com", settings.llm.baseUrl)
+        assertTrue(vm.state.value.llmAddressInvalid)
+    }
+    @Test
+    fun backupAndRestorePreserveDeletedRecordings() = runTest(dispatcher) {
+        meeting("2026-11-01_0900_周会")
+        val trashed = File(root, ".audio-trash/2026-11-01_0900_周会").apply { mkdirs() }
+        File(trashed, "录音.wav").writeText("recording")
+        File(trashed, ".deleted-at").writeText("2000000000")
+        val zip = File(Files.createTempDirectory("tingo-backup").toFile(), "library.zip")
+        val vm = viewModel(store(), catalog(1))
+        vm.backupTo { zip.outputStream() }
+        advanceUntilIdle()
+        root = Files.createTempDirectory("tingo-restored").toFile()
+        val restored = viewModel(store(), catalog(1), meetingsRoot = root)
+        restored.restoreFrom { zip.inputStream() }
+        advanceUntilIdle()
+        assertEquals("recording", File(root, ".audio-trash/2026-11-01_0900_周会/录音.wav").readText())
+        assertEquals("2000000000", File(root, ".audio-trash/2026-11-01_0900_周会/.deleted-at").readText())
+    }
+    @Test
+    fun automaticProcessingDefaultsAreSavedAcrossSettingsScreens() = runTest(dispatcher) {
+        val settings = AppSettings(InMemoryStore())
+        val first = viewModel(store(), catalog(1), settings)
+        advanceUntilIdle()
+        assertTrue(first.state.value.autoTranscribe)
+        assertTrue(first.state.value.autoMinutes)
+        first.saveAutoTranscribe(false)
+        first.saveAutoMinutes(false)
+        val reopened = viewModel(store(), catalog(1), settings)
+        advanceUntilIdle()
+        assertFalse(reopened.state.value.autoTranscribe)
+        assertFalse(reopened.state.value.autoMinutes)
+    }
 
     private val dispatcher = StandardTestDispatcher()
 

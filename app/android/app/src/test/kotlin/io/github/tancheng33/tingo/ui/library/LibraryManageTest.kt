@@ -30,6 +30,21 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryManageTest {
+    @Test
+    fun audioTrashCanBeListedAndRestored() = runTest(dispatcher) {
+        var restored: String? = null
+        val engine = object : FakeEnginePort() {
+            override fun listAudioTrash(): List<TrashItem> = listOf(TrashItem(id = "a", bytes = 42uL))
+            override fun restoreAudioFromTrash(id: String) { restored = id }
+        }
+        val vm = viewModel(engine)
+        vm.showTrash()
+        advanceUntilIdle()
+        assertEquals(listOf("a"), vm.audioTrash.value.map { it.id })
+        vm.restoreAudioFromTrash("a")
+        advanceUntilIdle()
+        assertEquals("a", restored)
+    }
 
     private val dispatcher = StandardTestDispatcher()
 

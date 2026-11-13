@@ -107,6 +107,28 @@ class LibraryViewModel(
     /** 回收站内容；非空且 [trashVisible] 为真时界面显示回收站视图。 */
     private val _trash = MutableStateFlow<List<TrashItem>>(emptyList())
     val trash: StateFlow<List<TrashItem>> = _trash.asStateFlow()
+    private val _audioTrash = MutableStateFlow<List<TrashItem>>(emptyList())
+    val audioTrash: StateFlow<List<TrashItem>> = _audioTrash.asStateFlow()
+
+    fun restoreAudioFromTrash(id: String) {
+        viewModelScope.launch(io) {
+            try { repository.restoreAudioFromTrash(id) } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
+            }
+            refreshTrash()
+        }
+    }
+
+    fun purgeAudioFromTrash(id: String) {
+        viewModelScope.launch(io) {
+            try { repository.purgeAudioTrash(id) } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
+            }
+            refreshTrash()
+        }
+    }
 
     /** 回收站视图是否在显示；放在这里而不是界面里，从详情页返回时不能丢。 */
     private val _trashVisible = MutableStateFlow(false)
@@ -285,6 +307,13 @@ class LibraryViewModel(
             } catch (e: TingoFailure) {
                 _lastError.value = e.kind
                 emptyList()
+            }
+            _audioTrash.value = try {
+                repository.listAudioTrash()
+            } catch (e: TingoFailure) {
+                _lastError.value = e.kind
+                _failureEvents.value = LibraryFailure(++failureSeq, e.kind)
+                _audioTrash.value
             }
         }
     }

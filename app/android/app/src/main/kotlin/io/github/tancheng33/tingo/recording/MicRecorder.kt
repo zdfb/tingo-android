@@ -25,6 +25,9 @@ class MicRecorder : AudioCapture {
     @Volatile
     private var paused = false
 
+    @Volatile
+    private var captureEpoch = 0
+
     /** 采集线程里遇到的致命错误（磁盘满、写入被关闭）；stop() 之后由调用方查。 */
     @Volatile
     var failed: Throwable? = null
@@ -40,6 +43,10 @@ class MicRecorder : AudioCapture {
      */
     @Volatile
     var onSamples: ((FloatArray) -> Unit)? = null
+
+    override fun setSamplesListener(listener: ((FloatArray) -> Unit)?) {
+        onSamples = listener
+    }
 
     override fun start(file: File) {
         check(record == null) { "已经在录音" }
@@ -73,13 +80,19 @@ class MicRecorder : AudioCapture {
                     Thread.sleep(20)
                     continue
                 }
+                val epoch = captureEpoch
                 val read = recorder.read(buffer, 0, buffer.size)
                 if (read <= 0) {
                     if (read == AudioRecord.ERROR_INVALID_OPERATION || read == AudioRecord.ERROR_DEAD_OBJECT) {
-                        break
+                        if (running && !paused && epoch == captureEpoch) {
+                            failed = IllegalStateException("麦克风读取失败: $read")
+                            running = false
+                            break
+                        }
                     }
                     continue
                 }
+                if (paused || epoch != captureEpoch) continue
                 currentLevel = peakLevel(buffer, read)
                 // read 一定是 2 的整数倍（16 bit 单声道），WavWriter 里有断言兜底
                 wav.append(buffer, read)
@@ -121,20 +134,26 @@ class MicRecorder : AudioCapture {
 
     override fun pause() {
         paused = true
+        captureEpoch++
+        runCatching { record?.stop() }
     }
 
     override fun resume() {
+        captureEpoch++
+        runCatching { record?.startRecording() }.onFailure { failed = it }
         paused = false
     }
+
+    override fun durationMs(): Long = writer?.durationMs() ?: 0
 
     override fun stop(): Long {
         if (record == null) return 0
         running = false
         paused = false
+        runCatching { record?.stop() }
         thread?.join(500)
         thread = null
         record?.let {
-            runCatching { it.stop() }
             it.release()
         }
         record = null

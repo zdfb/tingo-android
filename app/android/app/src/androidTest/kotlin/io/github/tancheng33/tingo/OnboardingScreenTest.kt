@@ -19,6 +19,8 @@ import io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel
 import io.github.tancheng33.tingo.ui.theme.TingoTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 
 class OnboardingScreenTest {
 
@@ -26,6 +28,27 @@ class OnboardingScreenTest {
     val compose = createComposeRule()
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test
+    fun modelDownloadStartsOnlyAfterConfirmation() {
+        var requested = false
+        compose.setContent {
+            TingoTheme {
+                OnboardingScreen(
+                    state = OnboardingViewModel.UiState(step = OnboardingViewModel.Step.MODEL),
+                    steps = OnboardingViewModel.Step.entries,
+                    llmConfigured = false, micGranted = false, systemAudioSupported = true,
+                    testing = false, probe = null, onTest = {}, onRequestPermission = {},
+                    onNext = {}, onBack = {}, onSkip = {}, onInstallDemo = {}, onOpenSettings = {},
+                    onDownloadModels = { requested = true },
+                )
+            }
+        }
+        compose.onNodeWithText(context.getString(R.string.onboard_model_download)).performClick()
+        compose.runOnIdle { assertFalse(requested) }
+        compose.onNodeWithText(context.getString(R.string.onboard_model_confirm)).performClick()
+        compose.runOnIdle { assertTrue(requested) }
+    }
 
     private fun renderWelcome() {
         compose.setContent {

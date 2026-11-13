@@ -44,6 +44,7 @@ class MinutesService(
         onToken: (String) -> Unit = {},
         /** 分段提炼的进度文字（"分段提炼 2/5"）；短会议不会回调 */
         onStage: (String) -> Unit = {},
+        includeHighlights: Boolean = true,
         /**
          * 最终纪要怎么写。
          *
@@ -58,7 +59,26 @@ class MinutesService(
         val spoken = MinutesLanguage.detect(transcript.sentences.map { it.text })
         val language = MinutesLanguage.resolve(languageSetting(), transcript.sentences.map { it.text })
         val date = meetingDate(meetingDir)
-        val terms = glossary(language)
+        val highlights = if (includeHighlights) {
+            io.github.tancheng33.tingo.recording.RecordingHighlights.read(meetingDir)
+        } else emptyList()
+        val marked = highlights.mapNotNull { position ->
+            transcript.sentences.minByOrNull { sentence ->
+                when {
+                    position < sentence.startMs -> sentence.startMs - position
+                    position > sentence.endMs -> position - sentence.endMs
+                    else -> 0L
+                }
+            }?.let { sentence -> "[${Transcript.mmss(position)}] ${sentence.text}" }
+        }.distinct()
+        val terms = buildString {
+            append(glossary(language))
+            if (marked.isNotEmpty()) {
+                append("\n\n")
+                append(if (language == MinutesLanguage.EN) "User-marked highlights:\n" else "用户标记的重点：\n")
+                append(marked.joinToString("\n"))
+            }
+        }
         val lines = MinutesPrompt.transcriptLines(transcript, language)
         val body = lines.joinToString("\n")
         // 长会议：整段喂进去，待办会被无关内容稀释（桌面同样先分段提炼再合并）

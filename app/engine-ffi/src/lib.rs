@@ -302,6 +302,8 @@ const MAX_CLEANUP_DAYS: u32 = 3650;
 /// 所以 `.trash/<id>` 只在里面直接放着这些文件时才可能被误认——回收站结构的
 /// 单测（`trash_never_shows_up_in_library`）盯着这条不变量。
 const TRASH_DIR: &str = ".trash";
+const AUDIO_TRASH_DIR: &str = ".audio-trash";
+static AUDIO_TRASH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 
 
@@ -347,9 +349,7 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
             meetings::write_meta(&dir, &meta).map_err(|e| io_error(e, "batch"))
         }
         "delete_audio" => {
-            // 与单场同一条路径：真删录音文件、转写与纪要留下。桌面把它挪进系统废纸篓，
-            // Android 的回收站只有整场会议，所以确认框明说"无法恢复"，这里也真删。
-            remove_audio(&meetings::audio_files(&dir), "batch").map(|_| ())
+            trash_audio(root, id, &dir).map(|_| ())
         }
         "delete" => {
             // 与单条删除同一语义：先进回收站，用户能反悔
@@ -368,18 +368,37 @@ fn apply_batch(root: &Path, id: &str, action: &str, tag: &str) -> Result<(), Eng
     }
 }
 
-/// 删掉这些录音文件并返回腾出的字节数。
-///
-/// 桌面把录音挪进系统废纸篓（访达里看得见、能拖回来）。Android 的回收站只收**整场会议**，
-/// 没有"被删掉的录音"这一栏：挪进 `.trash` 就成了既占着空间又找不回来的东西，
-/// 而界面承诺"腾出空间"。所以这里真删，确认框也明说"无法恢复"。
-fn remove_audio(files: &[std::path::PathBuf], op: &str) -> Result<u64, EngineError> {
-    let mut freed = 0u64;
-    for file in files {
-        freed += meetings::size_of(file);
-        std::fs::remove_file(file).map_err(|e| io_error(e, op))?;
+fn trash_audio(root: &Path, id: &str, dir: &Path) -> Result<u64, EngineError> {
+    let _lock = AUDIO_TRASH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let files = meetings::audio_files(dir);
+    if files.is_empty() {
+        return Err(EngineError::Missing { detail: "这场会议没有录音文件".to_string() });
     }
-    Ok(freed)
+    let target = root.join(AUDIO_TRASH_DIR).join(id);
+    if target.exists() {
+        return Err(EngineError::InvalidInput { detail: "回收站已有这场会议的录音，请先恢复或彻底删除".to_string() });
+    }
+    std::fs::create_dir_all(&target).map_err(|e| io_error(e, "delete_audio"))?;
+    let deleted_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| EngineError::InvalidInput { detail: e.to_string() })?.as_secs();
+    if let Err(e) = std::fs::write(target.join(".deleted-at"), deleted_at.to_string()) {
+        let _ = std::fs::remove_dir(&target);
+        return Err(io_error(e, "delete_audio"));
+    }
+    let mut moved: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    let mut bytes = 0;
+    for source in files {
+        let destination = target.join(source.file_name().unwrap());
+        bytes += meetings::size_of(&source);
+        if let Err(e) = std::fs::rename(&source, &destination) {
+            for (original, saved) in moved.iter().rev() { let _ = std::fs::rename(saved, original); }
+            let _ = std::fs::remove_file(target.join(".deleted-at"));
+            let _ = std::fs::remove_dir(&target);
+            return Err(io_error(e, "delete_audio"));
+        }
+        moved.push((source, destination));
+    }
+    Ok(bytes)
 }
 
 /// 把引擎的搜索结果 JSON 转成 typed Record；字段缺了就跳过那一条，不让整个搜索失败。
@@ -675,19 +694,10 @@ impl TingoEngine {
                 if !old || (archived_only && !summary.archived) {
                     continue;
                 }
-                let mut touched = false;
-                for file in meetings::audio_files(&dir) {
-                    let bytes = meetings::size_of(&file);
-                    match std::fs::remove_file(&file) {
-                        Ok(()) => {
-                            freed += bytes;
-                            touched = true;
-                        }
-                        Err(_) => failed += 1,
-                    }
-                }
-                if touched {
-                    meetings_touched += 1;
+                if meetings::audio_files(&dir).is_empty() { continue; }
+                match trash_audio(&root, &summary.id, &dir) {
+                    Ok(bytes) => { freed += bytes; meetings_touched += 1; }
+                    Err(_) => failed += 1,
                 }
             }
             Ok(AudioCleanup {
@@ -714,13 +724,74 @@ impl TingoEngine {
                     detail: "这场会议还在处理中，等它跑完再删录音".to_string(),
                 });
             }
-            let files = meetings::audio_files(&dir);
-            if files.is_empty() {
-                return Err(EngineError::Missing {
-                    detail: "这场会议没有录音文件".to_string(),
-                });
+            trash_audio(&root, &id, &dir)
+        })
+    }
+
+    pub fn list_audio_trash(&self) -> Result<Vec<TrashItem>, EngineError> {
+        let trash = self.paths.meetings_root.join(AUDIO_TRASH_DIR);
+        guard("list_audio_trash", move || {
+            let _lock = AUDIO_TRASH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let Ok(entries) = std::fs::read_dir(trash) else { return Ok(Vec::new()); };
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| EngineError::InvalidInput { detail: e.to_string() })?.as_secs();
+            let paths: Vec<_> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+            for path in &paths {
+                let deleted_at = std::fs::read_to_string(path.join(".deleted-at")).ok()
+                    .and_then(|s| s.parse::<u64>().ok());
+                if deleted_at.is_some_and(|time| now.saturating_sub(time) >= 30 * 24 * 60 * 60) {
+                    std::fs::remove_dir_all(path).map_err(|e| io_error(e, "list_audio_trash"))?;
+                }
             }
-            remove_audio(&files, "delete_audio")
+            let mut items: Vec<TrashItem> = paths.into_iter()
+                .filter(|p| p.is_dir())
+                .filter_map(|p| p.file_name().and_then(|n| n.to_str())
+                    .map(|n| TrashItem { id: n.to_string(), bytes: meetings::audio_files(&p).iter().map(|f| meetings::size_of(f)).sum() }))
+                .collect();
+            items.sort_by(|a, b| a.id.cmp(&b.id));
+            Ok(items)
+        })
+    }
+
+    pub fn restore_audio_from_trash(&self, id: String) -> Result<(), EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("restore_audio_from_trash", move || {
+            let _lock = AUDIO_TRASH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let dir = meeting_dir(&root, &id)?;
+            let source = root.join(AUDIO_TRASH_DIR).join(&id);
+            if !source.is_dir() { return Err(EngineError::Missing { detail: "回收站没有这场会议的录音".to_string() }); }
+            if !dir.is_dir() { return Err(EngineError::Missing { detail: "请先恢复对应的会议".to_string() }); }
+            let files = meetings::audio_files(&source);
+            if !meetings::audio_files(&dir).is_empty() {
+                return Err(EngineError::InvalidInput { detail: "会议已有录音，无法覆盖".to_string() });
+            }
+            let mut moved: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+            for file in files {
+                let destination = dir.join(file.file_name().unwrap());
+                if let Err(e) = std::fs::rename(&file, &destination) {
+                    for (original, restored) in moved.iter().rev() { let _ = std::fs::rename(restored, original); }
+                    return Err(io_error(e, "restore_audio_from_trash"));
+                }
+                moved.push((file, destination));
+            }
+            let marker = source.join(".deleted-at");
+            if marker.exists() { std::fs::remove_file(marker).map_err(|e| io_error(e, "restore_audio_from_trash"))?; }
+            std::fs::remove_dir(&source).map_err(|e| io_error(e, "restore_audio_from_trash"))
+        })
+    }
+
+    pub fn purge_audio_trash(&self, id: String) -> Result<u64, EngineError> {
+        let root = self.paths.meetings_root.clone();
+        guard("purge_audio_trash", move || {
+            let _lock = AUDIO_TRASH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            validate_id(&id)?;
+            let dir = root.join(AUDIO_TRASH_DIR).join(&id);
+            if !dir.is_dir() {
+                return Err(EngineError::Missing { detail: "回收站没有这场会议的录音".to_string() });
+            }
+            let bytes = meetings::audio_files(&dir).iter().map(|f| meetings::size_of(f)).sum();
+            std::fs::remove_dir_all(dir).map_err(|e| io_error(e, "purge_audio_trash"))?;
+            Ok(bytes)
         })
     }
 
@@ -1710,6 +1781,56 @@ mod tests {
     }
 
     #[test]
+    fn audio_trash_expires_after_thirty_days() {
+        let root = temp_root("audio-trash-expiry");
+        let id = "2026-10-28_1430_复盘".to_string();
+        let dir = meeting(&root, &id);
+        std::fs::write(dir.join("录音.wav"), b"recording").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_audio(id.clone(), vec![]).unwrap();
+        assert_eq!(engine.list_audio_trash().unwrap().len(), 1);
+        let marker = root.join("meetings").join(AUDIO_TRASH_DIR).join(&id).join(".deleted-at");
+        std::fs::write(marker, "1").unwrap();
+        assert!(engine.list_audio_trash().unwrap().is_empty());
+        assert!(dir.join("纪要.md").is_file());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn deleted_audio_can_be_purged_before_expiry() {
+        let root = temp_root("audio-trash-purge");
+        let id = "2026-10-28_1430_复盘".to_string();
+        let dir = meeting(&root, &id);
+        std::fs::write(dir.join("录音.wav"), b"recording").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+        engine.delete_audio(id.clone(), vec![]).unwrap();
+        assert_eq!(engine.purge_audio_trash(id).unwrap(), 9);
+        assert!(engine.list_audio_trash().unwrap().is_empty());
+        assert!(dir.join("纪要.md").is_file());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn deleted_audio_can_be_restored_without_overwriting_new_audio() {
+        let root = temp_root("audio-trash-restore");
+        let id = "2026-10-28_1430_复盘".to_string();
+        let dir = meeting(&root, &id);
+        std::fs::write(dir.join("录音.wav"), b"original").unwrap();
+        let engine = TingoEngine::new(root.display().to_string());
+
+        engine.delete_audio(id.clone(), vec![]).unwrap();
+        assert_eq!(engine.list_audio_trash().unwrap()[0].id, id);
+        std::fs::write(dir.join("录音.wav"), b"new").unwrap();
+        assert!(engine.restore_audio_from_trash(id.clone()).is_err());
+        assert_eq!(std::fs::read(dir.join("录音.wav")).unwrap(), b"new");
+        std::fs::remove_file(dir.join("录音.wav")).unwrap();
+        engine.restore_audio_from_trash(id.clone()).unwrap();
+        assert_eq!(std::fs::read(dir.join("录音.wav")).unwrap(), b"original");
+        assert!(engine.list_audio_trash().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn delete_audio_removes_only_the_recording() {
         let root = temp_root("delete-audio");
         let dir = meeting(&root, "2026-10-28_1430_复盘");
@@ -1723,8 +1844,7 @@ mod tests {
         assert_eq!(freed, 4096, "腾出的字节数要按被移走的录音算");
         assert!(!dir.join("录音.wav").exists(), "录音要离开会议目录");
         assert!(dir.join("纪要.md").is_file(), "转写与纪要必须留在原位");
-        // 真删：Android 的回收站只收整场会议，留一份录音只会既占空间又找不回来
-        assert!(std::fs::read_dir(root.join("meetings").join(TRASH_DIR)).is_err(), "不该往回收站里塞录音");
+        assert_eq!(engine.list_audio_trash().unwrap().len(), 1);
         // 会议本身还在库里（只是没有录音了）
         assert_eq!(engine.scan_library().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&root);
@@ -2013,6 +2133,9 @@ mod tests {
         assert_eq!(report.meetings, 1);
         assert_eq!(report.failed, 0);
         assert!(!old.join("录音.wav").exists(), "旧会议的音频该被删掉");
+        assert_eq!(engine.list_audio_trash().unwrap()[0].id, "2020-01-01_1000_旧会");
+        engine.restore_audio_from_trash("2020-01-01_1000_旧会".to_string()).unwrap();
+        assert!(old.join("录音.wav").is_file());
         assert!(old.join("纪要.md").is_file(), "纪要必须留着");
         assert!(recent.join("录音.wav").is_file(), "30 天内的会议不能被清");
         let _ = std::fs::remove_dir_all(&root);

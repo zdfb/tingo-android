@@ -4,6 +4,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.RandomAccessFile
 import java.security.MessageDigest
+import org.json.JSONArray
 
 /** 下载用的最小 HTTP 抽象：测试里换成假实现，不必联网。 */
 interface HttpFetcher {
@@ -33,6 +34,7 @@ class ModelStore(
     private val dir: File,
     private val fetcher: HttpFetcher,
     private val bufferSize: Int = 64 * 1024,
+    private val paraformerMetadata: ByteArray? = null,
 ) {
     fun fileFor(file: ModelFile): File = File(dir, file.fileName)
 
@@ -74,6 +76,9 @@ class ModelStore(
     fun invalidate(file: ModelFile) {
         fileFor(file).delete()
         markerFor(file).delete()
+        File(dir, "${file.fileName}.source").delete()
+        File(dir, "${file.fileName}.source.verified").delete()
+        File(dir, "${file.fileName}.tmp").delete()
     }
 
     /** 已占用的字节数（只统计清单里的文件）。 */
@@ -95,6 +100,9 @@ class ModelStore(
         val target = fileFor(file)
         // 已经下过并且校验过才算数：只比体积会把同尺寸坏文件当成好模型
         if (isReady(file)) return Result.success(target)
+        if (file.transform != null) {
+            return downloadTransformed(file, onProgress, verify)
+        }
 
         // 校验不通过或体积不对：从干净状态重来，避免在半截脏数据上叠加
         // 没下完的半截文件可以续传；"体积已经对但没有校验指纹"的文件反而是可疑的，
@@ -134,7 +142,9 @@ class ModelStore(
                     }
                 }
             }
-            if (verify(target)) {
+            if (target.length() < file.bytes) {
+                Result.failure(IllegalStateException("模型下载未完成：${file.fileName}"))
+            } else if (verify(target)) {
                 markerFor(file).writeText(file.sha256 ?: "size-only")
                 Result.success(target)
             } else {
@@ -146,12 +156,55 @@ class ModelStore(
         }
     }
 
+    private fun downloadTransformed(
+        file: ModelFile,
+        onProgress: (DownloadProgress) -> Unit,
+        verify: (File) -> Boolean,
+    ): Result<File> {
+        val source = file.copy(
+            fileName = "${file.fileName}.source",
+            bytes = file.sourceBytes ?: return Result.failure(IllegalArgumentException("Missing source size")),
+            sha256 = file.sourceSha256, sourceBytes = null, sourceSha256 = null, transform = null,
+        )
+        val downloaded = download(source, onProgress)
+        if (downloaded.isFailure) return Result.failure(downloaded.exceptionOrNull()!!)
+        val target = fileFor(file)
+        val temporary = File(dir, "${file.fileName}.tmp")
+        return try {
+            when (file.transform) {
+                "tokens-json" -> {
+                    val tokens = JSONArray(downloaded.getOrThrow().readText())
+                    temporary.bufferedWriter().use { writer ->
+                        for (i in 0 until tokens.length()) writer.write("${tokens.getString(i)} $i\n")
+                    }
+                }
+                "paraformer-metadata" -> {
+                    val metadata = requireNotNull(paraformerMetadata) { "Missing Paraformer metadata" }
+                    downloaded.getOrThrow().inputStream().use { input ->
+                        temporary.outputStream().use { output ->
+                            input.copyTo(output)
+                            output.write(metadata)
+                        }
+                    }
+                }
+                else -> error("Unknown model transformation: ${file.transform}")
+            }
+            check(verify(temporary)) { "模型文件校验失败：${file.fileName}" }
+            check(temporary.renameTo(target)) { "无法保存模型：${file.fileName}" }
+            markerFor(file).writeText(file.sha256 ?: "size-only")
+            invalidate(source)
+            Result.success(target)
+        } catch (e: Exception) {
+            temporary.delete()
+            Result.failure(e)
+        }
+    }
+
     /** 删除清单里的全部模型文件，返回释放的字数。 */
     fun deleteAll(catalog: ModelCatalog): Long {
         val freed = usedBytes(catalog)
         catalog.files.forEach {
-            fileFor(it).delete()
-            markerFor(it).delete()
+            invalidate(it)
         }
         return freed
     }

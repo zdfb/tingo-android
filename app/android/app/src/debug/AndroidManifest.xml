@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity android:name=".ui.design.RecordingWorkspacePreviewActivity" android:exported="true" />
         <activity
             android:name=".ui.design.TingoDesignPreviewActivity"
             android:exported="true"

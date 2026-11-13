@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -87,6 +91,8 @@ class LibraryManageActions(
     val onShowMeetings: () -> Unit = {},
     val onRestore: (String) -> Unit = {},
     val onPurge: (String) -> Unit = {},
+    val onRestoreAudio: (String) -> Unit = {},
+    val onPurgeAudio: (String) -> Unit = {},
     /** 清空整个回收站 */
     val onEmptyTrash: () -> Unit = {},
 )
@@ -94,7 +100,7 @@ class LibraryManageActions(
 /**
  * 会议库列表。
  *
- * 视觉上对着桌面版的"会议记录"页：近白底、白卡片 + 1px 细描边、16dp 圆角，
+ * 会议标题、时间和摘要构成列表的主要信息层级，
  * 标题与摘要用正文黑，时间与标签退到灰阶。列表项只回答三件事——什么时候开的、
  * 开了多久、一句话讲了什么；转写与纪要细节留在详情页。
  */
@@ -113,6 +119,7 @@ fun LibraryScreen(
     manage: LibraryManageActions = LibraryManageActions(),
     /** 回收站内容；[state] 为空且 [trashVisible] 为真时显示回收站视图 */
     trash: List<TrashItem> = emptyList(),
+    audioTrash: List<TrashItem> = emptyList(),
     trashVisible: Boolean = false,
     batchFailures: Int = 0,
     onStartRecording: () -> Unit = {},
@@ -122,6 +129,9 @@ fun LibraryScreen(
     if (trashVisible) {
         TrashView(
             items = trash,
+            audioItems = audioTrash,
+            onRestoreAudio = manage.onRestoreAudio,
+            onPurgeAudio = manage.onPurgeAudio,
             onRestore = manage.onRestore,
             onPurge = manage.onPurge,
             onBack = manage.onShowMeetings,
@@ -146,7 +156,18 @@ fun LibraryScreen(
     }
     when (state) {
         LibraryUiState.Loading -> DefaultStateScaffold {
-            CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+            // 首次扫描可能需要读取原生索引；保留可操作的页面骨架，避免整屏只剩一个转圈。
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(color = colors.blue, strokeWidth = 2.dp)
+                Text(
+                    text = stringResource(R.string.library_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.muted,
+                )
+            }
         }
 
         LibraryUiState.Empty -> DefaultStateScaffold(
@@ -160,6 +181,8 @@ fun LibraryScreen(
                 actionKind = PillKind.Primary,
                 secondaryAction = stringResource(R.string.action_refresh),
                 onSecondaryAction = onRefresh,
+                modifier = Modifier.padding(top = 28.dp),
+                showEmptyLabel = true,
             )
         }
 
@@ -304,11 +327,13 @@ private fun LibraryHeader(
                 Text(text = countLabel, style = MaterialTheme.typography.labelMedium, color = colors.faint)
             }
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.lineSoft))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = TingoDimens.touchTarget)
                 .background(colors.seg, TingoDimens.controlShape)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
@@ -340,18 +365,16 @@ private fun LibraryHeader(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(TingoDimens.gapTight), verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             PillFilter(
                 label = stringResource(R.string.library_filter_archived),
                 selected = archivedOnly,
                 onClick = { onArchivedOnlyChange(!archivedOnly) },
             )
-            // 回收站入口：删除是可恢复的动作，就必须有个地方能把会议找回来
-            PillButton(
-                label = stringResource(R.string.library_trash_entry),
-                onClick = onShowTrash,
-                kind = PillKind.Ghost,
-            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onShowTrash, modifier = Modifier.heightIn(min = TingoDimens.touchTarget)) {
+                Text(stringResource(R.string.library_trash_entry), color = colors.muted)
+            }
         }
     }
 }
@@ -365,14 +388,36 @@ private fun MessageBlock(
     actionKind: PillKind = PillKind.Ghost,
     secondaryAction: String? = null,
     onSecondaryAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    showEmptyLabel: Boolean = false,
 ) {
     val colors = TingoTheme.colors
     Column(
-        modifier = Modifier.padding(TingoDimens.gutter),
+        modifier = modifier.padding(TingoDimens.gutter),
         verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.text)
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.List,
+            contentDescription = null,
+            tint = colors.blue,
+            modifier = Modifier
+                .size(48.dp)
+                .background(colors.blueSoft, TingoDimens.controlShape)
+                .padding(12.dp),
+        )
+        if (showEmptyLabel) {
+            Text(
+                text = stringResource(R.string.library_empty_kicker),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.blue,
+            )
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.text,
+        )
         if (body != null) {
             Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         }
@@ -452,7 +497,7 @@ private fun MeetingCardRow(
                 )
             }
             Box {
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(TingoDimens.touchTarget)) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = stringResource(R.string.library_more),
@@ -703,6 +748,9 @@ private fun SearchHits(state: LibraryUiState.Content, onOpenAt: (String, ULong) 
 @Composable
 private fun TrashView(
     items: List<TrashItem>,
+    audioItems: List<TrashItem>,
+    onRestoreAudio: (String) -> Unit,
+    onPurgeAudio: (String) -> Unit,
     onRestore: (String) -> Unit,
     onPurge: (String) -> Unit,
     onBack: () -> Unit,
@@ -710,6 +758,17 @@ private fun TrashView(
     modifier: Modifier = Modifier,
 ) {
     val colors = TingoTheme.colors
+    var audioToPurge by remember { mutableStateOf<String?>(null) }
+    audioToPurge?.let { id ->
+        TingoConfirmDialog(
+            title = stringResource(R.string.audio_trash_purge_title),
+            body = stringResource(R.string.audio_trash_purge_body),
+            confirmLabel = stringResource(R.string.library_trash_purge),
+            destructive = true,
+            onDismiss = { audioToPurge = null },
+            onConfirm = { audioToPurge = null; onPurgeAudio(id) },
+        )
+    }
     Column(modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = TingoDimens.gutter, vertical = 12.dp),
@@ -728,7 +787,7 @@ private fun TrashView(
                 }
             }
         }
-        if (items.isEmpty()) {
+        if (items.isEmpty() && audioItems.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.library_trash_empty), color = colors.muted)
             }
@@ -738,6 +797,19 @@ private fun TrashView(
             contentPadding = PaddingValues(TingoDimens.gutter),
             verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
         ) {
+            if (audioItems.isNotEmpty()) {
+                item { Text(stringResource(R.string.audio_trash_description), color = colors.muted, style = MaterialTheme.typography.bodySmall) }
+                items(audioItems, key = { "audio:" + it.id }) { audio ->
+                    Row(Modifier.fillMaxWidth().background(colors.card, TingoDimens.cardShape).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(audio.id, style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.audio_trash_item, (audio.bytes / 1_000_000uL).toLong()), style = MaterialTheme.typography.labelSmall, color = colors.muted)
+                        }
+                        TextButton(onClick = { onRestoreAudio(audio.id) }) { Text(stringResource(R.string.library_trash_restore)) }
+                        TextButton(onClick = { audioToPurge = audio.id }) { Text(stringResource(R.string.library_trash_purge), color = colors.red) }
+                    }
+                }
+            }
             items(items, key = { it.id }) { item ->
                 Row(
                     modifier = Modifier

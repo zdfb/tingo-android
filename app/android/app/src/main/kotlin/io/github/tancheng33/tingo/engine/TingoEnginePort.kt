@@ -78,6 +78,9 @@ interface TingoEnginePort {
     fun restoreFromTrash(id: String)
 
     fun listTrash(): List<TrashItem>
+    fun listAudioTrash(): List<TrashItem> = emptyList()
+    fun restoreAudioFromTrash(id: String) { error("Audio trash unavailable") }
+    fun purgeAudioTrash(id: String): ULong = error("Audio trash unavailable")
 
     /** 彻底清除；`id` 为空表示清空回收站。 */
     fun purgeTrash(id: String): ULong
@@ -198,6 +201,9 @@ private class NativeTingoEngine(private val engine: TingoEngine) : TingoEnginePo
     override fun restoreFromTrash(id: String) = mapEngineCall { engine.restoreFromTrash(id) }
 
     override fun listTrash(): List<TrashItem> = mapEngineCall { engine.listTrash() }
+    override fun listAudioTrash(): List<TrashItem> = mapEngineCall { engine.listAudioTrash() }
+    override fun restoreAudioFromTrash(id: String) = mapEngineCall { engine.restoreAudioFromTrash(id) }
+    override fun purgeAudioTrash(id: String): ULong = mapEngineCall { engine.purgeAudioTrash(id) }
 
     override fun purgeTrash(id: String): ULong = mapEngineCall { engine.purgeTrash(id) }
 

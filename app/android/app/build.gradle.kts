@@ -125,49 +125,6 @@ fun hostLibPath(): String {
  * 设备级测试用的会议夹具直接取自引擎的测试夹具，避免仓库里存两份。
  * 输出到 `fixtures/` 子目录，测试侧照旧按 `assets("fixtures/<会议>")` 读取。
  */
-/**
- * 把 `models/` 里的模型打进 assets/models/，安装后由应用解包到自己的模型目录。
- *
- * 模型不进仓库（700+ MB 的二进制不该进 git）：`scripts/fetch-models-offline.sh` 负责把它们
- * 从模拟器/实机或镜像取到 `models/`。缺文件时这里只警告、不失败，方便只跑单元测试。
- */
-val syncBundledModels by tasks.registering(Sync::class) {
-    from(layout.projectDirectory.dir("../models"))
-    into(layout.buildDirectory.dir("generated/models/assets/models"))
-    include("*.onnx", "*.txt", "*.mvn")
-}
-
-/**
- * 打包内置模型前先确认模型真的在（缺文件直接失败，不是警告）。
- *
- * 规格要求"模型随 APK 内置、端侧推理不需要网络"：如果 `models/` 空着还照样出包，
- * 交付出来的 APK 会在离线设备上装不上模型——这类问题不该等到装到手机上才发现。
- * 只想跑单测/编译时用 `-PtingoSkipBundledModels=true` 显式跳过。
- */
-val verifyBundledModels by tasks.registering {
-    val modelsDir = layout.projectDirectory.dir("../models")
-    val skip = providers.gradleProperty("tingoSkipBundledModels").map { it.toBoolean() }.orElse(false)
-    doLast {
-        if (skip.get()) {
-            logger.lifecycle("跳过内置模型检查：-PtingoSkipBundledModels=true")
-            return@doLast
-        }
-        // 文件名以 assets 里的清单为准，别在这里再抄一份（抄一份就会和清单漂移）
-        val expected = listOf("models.json").flatMap { manifest ->
-            val text = rootProject.file("app/src/main/assets/$manifest").readText()
-            Regex("\"file_?[Nn]ame\"\\s*:\\s*\"([^\"]+)\"").findAll(text).map { it.groupValues[1] }.toList()
-        }
-        check(expected.isNotEmpty()) { "assets 清单里没解析到文件名，检查 models.json 格式" }
-        val missing = expected.distinct().filterNot { modelsDir.file(it).asFile.exists() }
-        if (missing.isNotEmpty()) {
-            throw GradleException(
-                "内置模型缺失：${missing.joinToString()}；先跑 ./scripts/fetch-models-offline.sh，" +
-                    "或用 -PtingoSkipBundledModels=true 跳过（产物将不带模型）",
-            )
-        }
-    }
-}
-
 val syncTestFixtures by tasks.registering(Sync::class) {
     from(rootProject.layout.projectDirectory.dir("../engine/tests/fixtures"))
     into(layout.buildDirectory.dir("generated/fixtures/assets/fixtures"))
@@ -181,11 +138,11 @@ android {
     ndkVersion = "30.0.16248370"
 
     defaultConfig {
-        applicationId = "io.github.tancheng33.tingo"
-        minSdk = 26
+        applicationId = "io.github.zdfb.tingo"
+        minSdk = 29
         targetSdk = 37
-        versionCode = 502
-        versionName = "0.5.2"
+        versionCode = 504
+        versionName = "0.5.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -226,8 +183,6 @@ android {
             // Android SourceSet API 不接受 Provider，这里在配置期解析为具体目录
             kotlin.srcDir(uniffiOutDir.get().asFile)
             jniLibs.srcDir(cargoJniLibsDir.get().asFile)
-            // 模型随 APK 内置：assemble 前把 models/ 的内容放进 assets/models/
-            assets.srcDir(layout.buildDirectory.dir("generated/models/assets").get().asFile)
         }
         getByName("test") {
             kotlin.srcDir("src/test/kotlin")
@@ -254,12 +209,6 @@ tasks.named("preBuild") {
 // androidTest 的 assets 在合并测试资源之前要就位
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAssets") }.configureEach {
     dependsOn(syncTestFixtures)
-}
-
-// 主 assets（内置模型）要在合并主资源之前同步好
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") && !it.name.contains("AndroidTest") }.configureEach {
-    dependsOn(verifyBundledModels)
-    dependsOn(syncBundledModels)
 }
 
 dependencies {

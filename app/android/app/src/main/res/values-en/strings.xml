@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="record_workspace_active">Recording</string>
+    <string name="record_workspace_paused">Paused</string>
+    <string name="record_workspace_listening">Listening. Recognized speech will appear here.</string>
+    <string name="record_discard_confirm">This recording will be deleted and cannot be restored. Discard it?</string>
+    <string name="err_audio_mix_failed">Could not combine the audio tracks, so transcription was not started. The recordings are saved; check storage or try again.</string>
+    <string name="record_new_meeting">Start a new meeting</string>
+    <string name="record_live_incomplete">Live text may be incomplete. Audio is still being saved; transcribe the full recording afterwards.</string>
+    <string name="settings_check_updates">Check for updates</string>
+    <string name="settings_updates_open_failed">Could not open the updates page. Check your browser settings.</string>
+    <string name="processing_channel">Meeting processing</string>
+    <string name="processing_notification_title">Processing meeting</string>
+    <string name="processing_notification_body">Transcribing or generating minutes. Tap to see progress.</string>
+    <string name="processing_service_start_failed">Background processing could not start. Processing will continue, but may stop in the background. You can retry from the meeting details.</string>
+    <string name="recording_recovered_title">Interrupted recording found</string>
+    <string name="recording_recovered_body">“%1$s” did not finish normally. The saved audio has been repaired where possible. Open the meeting to transcribe and organize it.</string>
+    <string name="recording_recovered_open">Open meeting</string>
+    <string name="record_provisional_speaker">Provisional speaker %1$d</string>
+    <string name="record_speaker_unknown">Unknown speaker</string>
+    <string name="record_speaker_provisional_hint">Speaker numbers are provisional and may change in the final transcript.</string>
+    <string name="record_highlight_save_failed">Could not save the highlight. Recording continues.</string>
+    <string name="settings_llm_address_invalid">Enter a public HTTPS service address</string>
+    <string name="auto_transcribe">Transcribe automatically after recording</string>
+    <string name="auto_minutes">Generate minutes automatically after transcription</string>
     <string name="app_name">Tingo</string>
 
     <!-- Navigation -->
@@ -45,7 +68,9 @@
     <!-- Recording placeholder (recording lands in a later change) -->
 
     <!-- Library -->
-    <string name="library_title">Meetings</string>
+    <string name="library_title">Meeting notes</string>
+    <string name="library_loading">Getting your meetings ready</string>
+    <string name="library_empty_kicker">Your meeting space</string>
     <string name="library_empty">No meetings yet</string>
     <string name="library_empty_body">Start a recording or import an existing audio file.</string>
     <string name="library_start_recording">Start recording</string>
@@ -60,6 +85,8 @@
     <string name="library_count_filtered">Showing %1$d of %2$d</string>
     <string name="detail_select_hint">Pick a meeting on the left</string>
     <string name="record_idle_hint">Tap start when ready. Audio stays on this device.</string>
+    <string name="record_signature">Keep the important parts, on this device</string>
+    <string name="record_options">Meeting options</string>
     <string name="record_permission_denied">No microphone permission, so recording cannot start. You can grant it in system settings.</string>
     <string name="record_start">Start recording</string>
     <string name="record_pause">Pause</string>
@@ -85,6 +112,7 @@
     <string name="detail_export">Export and share</string>
     <string name="err_no_recording">This meeting has no recording that can be transcribed</string>
     <string name="err_model_download_failed">Model download failed: %1$s</string>
+    <string name="err_model_required">Download the speech model in the setup guide before recording.</string>
     <string name="err_transcribe_failed">Transcription failed: %1$s</string>
     <string name="err_no_transcript">This meeting has no transcript yet; create one first</string>
     <string name="err_minutes_rejected">The model did not follow the required structure: %1$s</string>
@@ -105,7 +133,7 @@
     <string name="record_system_audio_label">Also capture the meeting app\'s audio</string>
     <string name="record_system_audio_hint">Records the other participants. Most meeting apps block capture; if blocked, only the microphone is recorded.</string>
     <string name="record_system_audio_unsupported">System audio capture needs Android 10+; only the microphone can be recorded</string>
-    <string name="record_system_audio_missing">Captured nothing from the meeting app (it likely blocks capture); microphone only this time</string>
+    <string name="record_system_audio_missing">System audio is unavailable or interrupted. The microphone is still recording.</string>
     <string name="record_system_audio_denied">Screen-capture permission denied; microphone only this time</string>
     <string name="detail_export_bundle">Export archive (audio, transcript, minutes)</string>
     <string name="player_play">Play</string>
@@ -149,7 +177,7 @@
     <string name="library_batch_tag">Add tag</string>
     <string name="library_batch_tag_title">Tag selected meetings</string>
     <string name="library_batch_delete_audio">Delete audio</string>
-    <string name="library_batch_delete_audio_body">The recordings of the selected meetings are deleted permanently; transcripts and minutes stay, but they can no longer be played back.</string>
+    <string name="library_batch_delete_audio_body">Recordings move to the trash for 30 days; transcripts and minutes stay.</string>
     <string name="library_batch_partial">%1$d could not be processed; the rest finished</string>
     <string name="library_search_expanded">Also searching: %1$s</string>
     <string name="library_hit_in_minutes">Found in minutes</string>
@@ -215,9 +243,23 @@
     <string name="onboard_point_record_body">Captures the other side in Zoom, Teams, Feishu…</string>
     <string name="onboard_point_source_title">Every claim has a source</string>
     <string name="onboard_point_source_body">Each line plays back the original words</string>
-    <string name="onboard_model_ready">Ready: the model ships with the app, no download needed</string>
-    <string name="onboard_model_missing">Speech model missing: reinstall it in Settings → Models</string>
+    <string name="onboard_model_ready">Speech model ready</string>
+    <string name="onboard_model_missing">Download the Paraformer speech model before recording</string>
     <string name="onboard_model_body">Recognition is fully offline; audio is never uploaded.</string>
+    <string name="onboard_model_size">Download size: about %1$d MiB</string>
+    <string name="settings_group_device">Device and storage</string>
+    <string name="settings_group_minutes">Minutes and terminology</string>
+    <string name="settings_group_recording">Recording and processing</string>
+    <string name="settings_group_recognition">Speech recognition</string>
+    <string name="onboard_model_download">Download speech model</string>
+    <string name="onboard_model_confirm">Confirm download</string>
+    <string name="onboard_model_confirm_body">About %1$d MiB will be downloaded. Mobile data charges may apply; interrupted downloads can resume.</string>
+    <string name="onboard_model_downloading">Downloading…</string>
+    <string name="onboard_model_progress">Download progress: %1$d%%</string>
+    <string name="record_mark_highlight">Mark highlight</string>
+    <string name="record_highlights">Highlights</string>
+    <string name="detail_include_highlights">Include highlights in minutes</string>
+    <string name="onboard_model_download_failed">Download failed. Check your connection and try again.</string>
     <string name="onboard_perm_mic">Microphone</string>
     <string name="onboard_perm_granted">Granted</string>
     <string name="onboard_perm_ask_later">Requested on your first recording</string>
@@ -265,17 +307,17 @@
     <string name="settings_resume_onboarding">Continue the tour</string>
     <string name="settings_cleanup_audio">Clean up old audio…</string>
     <string name="settings_cleanup_audio_running">Cleaning…</string>
-    <string name="settings_cleanup_audio_hint">Only recordings are deleted; transcripts, minutes and exports stay. Those meetings will no longer be playable.</string>
+    <string name="settings_cleanup_audio_hint">Recordings move to trash for 30 days and still use storage; transcripts, minutes and exports stay.</string>
     <string name="settings_cleanup_audio_all">Any date</string>
     <string name="settings_cleanup_audio_days">Older than %1$d days</string>
     <string name="settings_cleanup_audio_archived_only">Archived only</string>
     <string name="settings_cleanup_audio_title">Delete old audio?</string>
-    <string name="settings_cleanup_audio_body">Recordings of meetings older than %1$d days will be deleted. Transcripts and minutes stay, but those meetings can no longer be played back, and this cannot be undone.</string>
-    <string name="settings_cleanup_audio_body_all">Recordings of every meeting will be deleted. Transcripts and minutes stay, but they can no longer be played back, and this cannot be undone.</string>
+    <string name="settings_cleanup_audio_body">Recordings older than %1$d days move to trash for 30 days.</string>
+    <string name="settings_cleanup_audio_body_all">All recordings move to trash for 30 days.</string>
     <string name="settings_cleanup_audio_body_archived">Only archived meetings are touched.</string>
     <string name="settings_cleanup_audio_confirm">Delete audio</string>
-    <string name="settings_cleanup_audio_done">Cleaned %1$d meetings, freed %2$s</string>
-    <string name="settings_cleanup_audio_partial">Cleaned %1$d meetings (%2$s); %3$d files could not be deleted (maybe in use)</string>
+    <string name="settings_cleanup_audio_done">Moved recordings from %1$d meetings to trash (%2$s)</string>
+    <string name="settings_cleanup_audio_partial">Moved %1$d meetings (%2$s); %3$d meetings could not be processed</string>
     <string name="settings_cleanup_audio_none">No old audio matched</string>
     <string name="settings_cleanup_audio_failed">Could not clean up old audio — files may be in use. Try again later.</string>
     <string name="settings_minutes_language">Minutes language</string>
@@ -292,7 +334,11 @@
     <string name="detail_fishbone_quotes">%1$d quote(s) · %2$d chars</string>
     <string name="detail_delete_audio">Delete recording</string>
     <string name="detail_delete_audio_confirm_title">Delete this meeting\'s recording?</string>
-    <string name="detail_delete_audio_confirm_body">The recording is deleted permanently; the transcript and minutes stay, but you can\'t play it back.</string>
+    <string name="detail_delete_audio_confirm_body">The recording moves to the trash for 30 days and still uses storage; the transcript and minutes stay.</string>
     <string name="detail_save_and_regenerate">Save &amp; regenerate minutes</string>
-    <string name="detail_audio_deleted">Recording deleted — freed %1$d MB</string>
+    <string name="detail_audio_deleted">Recording moved to trash</string>
+    <string name="audio_trash_description">Recordings remain for 30 days and continue to use storage</string>
+    <string name="audio_trash_item">Recording · %1$d MB</string>
+    <string name="audio_trash_purge_title">Permanently delete recording?</string>
+    <string name="audio_trash_purge_body">This cannot be undone. The transcript and minutes will remain.</string>
 </resources>

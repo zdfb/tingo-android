@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.PlayArrow
+import io.github.tancheng33.tingo.ui.components.TingoIcons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,7 +49,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -71,8 +70,6 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import io.github.tancheng33.tingo.ui.detail.AutoChain
-import io.github.tancheng33.tingo.ui.detail.AutoChainFlags
 import io.github.tancheng33.tingo.ui.detail.MinutesUiState
 import io.github.tancheng33.tingo.ui.detail.TranscriptionUiState
 import io.github.tancheng33.tingo.data.MeetingExporter
@@ -87,7 +84,6 @@ import io.github.tancheng33.tingo.ui.onboard.OnboardingViewModel
 import io.github.tancheng33.tingo.ui.tasks.RunningTask
 import io.github.tancheng33.tingo.ui.onboard.OnboardingScreen
 import io.github.tancheng33.tingo.importing.DemoMeeting
-import io.github.tancheng33.tingo.importing.AudioImport
 import io.github.tancheng33.tingo.data.MeetingCard
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.settings.AppLanguage
@@ -96,8 +92,6 @@ import io.github.tancheng33.tingo.minutes.remote.LlmChat
 import io.github.tancheng33.tingo.minutes.remote.RemoteMinutesGenerator
 import io.github.tancheng33.tingo.minutes.remote.UrlHttpJsonClient
 import io.github.tancheng33.tingo.minutes.MinutesService
-import io.github.tancheng33.tingo.recording.LiveTranscriber
-import io.github.tancheng33.tingo.transcription.AsrModels
 import io.github.tancheng33.tingo.transcription.TranscriptionPipeline
 import io.github.tancheng33.tingo.ui.detail.DetailScreen
 import io.github.tancheng33.tingo.ui.detail.MinutesViewModel
@@ -126,7 +120,7 @@ private enum class TopDestination(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val labelRes: Int,
 ) {
-    RECORD("record", Icons.Filled.PlayArrow, R.string.nav_record),
+    RECORD("record", TingoIcons.Mic, R.string.nav_record),
     MEETINGS("meetings", Icons.AutoMirrored.Filled.List, R.string.nav_meetings),
     SETTINGS("settings", Icons.Filled.Settings, R.string.nav_settings),
 }
@@ -192,11 +186,32 @@ fun TingoRoot(
     }
     // 回收站视图与"列表/详情"共用同一页：用状态切换而不是再加一条导航路由
     val trashVisible by libraryViewModel.trashVisible.collectAsStateWithLifecycle()
+    val audioTrashItems by libraryViewModel.audioTrash.collectAsStateWithLifecycle()
     // 搜索命中要跳到具体毫秒：详情页的播放器接这个值
     var pendingSeekMs by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
 
     /** 宽屏时右侧详情显示哪一场；窄屏走导航压栈。 */
     var selectedMeetingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val recoveredRecordings by container.recoveredRecordings.collectAsStateWithLifecycle()
+    var deferredRecovery by remember { mutableStateOf(false) }
+    val recoveredId = recoveredRecordings.firstOrNull()
+    if (recoveredId != null && !deferredRecovery) {
+        io.github.tancheng33.tingo.ui.components.TingoConfirmDialog(
+            title = stringResource(R.string.recording_recovered_title),
+            body = stringResource(R.string.recording_recovered_body, recoveredId),
+            confirmLabel = stringResource(R.string.recording_recovered_open),
+            onConfirm = {
+                container.acknowledgeRecoveredRecording(recoveredId)
+                if (wide) {
+                    selectedMeetingId = recoveredId
+                    navController.navigate(TopDestination.MEETINGS.route) { launchSingleTop = true }
+                } else {
+                    navController.navigate("$DETAIL_ROUTE/${android.net.Uri.encode(recoveredId)}")
+                }
+            },
+            onDismiss = { deferredRecovery = true },
+        )
+    }
 
     /** 点了"不可读"标记时告诉用户具体是哪个目录（排查只能靠路径）。 */
     var unreadablePath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -213,66 +228,18 @@ fun TingoRoot(
     // 录音状态机与它的守护副作用都放在外壳层：录音必须在用户切到别的页时照样进行，
     // 通知栏计时继续走、通知栏"结束录音"继续有效。放到录音页的组合里，切走就全断了。
     val recordContext = androidx.compose.ui.platform.LocalContext.current
-    val recordViewModel: RecordViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                RecordViewModel(
-                    capture = MicRecorder(),
-                    meetingsRoot = File(container.dataRoot, "meetings"),
-                    stopService = { RecordingService.stop(recordContext) },
-                    // 静音自动结束：配置与桌面同一条语义（分钟数，0 = 不自动停）
-                    autoStopSilenceMin = { container.settings.autoStopSilenceMin },
-                    // 导入与录音共用同一台引擎与同一条转写流水线
-                    importing = io.github.tancheng33.tingo.importing.AudioImport(
-                        engine = container.engine,
-                        transcriber = TranscriptionPipeline(container.models, container.catalog),
-                        cacheDir = File(recordContext.cacheDir, "imports").apply { mkdirs() },
-                    ),
-                    tasks = container.tasks,
-                    // 边录边转：模型没就绪时给 null，录音照旧、只是不显示实时文字
-                    liveTranscriber = if (container.catalog.files.all { file -> container.models.isReady(file) }) {
-                        { onSentence: (String) -> Unit ->
-                            val models = AsrModels.open(container.models, container.catalog)
-                            LiveTranscriber(
-                                asr = models,
-                                releaseModels = models::close,
-                                onSentence = onSentence,
-                            )
-                        }
-                    } else {
-                        null
-                    },
-                )
-            }
-        },
-    )
+    val recordViewModel = container.recordingController.viewModel
     val recordState by recordViewModel.state.collectAsStateWithLifecycle()
-    val liveLines by recordViewModel.liveLines.collectAsStateWithLifecycle()
+    val liveEntries = recordViewModel.liveEntries
+    val highlights by recordViewModel.highlights.collectAsStateWithLifecycle()
+    val liveTranscriptIncomplete by recordViewModel.liveTranscriptIncomplete.collectAsStateWithLifecycle()
+    val highlightSaveFailed by recordViewModel.highlightSaveFailed.collectAsStateWithLifecycle()
     val importState by recordViewModel.import.collectAsStateWithLifecycle()
     val autoStoppedAfter by recordViewModel.autoStoppedAfter.collectAsStateWithLifecycle()
     val runningTasks by container.tasks.tasks.collectAsStateWithLifecycle()
     val recordSystemAudioStatus by recordViewModel.systemAudioStatus.collectAsStateWithLifecycle()
-    // 刚录完的会议：等录完那一刻记下来，进详情页后自动开始转写（桌面同样是"结束即转写"）
-    var pendingAutoTranscribe by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf<String?>(null)
-    }
-    // 转写完了接着写纪要的那一场；只在"刚录完"这条链上设，手动转写不会触发
-    var pendingAutoMinutes by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf<String?>(null)
-    }
-    // 两个 id 合成一份"这一场要不要自动跑"的说明：详情页只接一个参数，
-    // 两处 DetailRoute 调用点也不必各抄一遍四个回调
-    val autoChainFor: (String) -> AutoChainFlags = { id ->
-        AutoChainFlags(
-            transcribe = pendingAutoTranscribe == id,
-            onTranscribeStarted = {
-                pendingAutoTranscribe = null
-                pendingAutoMinutes = id
-            },
-            minutes = pendingAutoMinutes == id,
-            onMinutesStarted = { pendingAutoMinutes = null },
-        )
-    }
+    var meetingAutoTranscribe by remember { mutableStateOf(container.settings.autoTranscribe) }
+    var meetingAutoMinutes by remember { mutableStateOf(container.settings.autoMinutes) }
     var systemAudioEnabled by remember { mutableStateOf(false) }
     var systemAudioDenied by remember { mutableStateOf(false) }
     // 选文件走系统选择器（不开 SAF 持久授权：我们只读一次，马上解码进库）
@@ -290,25 +257,10 @@ fun TingoRoot(
         }
     }
 
-    DisposableEffect(Unit) {
-        RecordingKeepAlive.onServiceDestroyed = { recordViewModel.onInterrupted() }
-        RecordingKeepAlive.onStopRequested = { recordViewModel.stop() }
-        RecordingKeepAlive.onSystemAudioCapture = { capture ->
-            if (capture != null) recordViewModel.attachSystemAudio(capture) else recordViewModel.systemAudioFailed()
-        }
-        onDispose {
-            // 组合没了，但服务可能还在跑：这里不能把回调清成空动作，
-            // 否则通知栏"结束录音"变成点了没反应、迟到的投影也没人停
-            RecordingKeepAlive.onServiceDestroyed = {}
-            RecordingKeepAlive.onStopRequested = {}
-            RecordingKeepAlive.onSystemAudioCapture = { capture -> runCatching { capture?.stop() } }
-        }
-    }
-    // 每个 tick 只更新通知内容；服务本身只在"需不需要"变化时启停
-    LaunchedEffect(recordState) { RecordingKeepAlive.publish(recordState) }
     val needsService = requiresForegroundService(recordState)
     LaunchedEffect(needsService, systemAudioEnabled) {
         if (needsService) {
+            RecordingKeepAlive.publish(recordViewModel.state.value)
             RecordingService.start(recordContext, systemAudio = systemAudioEnabled)
         } else {
             RecordingService.stop(recordContext)
@@ -324,7 +276,10 @@ fun TingoRoot(
         if (result.resultCode == Activity.RESULT_OK && data != null) {
             systemAudioDenied = false
             recordViewModel.start()
-            RecordingService.start(recordContext, systemAudio = true, projection = data)
+            if (requiresForegroundService(recordViewModel.state.value)) {
+                RecordingKeepAlive.publish(recordViewModel.state.value)
+                RecordingService.start(recordContext, systemAudio = true, projection = data)
+            }
         } else {
             systemAudioDenied = true
             recordViewModel.start()
@@ -369,15 +324,20 @@ fun TingoRoot(
     }
 
     val startRecording: () -> Unit = {
-        val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-            recordContext,
-            android.Manifest.permission.RECORD_AUDIO,
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!micGranted) {
-            startRecordingAfterMicGranted = beginRecording
-            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        container.recordingController.configureNextRecording(meetingAutoTranscribe, meetingAutoMinutes)
+        if (!container.catalog.files.all { file -> container.models.isReady(file) }) {
+            recordViewModel.start()
         } else {
-            beginRecording()
+            val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                recordContext,
+                android.Manifest.permission.RECORD_AUDIO,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!micGranted) {
+                startRecordingAfterMicGranted = beginRecording
+                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            } else {
+                beginRecording()
+            }
         }
     }
 
@@ -464,6 +424,8 @@ fun TingoRoot(
             onBack = onboardViewModel::back,
             onSkip = onboardViewModel::skip,
             onInstallDemo = { onboardViewModel.installDemo(container.uiLanguage() == "en") },
+            onDownloadModels = onboardViewModel::downloadModels,
+            modelSizeBytes = container.catalog.downloadBytes,
             onOpenSettings = {
                 // 收起引导但不算走完：设置页那条"继续新手引导"才能出现
                 onboardViewModel.pause()
@@ -482,6 +444,7 @@ fun TingoRoot(
                     currentDestination?.hierarchy?.any { it.route == destination.route } == true
                 },
                 onSelect = { destination ->
+                    // 用单一的顶级目的地栈，避免从详情返回或重复点击时叠加多个页面。
                     navController.navigate(destination.route) {
                         popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
@@ -498,7 +461,6 @@ fun TingoRoot(
     // 手机上原来要"打开会议 → 点转写"两步，用户常在第一步就以为完事了
     androidx.compose.runtime.LaunchedEffect(recordState) {
         val finished = recordState as? RecordUiState.Finished ?: return@LaunchedEffect
-        pendingAutoTranscribe = finished.meetingId
         onOpenMeeting(finished.meetingId)
     }
     // 导入完成就进那场会议的详情（与录音结束后的行为一致）
@@ -517,14 +479,30 @@ fun TingoRoot(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
         ) {
             composable(TopDestination.RECORD.route) {
+                val statusRows by androidx.compose.runtime.produceState(
+                    initialValue = emptyList<HomeStatus>(),
+                    key1 = onboardState.modelReady,
+                ) {
+                    value = withContext(Dispatchers.IO) { homeStatusRows(container) }
+                }
+                LaunchedEffect(Unit) {
+                    if (recordState is RecordUiState.Idle) {
+                        meetingAutoTranscribe = container.settings.autoTranscribe
+                        meetingAutoMinutes = container.settings.autoMinutes
+                    }
+                }
                 RecordRoute(
                     recent = (libraryState as? LibraryUiState.Content)
                         ?.items
                         ?.filter { !it.archived }
                         ?.take(3)
                         .orEmpty(),
-                    statusRows = homeStatusRows(container),
+                    statusRows = statusRows,
                     state = recordState,
+                    autoTranscribe = meetingAutoTranscribe,
+                    autoMinutes = meetingAutoMinutes,
+                    onAutoTranscribeChange = { meetingAutoTranscribe = it },
+                    onAutoMinutesChange = { meetingAutoMinutes = it },
                     autoStoppedAfter = autoStoppedAfter,
                     runningTasks = runningTasks,
                     onOpenTask = { id ->
@@ -535,7 +513,11 @@ fun TingoRoot(
                     },
                     importProgress = importState.progress,
                     importFailure = importState.failure,
-                    liveLines = liveLines,
+                    liveLines = emptyList(),
+                    liveEntries = liveEntries,
+                    highlights = highlights,
+                    liveTranscriptIncomplete = liveTranscriptIncomplete,
+                    highlightSaveFailed = highlightSaveFailed,
                     onPickAudio = {
                         val error = runCatching {
                             pickAudio.launch(
@@ -559,9 +541,15 @@ fun TingoRoot(
                     },
                     onStart = startRecording,
                     onPause = recordViewModel::pause,
+                    onMarkHighlight = recordViewModel::markHighlight,
                     onResume = recordViewModel::resume,
                     onStop = recordViewModel::stop,
                     onDiscard = recordViewModel::discard,
+                    onNewMeeting = {
+                        meetingAutoTranscribe = container.settings.autoTranscribe
+                        meetingAutoMinutes = container.settings.autoMinutes
+                        recordViewModel.prepareNewMeeting()
+                    },
                     onOpenMeeting = { id ->
                         // 用户已经进到那场会议了，自动结束的提示不必再挂着
                         recordViewModel.consumeAutoStopNotice()
@@ -604,9 +592,12 @@ fun TingoRoot(
                             onShowMeetings = libraryViewModel::showMeetings,
                             onRestore = libraryViewModel::restoreFromTrash,
                             onPurge = libraryViewModel::purgeFromTrash,
+                            onRestoreAudio = libraryViewModel::restoreAudioFromTrash,
+                            onPurgeAudio = libraryViewModel::purgeAudioFromTrash,
                             onEmptyTrash = { libraryViewModel.purgeAllFromTrash() },
                         ),
                         trash = trashItems,
+                        audioTrash = audioTrashItems,
                         trashVisible = trashVisible,
                         batchFailures = batchFailures,
                         onStartRecording = {
@@ -629,7 +620,6 @@ fun TingoRoot(
                             runCatching { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } }
                         },
                         onChanged = libraryViewModel::refresh,
-                        autoChain = autoChainFor(id),
                     )
                             } ?: EmptyDetailHint()
                         }
@@ -654,7 +644,6 @@ fun TingoRoot(
                     onOpenSettings = { navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true } },
                     seekMs = seek,
                     onChanged = libraryViewModel::refresh,
-                    autoChain = autoChainFor(id),
                 )
                 // 跳一次就够：返回后再进来不该又跳回同一句
                 androidx.compose.runtime.LaunchedEffect(seek) { pendingSeekMs = null }
@@ -767,6 +756,8 @@ fun TingoRoot(
                     onSaveHotwords = settingsViewModel::saveHotwords,
                     onAddHotword = settingsViewModel::addHotword,
                     onSaveAutoStopSilence = settingsViewModel::saveAutoStopSilence,
+                    onSaveAutoTranscribe = settingsViewModel::saveAutoTranscribe,
+                    onSaveAutoMinutes = settingsViewModel::saveAutoMinutes,
                     onSaveMinutesLanguage = settingsViewModel::setMinutesLanguage,
                     onReplayOnboarding = {
                         onboardViewModel.restart()
@@ -797,6 +788,16 @@ fun TingoRoot(
                     libraryResult = models.libraryResult,
                     onBackupLibrary = { backupLauncher.launch("tingo-会议库备份.zip") },
                     onRestoreLibrary = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+                    onOpenReleases = {
+                        runCatching {
+                            settingsContext.startActivity(android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://github.com/zdfb/tingo-android/releases"),
+                            ))
+                        }.onFailure {
+                            container.toasts.show(settingsContext.getString(R.string.settings_updates_open_failed), error = true)
+                        }
+                    },
                 )
             }
         }
@@ -862,6 +863,10 @@ private fun RecordRoute(
     statusRows: List<HomeStatus>,
     onOpenMeeting: (String) -> Unit,
     state: RecordUiState,
+    autoTranscribe: Boolean,
+    autoMinutes: Boolean,
+    onAutoTranscribeChange: (Boolean) -> Unit,
+    onAutoMinutesChange: (Boolean) -> Unit,
     autoStoppedAfter: Int?,
     runningTasks: List<RunningTask>,
     onOpenTask: (String) -> Unit,
@@ -869,6 +874,10 @@ private fun RecordRoute(
     importFailure: RecordViewModel.ImportFailure?,
     /** 边录边转的最近几句 */
     liveLines: List<String>,
+    liveEntries: List<RecordViewModel.LiveEntry>,
+    highlights: List<Long>,
+    liveTranscriptIncomplete: Boolean,
+    highlightSaveFailed: Boolean,
     onPickAudio: () -> Unit,
     systemAudioStatus: RecordViewModel.SystemAudioStatus,
     systemAudioEnabled: Boolean,
@@ -876,13 +885,23 @@ private fun RecordRoute(
     onSystemAudioChange: (Boolean) -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
+    onMarkHighlight: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
     onDiscard: () -> Unit,
+    onNewMeeting: () -> Unit,
 ) {
     RecordScreen(
         state = state,
+        autoTranscribe = autoTranscribe,
+        autoMinutes = autoMinutes,
+        onAutoTranscribeChange = onAutoTranscribeChange,
+        onAutoMinutesChange = onAutoMinutesChange,
         liveLines = liveLines,
+        liveEntries = liveEntries,
+        highlights = highlights,
+        liveTranscriptIncomplete = liveTranscriptIncomplete,
+        highlightSaveFailed = highlightSaveFailed,
         recent = recent,
         statusRows = statusRows,
         onOpenRecent = onOpenMeeting,
@@ -892,9 +911,11 @@ private fun RecordRoute(
         systemAudioMissing = systemAudioStatus == RecordViewModel.SystemAudioStatus.MISSING,
         systemAudioDenied = systemAudioDenied,
         onPause = onPause,
+        onMarkHighlight = onMarkHighlight,
         onResume = onResume,
         onStop = onStop,
         onDiscard = onDiscard,
+        onNewMeeting = onNewMeeting,
         onOpenMeeting = onOpenMeeting,
         onPickAudio = onPickAudio,
         autoStoppedAfter = autoStoppedAfter,
@@ -975,7 +996,6 @@ private fun DetailRoute(
     /** 改名/标签等写操作后通知调用方刷新列表 */
     onChanged: () -> Unit = {},
     /** 刚录完的这一场：自动转写、转写完接着写纪要（桌面"结束即写完"同一条链） */
-    autoChain: AutoChainFlags = AutoChainFlags(),
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val exportScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -1031,6 +1051,7 @@ private fun DetailRoute(
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var includeHighlights by androidx.compose.runtime.remember(meetingId) { androidx.compose.runtime.mutableStateOf(true) }
     // 播放中每 500 ms 拉一次进度；没有播放器时这个循环什么也不做
     androidx.compose.runtime.LaunchedEffect(state.playback.playing) {
         while (state.playback.playing) {
@@ -1040,74 +1061,23 @@ private fun DetailRoute(
     }
     val meetingTitle = state.detail?.summary?.title.orEmpty().ifBlank { meetingId }
 
-    val transcriptionViewModel: TranscriptionViewModel = viewModel(
-        key = "transcribe-$meetingId",
-        factory = viewModelFactory {
-            initializer {
-                TranscriptionViewModel(
-                    tasks = container.tasks,
-                    ensureBundled = container::installBundledModels,
-                    transcriber = TranscriptionPipeline(container.models, container.catalog),
-                    store = container.models,
-                    catalog = container.catalog,
-                    meetingDir = container.meetingDir(meetingId),
-                )
-            }
-        },
-    )
+    val transcriptionViewModel = remember(container, meetingId) { container.transcriptionFor(meetingId) }
     val transcription by transcriptionViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { transcriptionViewModel.prepare() }
-    // 录完自动转写：等 prepare 把音轨备好（Idle）再开跑，否则 start 会因为"没有录音"直接失败
-    androidx.compose.runtime.LaunchedEffect(meetingId, autoChain.transcribe, transcription) {
-        if (!autoChain.transcribe || transcription !is TranscriptionUiState.Idle) return@LaunchedEffect
-        transcriptionViewModel.start()
-        autoChain.onTranscribeStarted()
+    var confirmModelDownload by remember(meetingId) { mutableStateOf(false) }
+    if (confirmModelDownload) {
+        val bytes = (transcription as? TranscriptionUiState.NeedModels)?.missingBytes ?: 0L
+        io.github.tancheng33.tingo.ui.components.TingoConfirmDialog(
+            title = stringResource(R.string.onboard_model_download),
+            body = stringResource(R.string.onboard_model_confirm_body, (bytes + 1_048_575) / 1_048_576),
+            confirmLabel = stringResource(R.string.onboard_model_confirm),
+            onConfirm = { confirmModelDownload = false; transcriptionViewModel.start(allowDownload = true) },
+            onDismiss = { confirmModelDownload = false },
+        )
     }
-
-    val minutesViewModel: MinutesViewModel = viewModel(
-        key = "minutes-$meetingId",
-        factory = viewModelFactory {
-            initializer {
-                val meetingDir = container.meetingDir(meetingId)
-                MinutesViewModel(
-                    tasks = container.tasks,
-                    serviceFactory = {
-                        MinutesService(
-                            generator = RemoteMinutesGenerator(
-                                configProvider = { container.settings.llm },
-                                client = UrlHttpJsonClient(),
-                            ),
-                            // 热词 → 提示词里的"专有名词"段：与桌面同一份文案，
-                            // 但语言要跟纪要语言一致（英文纪要里塞中文句子，模型会跟着改口）。
-                            glossary = { lang -> container.engine.minutesGlossary(lang) },
-                            languageSetting = { container.settings.minutesLanguage },
-                        )
-                    },
-                    isConfigured = { container.settings.llm.isConfigured },
-                    meetingDir = meetingDir,
-                    // 重新生成也要把上一版归档：与手工编辑走同一条保存路径
-                    saveMinutes = { text -> container.engine.saveMinutes(meetingId, text) },
-                )
-            }
-        },
-    )
+    val minutesViewModel = remember(container, meetingId) { container.minutesFor(meetingId) }
     val minutesState by minutesViewModel.state.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(meetingId) { minutesViewModel.prepare() }
-    // 转写一完成就接着写纪要：没配模型服务时 prepare 会把状态置成 NotConfigured，
-    // 那就不要自动开（那条路是"去设置"，不是"重试一次就会好"）
-    androidx.compose.runtime.LaunchedEffect(meetingId, autoChain.minutes, transcription, minutesState, state.detail) {
-        if (!autoChain.minutes) return@LaunchedEffect
-        val shouldStart = AutoChain.shouldAutoStartMinutes(
-            armed = autoChain.minutes,
-            transcription = transcription,
-            hasMinutes = !state.detail?.minutesText.isNullOrBlank(),
-            minutes = minutesState,
-        )
-        // 条件不满足也把标记撤掉：留着它下次进页面又试一遍
-        autoChain.onMinutesStarted()
-        if (shouldStart) minutesViewModel.start()
-    }
-
     // 转写/纪要写进会议目录后重新读详情：不然界面会一直停在"暂无转写""暂无纪要"
     androidx.compose.runtime.LaunchedEffect(transcription) {
         if (transcription is TranscriptionUiState.Done) viewModel.load()
@@ -1137,14 +1107,22 @@ private fun DetailRoute(
             onSentenceClick = { startMs -> viewModel.playFrom(startMs.toLong()) },
             showMinutesTab = showMinutesTab,
             transcription = transcription,
-            onTranscribe = transcriptionViewModel::start,
+            onTranscribe = {
+                if (transcription is TranscriptionUiState.NeedModels) confirmModelDownload = true
+                else transcriptionViewModel.start()
+            },
             onCancelTranscribe = transcriptionViewModel::cancel,
             minutesGeneration = minutesState,
-            onGenerateMinutes = minutesViewModel::start,
+            onGenerateMinutes = { minutesViewModel.start(includeHighlights) },
             onCancelMinutes = minutesViewModel::cancel,
             onOpenSettings = onOpenSettings,
             initialSeekMs = seekMs,
             onPlayFrom = viewModel::playFrom,
+            highlights = androidx.compose.runtime.remember(meetingId) {
+                io.github.tancheng33.tingo.recording.RecordingHighlights.read(container.meetingDir(meetingId))
+            },
+            includeHighlights = includeHighlights,
+            onIncludeHighlightsChange = { includeHighlights = it },
             speakers = state.speakers,
             guessing = state.guessing,
             guessFailure = state.guessFailure,
@@ -1154,15 +1132,15 @@ private fun DetailRoute(
                 val busyIds = container.tasks.tasks.value.map { it.meetingId }
                 viewModel.deleteRecording(
                     busyIds = busyIds,
-                    onFreed = { freed ->
+                    onFreed = { _ ->
                         container.toasts.show(
-                            context.getString(R.string.detail_audio_deleted, freed / 1_000_000uL),
+                            context.getString(R.string.detail_audio_deleted),
                         )
                     },
                     onFailed = { detail -> container.toasts.show(detail, error = true) },
                 )
             },
-            onRegenerateMinutes = minutesViewModel::start,
+            onRegenerateMinutes = { minutesViewModel.start(includeHighlights) },
             onApplyGuess = viewModel::applyGuess,
             // 界面语言跟着系统走：提示词里的"说话人N"要和界面一致
             onGuessSpeakers = { viewModel.guessSpeakers(uiLang) },
@@ -1320,8 +1298,7 @@ private fun EmptyDetailHint() {
 /**
  * 底部导航：桌面版侧栏的三项在手机上落成一条。
  *
- * 选中项不是"变个颜色"，而是换成一块细描边的白底卡片——桌面版侧栏就是这个语言，
- * 一眼能看出"我在哪"。
+ * 使用图标与文字共同标识当前页面。
  */
 @Composable
 private fun TingoBottomBar(
@@ -1350,14 +1327,7 @@ private fun TingoBottomBar(
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .background(if (selected) colors.card else colors.bg, TingoDimens.controlShape)
-                        .then(
-                            if (selected) {
-                                Modifier.border(BorderStroke(TingoDimens.hairline, colors.line), TingoDimens.controlShape)
-                            } else {
-                                Modifier
-                            },
-                        )
+                        .background(if (selected) colors.blueSoft else colors.bg, TingoDimens.controlShape)
                         .clickable { onSelect(destination) }
                         .semantics {
                             role = androidx.compose.ui.semantics.Role.Tab
@@ -1368,13 +1338,13 @@ private fun TingoBottomBar(
                     Icon(
                         imageVector = destination.icon,
                         contentDescription = null,
-                        tint = if (selected) colors.text else colors.muted,
-                        modifier = Modifier.size(20.dp),
+                        tint = if (selected) colors.blue else colors.muted,
+                        modifier = Modifier.size(22.dp),
                     )
                     Text(
                         text = stringResource(destination.labelRes),
                         style = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal),
-                        color = if (selected) colors.text else colors.muted,
+                        color = if (selected) colors.blue else colors.muted,
                     )
                 }
             }

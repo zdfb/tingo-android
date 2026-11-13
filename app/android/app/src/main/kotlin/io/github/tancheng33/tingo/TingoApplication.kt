@@ -13,7 +13,8 @@ class TingoApplication : Application() {
         container.ensureDataRoot()
         // 进程被杀留下的半截录音：启动时补好头，用户下次就见不到"点不开"的条目
         container.repairInterruptedRecordingsOnStart()
-        // 内置模型解包到模型目录：模型随 APK 分发，端侧推理不需要网络
-        container.installBundledModelsOnStart()
+        kotlin.concurrent.thread(name = "tingo-audio-trash", isDaemon = true) {
+            runCatching { container.engine.listAudioTrash() }
+        }
     }
 }

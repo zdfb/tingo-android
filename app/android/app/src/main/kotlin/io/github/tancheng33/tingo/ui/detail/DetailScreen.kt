@@ -42,6 +42,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -131,6 +132,9 @@ fun DetailScreen(
     onTogglePlay: () -> Unit = {},
     /** 跳到指定毫秒并开始播放（搜索命中跳转用） */
     onPlayFrom: (Long) -> Unit = {},
+    highlights: List<Long> = emptyList(),
+    includeHighlights: Boolean = true,
+    onIncludeHighlightsChange: (Boolean) -> Unit = {},
 ) {
     val pageTitle = state.detail?.summary?.title?.takeIf(String::isNotBlank)
         ?: stringResource(R.string.nav_meetings)
@@ -182,15 +186,6 @@ fun DetailScreen(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    // 有内容才可分享：空会议导出会得到一个空文件，不如不给入口
-                    if (onExportBundle != null) {
-                        IconButton(onClick = onExportBundle, enabled = exportEnabled) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Share,
-                                contentDescription = stringResource(R.string.detail_export_bundle),
-                            )
-                        }
-                    }
                     IconButton(onClick = onExport, enabled = exportEnabled) {
                         Icon(
                             imageVector = Icons.Default.Share,
@@ -206,6 +201,16 @@ fun DetailScreen(
                             )
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            if (onExportBundle != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.detail_export_bundle), color = TingoTheme.colors.text) },
+                                    enabled = exportEnabled,
+                                    onClick = {
+                                        menuOpen = false
+                                        onExportBundle()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.detail_rename), color = TingoTheme.colors.text) },
                                 onClick = {
@@ -374,6 +379,25 @@ fun DetailScreen(
                 }
                 if (playback.available) {
                     PlaybackBar(playback = playback, onTogglePlay = onTogglePlay)
+                    if (highlights.isNotEmpty()) {
+                        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                            highlights.forEach { position ->
+                                TextButton(onClick = { onPlayFrom(position) }) {
+                                    Text(clockOf(position.toULong()))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (highlights.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onIncludeHighlightsChange(!includeHighlights) }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = includeHighlights, onCheckedChange = onIncludeHighlightsChange)
+                        Text(stringResource(R.string.detail_include_highlights))
+                    }
                 }
                 // 分段控件（桌面版同样的"灰底 + 白色浮起项"），比 M3 的 TabRow 更接近桌面观感
                 if (showMinutesTab) {

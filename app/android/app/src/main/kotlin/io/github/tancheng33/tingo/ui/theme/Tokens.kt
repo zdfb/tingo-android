@@ -13,22 +13,22 @@ import androidx.compose.ui.unit.sp
  */
 object TingoColors {
     // 浅色：近白底、细描边白卡片（桌面版同样的取值）
-    val bg = Color(0xFFFAFAFC)
+    val bg = Color(0xFFF6F8FC)
     val card = Color(0xFFFFFFFF)
-    val line = Color(0xFFE9E9ED)
-    val lineSoft = Color(0xFFF0F0F3)
-    val seg = Color(0xFFF2F2F5)
-    val hover = Color(0xFFF4F4F7)
-    val text = Color(0xFF0A0A0A)
-    val text2 = Color(0xFF27251E)
-    val muted = Color(0xFF6B7076)
-    val faint = Color(0xFFA3A7AD)
+    val line = Color(0xFFE3E8F1)
+    val lineSoft = Color(0xFFEDF0F5)
+    val seg = Color(0xFFEDF1F7)
+    val hover = Color(0xFFF0F3F8)
+    val text = Color(0xFF101828)
+    val text2 = Color(0xFF344054)
+    val muted = Color(0xFF667085)
+    val faint = Color(0xFF98A2B3)
     val black = Color(0xFF000000)
     /** 黑底上写字用的颜色（深色模式下黑底其实是近白，所以不能写死白） */
     val onBlack = Color(0xFFFFFFFF)
 
-    val blue = Color(0xFF1F4BFF)
-    val blueSoft = Color(0xFFE9EFFF)
+    val blue = Color(0xFF2956E8)
+    val blueSoft = Color(0xFFE8EEFF)
     val cyan = Color(0xFF34C6F4)
     val red = Color(0xFFD92D20)
     val green = Color(0xFF12B76A)
@@ -37,21 +37,21 @@ object TingoColors {
 
 /** 深色：桌面版只给了深色背景与描边，这里补齐前后景对比。 */
 object TingoColorsDark {
-    val bg = Color(0xFF0B0F1E)
-    val card = Color(0xFF121831)
-    val line = Color(0xFF232B4A)
-    val lineSoft = Color(0xFF1B2240)
-    val seg = Color(0xFF1B2240)
-    val hover = Color(0xFF1B2240)
-    val text = Color(0xFFEEF1FB)
-    val text2 = Color(0xFFDCE2F5)
-    val muted = Color(0xFF9AA3BF)
-    val faint = Color(0xFF6C7597)
+    val bg = Color(0xFF0D1324)
+    val card = Color(0xFF151E34)
+    val line = Color(0xFF263451)
+    val lineSoft = Color(0xFF1E2A43)
+    val seg = Color(0xFF19243B)
+    val hover = Color(0xFF1D2A44)
+    val text = Color(0xFFF2F4FA)
+    val text2 = Color(0xFFD5DCEE)
+    val muted = Color(0xFFA5B0C7)
+    val faint = Color(0xFF7886A3)
     val black = Color(0xFFEEF1FB)
     val onBlack = Color(0xFF0B0F1E)
 
-    val blue = Color(0xFF9DB2FF)
-    val blueSoft = Color(0xFF1E2A5C)
+    val blue = Color(0xFFA9BCFF)
+    val blueSoft = Color(0xFF23356B)
     val cyan = Color(0xFF67D8F8)
     val red = Color(0xFFF97066)
     val green = Color(0xFF47CD89)
@@ -61,7 +61,7 @@ object TingoColorsDark {
 /** 尺寸与间距：桌面版是 240px 侧栏 + 16px 圆角卡片，手机端按同一节奏缩放。 */
 object TingoDimens {
     val radiusCard = 16.dp
-    val radiusControl = 10.dp
+    val radiusControl = 14.dp
 
     /** 品牌区图标边长：与标题一行的视觉重量匹配 */
     val brandMark = 28.dp

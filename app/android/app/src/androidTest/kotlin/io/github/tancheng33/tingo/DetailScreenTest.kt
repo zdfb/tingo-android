@@ -136,6 +136,39 @@ class DetailScreenTest {
     }
 
     @Test
+    fun tappingHighlightSeeksToRecordingMoment() {
+        var seek = -1L
+        compose.setContent {
+            TingoTheme {
+                DetailScreen(
+                    state = DetailUiState(loading = false, detail = detail()),
+                    onRetry = {}, onSentenceClick = {},
+                    playback = PlaybackState(available = true, durationMs = 120_000),
+                    highlights = listOf(65_000L), onPlayFrom = { seek = it },
+                )
+            }
+        }
+        compose.onNodeWithText("01:05").performClick()
+        compose.runOnIdle { assertEquals(65_000L, seek) }
+    }
+
+    @Test
+    fun highlightInclusionCanBeTurnedOffBeforeGeneratingMinutes() {
+        var include = true
+        compose.setContent {
+            TingoTheme {
+                DetailScreen(
+                    state = DetailUiState(loading = false, detail = detail()),
+                    onRetry = {}, onSentenceClick = {}, highlights = listOf(1_000L),
+                    includeHighlights = include, onIncludeHighlightsChange = { include = it },
+                )
+            }
+        }
+        compose.onNodeWithText(text(R.string.detail_include_highlights)).performClick()
+        compose.runOnIdle { assertEquals(false, include) }
+    }
+
+    @Test
     fun loadingStateShowsAnAccessiblePageTitle() {
         render(DetailUiState(loading = true))
 

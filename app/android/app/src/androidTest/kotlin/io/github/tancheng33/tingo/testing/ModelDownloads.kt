@@ -16,7 +16,10 @@ import java.io.File
 object ModelDownloads {
 
     fun store(context: Context, name: String): ModelStore =
-        ModelStore(File(context.cacheDir, name).apply { mkdirs() }, UrlFetcher())
+        ModelStore(
+            File(context.cacheDir, name).apply { mkdirs() }, UrlFetcher(),
+            paraformerMetadata = context.assets.open("paraformer-metadata.bin").use { it.readBytes() },
+        )
 
     fun catalog(context: Context, asset: String = "models.json"): ModelCatalog =
         ModelCatalog.parse(context.assets.open(asset).bufferedReader().readText())

@@ -1,5 +1,33 @@
 package io.github.tancheng33.tingo.settings
 
+import java.net.URI
+import java.net.InetAddress
+
+fun publicHttpsAddress(value: String): Boolean = runCatching {
+    val uri = URI(value.trim())
+    val host = uri.host?.lowercase() ?: return false
+    if (!uri.scheme.equals("https", true) || uri.userInfo != null || uri.fragment != null ||
+        host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+        (!host.contains('.') && !host.contains(':'))) return false
+    if (host.contains(':') || host.all { it.isDigit() || it == '.' }) {
+        return isPublicAddress(InetAddress.getByName(host))
+    }
+    true
+}.getOrDefault(false)
+
+fun isPublicAddress(address: InetAddress): Boolean {
+    val bytes = address.address
+    if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+        address.isSiteLocalAddress || address.isMulticastAddress) return false
+    if (bytes.size == 16 && (bytes[0].toInt() and 0xfe) == 0xfc) return false
+    if (bytes.size == 4) {
+        val a = bytes[0].toInt() and 255
+        val b = bytes[1].toInt() and 255
+        if (a == 0 || a >= 224 || (a == 100 && b in 64..127) || (a == 198 && b in 18..19)) return false
+    }
+    return true
+}
+
 /** 接口协议，取值与桌面版 `config.toml` 的 `[llm] api` 一致。 */
 enum class LlmProtocol(val wire: String) {
     OPENAI("openai"),
@@ -30,5 +58,5 @@ data class LlmConfig(
      * 不如在点按钮之前就说清楚。
      */
     val isConfigured: Boolean
-        get() = baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()
+        get() = publicHttpsAddress(baseUrl) && apiKey.isNotBlank() && model.isNotBlank()
 }
