@@ -333,6 +333,7 @@
     <string name="detail_fishbone_no_evidence">No evidence</string>
     <string name="detail_fishbone_weak">Thin evidence · %1$d quote(s) · %2$d chars</string>
     <string name="detail_fishbone_quotes">%1$d quote(s) · %2$d chars</string>
+    <string name="detail_fishbone_more">%1$d more branches</string>
     <string name="detail_delete_audio">Delete recording</string>
     <string name="detail_delete_audio_confirm_title">Delete this meeting\'s recording?</string>
     <string name="detail_delete_audio_confirm_body">The recording moves to the trash for 30 days and still uses storage; the transcript and minutes stay.</string>

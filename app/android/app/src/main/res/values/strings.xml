@@ -333,6 +333,7 @@
     <string name="detail_fishbone_no_evidence">无原文依据</string>
     <string name="detail_fishbone_weak">依据很少 · 引用 %1$d 段 · %2$d 字</string>
     <string name="detail_fishbone_quotes">引用 %1$d 段 · %2$d 字</string>
+    <string name="detail_fishbone_more">还有 %1$d 个分支</string>
     <string name="detail_delete_audio">只删录音</string>
     <string name="detail_delete_audio_confirm_title">删除这场会议的录音？</string>
     <string name="detail_delete_audio_confirm_body">录音将移入回收站，保留 30 天，期间仍占用空间；转写和纪要保留。</string>

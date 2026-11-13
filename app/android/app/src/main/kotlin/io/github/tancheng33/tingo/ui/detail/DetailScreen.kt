@@ -671,7 +671,7 @@ private fun FishboneDiagram(
             }
         }
         if (branches.size > 6) {
-            Text("+${branches.size - 6}", style = MaterialTheme.typography.labelSmall, color = colors.muted)
+            Text(stringResource(R.string.detail_fishbone_more, branches.size - 6), style = MaterialTheme.typography.labelSmall, color = colors.muted)
         }
     }
 }
