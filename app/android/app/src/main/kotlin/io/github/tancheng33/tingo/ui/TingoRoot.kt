@@ -1103,6 +1103,7 @@ private fun DetailRoute(
         }
         DetailScreen(
             state = state,
+            wide = wide,
             onRetry = viewModel::load,
             // 点一句就跳到那一句开始播；没有录音时 ViewModel 里是空操作
             onSentenceClick = { startMs -> viewModel.playFrom(startMs.toLong()) },

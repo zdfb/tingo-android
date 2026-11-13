@@ -39,6 +39,8 @@ sealed interface LibraryUiState {
         val archivedOnly: Boolean = false,
         val selectedTag: String? = null,
         val availableTags: List<String> = emptyList(),
+        /** 搜索命中可见的会议范围；不套标题/摘要本地过滤，因为引擎还搜索正文。 */
+        val searchScopeIds: Set<String> = emptySet(),
         /** 多选中的会议 id；非空时界面显示批量操作条 */
         val selection: Set<String> = emptySet(),
         /** 搜索命中：空表示"这次搜索没有命中"而不是"没在搜索" */
@@ -345,7 +347,14 @@ class LibraryViewModel(
     }
 
     fun selectAll() {
-        val all = (lastSnapshot ?: return).filter { !archivedOnly || it.archived }.map { it.id }.toSet()
+        val all = (lastSnapshot ?: return)
+            .filter { card ->
+                (!archivedOnly || card.archived) &&
+                    (selectedTag == null || selectedTag in card.tags) &&
+                    matchesQuery(card, query)
+            }
+            .map { it.id }
+            .toSet()
         selection = all
         lastSnapshot?.let { _state.value = render(it) }
     }
@@ -413,6 +422,9 @@ class LibraryViewModel(
             archivedOnly = archivedOnly,
             selectedTag = selectedTag,
             availableTags = all.flatMap { it.tags }.distinct().sorted(),
+            searchScopeIds = all.filter { card ->
+                (!archivedOnly || card.archived) && (selectedTag == null || selectedTag in card.tags)
+            }.mapTo(mutableSetOf()) { it.id },
             selection = selection,
             hits = hits,
             expandedTerms = expandedTerms,

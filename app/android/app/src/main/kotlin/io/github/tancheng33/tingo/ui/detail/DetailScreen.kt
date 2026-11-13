@@ -2,6 +2,7 @@ package io.github.tancheng33.tingo.ui.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.CircleShape
@@ -87,6 +88,7 @@ import io.github.tancheng33.tingo.ui.components.TaskStatusBar
 @Composable
 fun DetailScreen(
     state: DetailUiState,
+    wide: Boolean = false,
     onRetry: () -> Unit,
     onSentenceClick: (ULong) -> Unit,
     modifier: Modifier = Modifier,
@@ -428,6 +430,7 @@ fun DetailScreen(
                         minutes = state.minutes,
                         minutesFailure = state.minutesFailure,
                         fishbone = detail?.fishbone,
+                        wide = wide,
                         transcript = detail?.transcript,
                         onPlayFrom = onSentenceClick,
                         generation = minutesGeneration,
@@ -454,6 +457,7 @@ private fun MinutesPane(
     minutes: MinutesDoc?,
     minutesFailure: FailureKind?,
     fishbone: Fishbone?,
+    wide: Boolean,
     /** 转写正文：鱼骨图的"有没有原话支撑"与时间戳跳转都要它 */
     transcript: io.github.tancheng33.tingo.engine.Transcript?,
     onPlayFrom: (ULong) -> Unit,
@@ -491,7 +495,7 @@ private fun MinutesPane(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(section.heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (section.kind == SectionKind.ROOT_CAUSE && fishbone != null) {
-                        FishboneCard(fishbone, transcript = transcript, onPlayFrom = onPlayFrom)
+                        FishboneCard(fishbone, transcript = transcript, onPlayFrom = onPlayFrom, wide = wide)
                     } else {
                         // 有 ```fishbone 代码块但没解析出图，就照原文展示并标注，别让用户以为内容丢了
                         if (section.body.contains(FISHBONE_FENCE)) {
@@ -523,6 +527,7 @@ private fun FishboneCard(
     fishbone: Fishbone,
     transcript: io.github.tancheng33.tingo.engine.Transcript?,
     onPlayFrom: (ULong) -> Unit,
+    wide: Boolean,
 ) {
     val colors = TingoTheme.colors
     val summary = FishboneGrounding.summarize(fishbone, transcript)
@@ -530,7 +535,7 @@ private fun FishboneCard(
     var expanded by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(fishbone.problem, style = MaterialTheme.typography.titleSmall)
-        FishboneDiagram(fishbone = fishbone, transcript = transcript)
+        FishboneDiagram(fishbone = fishbone, transcript = transcript, wide = wide)
         Text(
             text = if (summary.withoutEvidence > 0) {
                 stringResource(
@@ -623,6 +628,7 @@ private fun FishboneCard(
 private fun FishboneDiagram(
     fishbone: Fishbone,
     transcript: io.github.tancheng33.tingo.engine.Transcript?,
+    wide: Boolean,
 ) {
     val colors = TingoTheme.colors
     val branches = fishbone.branches.filter { it.title.isNotBlank() }
@@ -641,25 +647,42 @@ private fun FishboneDiagram(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.fillMaxWidth().height(104.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().height(if (wide) 104.dp else 156.dp)) {
             Canvas(Modifier.fillMaxSize()) {
-                val y = size.height * 0.52f
-                val start = size.width * 0.08f
-                val end = size.width * 0.92f
-                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(start, y), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
-                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y - 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
-                drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y + 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
-                branches.take(6).forEachIndexed { index, _ ->
-                    val x = start + (end - start) * ((index + 1).toFloat() / (branches.take(6).size + 1))
-                    val upper = index % 2 == 0
-                    val branchY = if (upper) y - 32.dp.toPx() else y + 32.dp.toPx()
-                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY), 2.dp.toPx(), StrokeCap.Round)
-                    drawCircle(branchColors[index], radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY))
+                if (wide) {
+                    val y = size.height * 0.52f
+                    val start = size.width * 0.08f
+                    val end = size.width * 0.92f
+                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(start, y), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y - 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(end - 12.dp.toPx(), y + 8.dp.toPx()), androidx.compose.ui.geometry.Offset(end, y), 3.dp.toPx(), StrokeCap.Round)
+                    branches.take(6).forEachIndexed { index, _ ->
+                        val x = start + (end - start) * ((index + 1).toFloat() / (branches.take(6).size + 1))
+                        val upper = index % 2 == 0
+                        val branchY = if (upper) y - 32.dp.toPx() else y + 32.dp.toPx()
+                        drawLine(colors.blue, androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY), 2.dp.toPx(), StrokeCap.Round)
+                        drawCircle(branchColors[index], radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x - 22.dp.toPx(), branchY))
+                    }
+                    drawCircle(colors.blue, radius = 8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(end, y))
+                } else {
+                    val x = size.width * 0.22f
+                    val start = size.height * 0.12f
+                    val end = size.height * 0.82f
+                    drawLine(colors.blue, androidx.compose.ui.geometry.Offset(x, start), androidx.compose.ui.geometry.Offset(x, end), 3.dp.toPx(), StrokeCap.Round)
+                    drawCircle(colors.blue, radius = 8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, start))
+                    branches.take(6).forEachIndexed { index, _ ->
+                        val y = start + (end - start) * ((index + 1).toFloat() / (branches.take(6).size + 1))
+                        val right = index % 2 == 0
+                        val branchX = if (right) x + size.width * 0.28f else x - size.width * 0.16f
+                        drawLine(colors.blue, androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(branchX, y), 2.dp.toPx(), StrokeCap.Round)
+                        drawCircle(branchColors[index], radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(branchX, y))
+                    }
                 }
-                drawCircle(colors.blue, radius = 8.dp.toPx(), center = androidx.compose.ui.geometry.Offset(end, y))
             }
             Box(
-                modifier = Modifier.align(Alignment.CenterEnd).background(colors.blueSoft, TingoDimens.controlShape).padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = if (wide) Modifier.align(Alignment.CenterEnd) else Modifier.align(Alignment.TopCenter)
+                    .background(colors.blueSoft, TingoDimens.controlShape)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(fishbone.problem, style = MaterialTheme.typography.labelMedium, color = colors.blue, maxLines = 2)
             }

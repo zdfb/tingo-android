@@ -34,4 +34,12 @@ class LiveSpeakerReclustererTest {
         val tracker = LiveSpeakerReclusterer(reclusterEvery = 1, clusterer = { list -> List(list.size) { 0 } })
         assertNull(tracker.add(1, "没有声纹", FloatArray(0)).single().speaker)
     }
+
+    @Test
+    fun invalidEmbeddingDoesNotEnterTheClusterer() {
+        var clustered = 0
+        val tracker = LiveSpeakerReclusterer(reclusterEvery = 1, clusterer = { clustered++; List(it.size) { 0 } })
+        tracker.add(1, "坏声纹", floatArrayOf(Float.NaN, 0f))
+        assertEquals(0, clustered)
+    }
 }

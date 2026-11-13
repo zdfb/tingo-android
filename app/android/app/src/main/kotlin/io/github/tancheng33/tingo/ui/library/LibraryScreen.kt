@@ -221,7 +221,7 @@ fun LibraryScreen(
                     onClear = manage.onClearSelection,
                     onBatch = manage.onBatch,
                 )
-            } else if (state.query.isNotBlank() && state.hits.isNotEmpty()) {
+            } else if (state.query.isNotBlank() && state.hits.any { it.meetingId in state.searchScopeIds }) {
                 SearchHits(state = state, onOpenAt = onOpenAtHit)
             }
             LazyColumn(
@@ -247,6 +247,7 @@ fun LibraryScreen(
                                 onAction = {
                                     onQueryChange("")
                                     if (state.archivedOnly) onArchivedOnlyChange(false)
+                                    if (state.selectedTag != null) onTagChange(null)
                                 },
                             )
                         }
@@ -735,7 +736,7 @@ private fun BatchBar(
 @Composable
 private fun SearchHits(state: LibraryUiState.Content, onOpenAt: (String, ULong) -> Unit) {
     val colors = TingoTheme.colors
-    val grouped = state.hits.groupBy { it.meetingId }
+    val grouped = state.hits.filter { it.meetingId in state.searchScopeIds }.groupBy { it.meetingId }
     Column(
         modifier = Modifier
             .fillMaxWidth()

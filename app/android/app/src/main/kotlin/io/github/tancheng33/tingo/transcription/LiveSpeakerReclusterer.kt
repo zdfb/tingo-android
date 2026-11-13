@@ -12,11 +12,13 @@ class LiveSpeakerReclusterer(
     private val reclusterEvery: Int = DEFAULT_RECLUSTER_EVERY,
     private val clusterer: (List<FloatArray>) -> List<Int> = { SpeakerClustering().cluster(it) },
 ) {
+    init { require(reclusterEvery > 0) { "reclusterEvery 必须大于 0" } }
     private val items = mutableListOf<LiveSpeakerUtterance>()
     fun add(key: Long, text: String, embedding: FloatArray): List<LiveSpeakerUtterance> {
         // 某一路临时识别偶尔拿不到声纹：沿用最近已确认的说话人，避免同一人的连续气泡闪回“未知”。
-        val inheritedSpeaker = if (embedding.isEmpty()) items.lastOrNull { it.speaker != null }?.speaker else null
-        items += LiveSpeakerUtterance(key, text, embedding.copyOf(), inheritedSpeaker)
+        val usable = embedding.isUsable()
+        val inheritedSpeaker = if (!usable) items.lastOrNull { it.speaker != null }?.speaker else null
+        items += LiveSpeakerUtterance(key, text, if (usable) embedding.copyOf() else FloatArray(0), inheritedSpeaker)
         val validCount = items.count { it.embedding.isNotEmpty() }
         if (validCount == 1 || validCount % reclusterEvery == 0) recluster()
         return snapshot()
@@ -46,4 +48,9 @@ class LiveSpeakerReclusterer(
     }
 
     companion object { const val DEFAULT_RECLUSTER_EVERY = 4 }
+}
+
+private fun FloatArray.isUsable(): Boolean {
+    if (isEmpty() || any { !it.isFinite() }) return false
+    return sumOf { it.toDouble() * it.toDouble() } > 1e-12
 }

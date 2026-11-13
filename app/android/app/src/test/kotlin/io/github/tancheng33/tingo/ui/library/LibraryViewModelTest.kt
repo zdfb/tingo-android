@@ -2,6 +2,8 @@ package io.github.tancheng33.tingo.ui.library
 
 import io.github.tancheng33.tingo.data.MeetingRepository
 import io.github.tancheng33.tingo.engine.FailureKind
+import io.github.tancheng33.tingo.engine.SearchHit
+import io.github.tancheng33.tingo.engine.SearchResults
 import io.github.tancheng33.tingo.engine.TingoFailure
 import io.github.tancheng33.tingo.testing.FakeEnginePort
 import io.github.tancheng33.tingo.testing.summary
@@ -244,5 +246,28 @@ class LibraryViewModelTest {
         vm.onQueryChange("注册页")
         advanceUntilIdle()
         assertEquals("en", engine.searchedLanguage)
+    }
+
+    @Test
+    fun bodySearchHitRemainsVisibleWhenTitleDoesNotMatch() = runTest(dispatcher) {
+        val engine = FakeEnginePort(
+            onScan = { listOf(summary("m1", title = "会议标题", tags = listOf("项目"))) },
+            onSearch = { query ->
+                SearchResults(
+                    query = query,
+                    expanded = listOf(query),
+                    hits = listOf(SearchHit("m1", "会议标题", "2026-01-01", false, "转写正文命中", 1uL, "说话人1")),
+                )
+            },
+        )
+        val vm = viewModel(engine)
+        advanceUntilIdle()
+        vm.onTagChange("项目")
+        vm.onQueryChange("正文")
+        advanceUntilIdle()
+
+        val content = vm.state.value as LibraryUiState.Content
+        assertEquals(setOf("m1"), content.searchScopeIds)
+        assertEquals(listOf("m1"), content.hits.map { it.meetingId })
     }
 }
