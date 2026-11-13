@@ -327,6 +327,7 @@
     <string name="settings_minutes_language_en">English</string>
     <string name="library_delete_busy">这场会议还在处理中：先停下转写或纪要，再删除</string>
     <string name="record_live_hint">实时文字，最终以录完后的转写为准</string>
+    <string name="record_live_badge">实时</string>
     <string name="detail_fishbone_summary">%1$d 个分支 · 引用原话 %2$d 段</string>
     <string name="detail_fishbone_summary_partial">%1$d 个分支 · 引用原话 %2$d 段 · %3$d 个分支无原文依据</string>
     <string name="detail_fishbone_no_evidence">无原文依据</string>

@@ -1,6 +1,7 @@
 package io.github.tancheng33.tingo.ui.record
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -102,6 +104,13 @@ internal fun RecordingWorkspace(
         }
         HorizontalDivider(color = colors.line)
         val listState = rememberLazyListState()
+        val avatarColors = listOf(colors.blue, colors.cyan, colors.green, colors.amber)
+        val bubbleColors = listOf(
+            colors.blueSoft,
+            colors.seg,
+            colors.green.copy(alpha = 0.12f),
+            colors.amber.copy(alpha = 0.14f),
+        )
         val count = if (entries.isNotEmpty()) entries.size else lines.size
         LaunchedEffect(count) {
             if (count > 0 && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
@@ -115,14 +124,61 @@ internal fun RecordingWorkspace(
             if (entries.isNotEmpty()) {
                 items(count = entries.size, key = { index -> entries[entries.lastIndex - index].key }) { index ->
                     val entry = entries[entries.lastIndex - index]
-                    Row(Modifier.fillMaxWidth().padding(vertical = TingoDimens.gapTight), horizontalArrangement = Arrangement.spacedBy(TingoDimens.gap)) {
-                        Box(Modifier.size(36.dp).background(colors.seg, CircleShape), contentAlignment = Alignment.Center) {
-                            Text(entry.speaker?.toString() ?: "—", style = MaterialTheme.typography.labelLarge, color = colors.text2)
+                    val speakerIndex = entry.speaker ?: 0
+                    val colorIndex = speakerIndex.mod(avatarColors.size)
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = TingoDimens.gapTight),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Box(
+                            Modifier.size(38.dp).background(avatarColors[colorIndex], CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = entry.speaker?.let { "S$it" } ?: "我",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (colorIndex == 1) colors.text else colors.onBlack,
+                            )
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(entry.speaker?.let { stringResource(R.string.record_provisional_speaker, it) }
-                                ?: stringResource(R.string.record_speaker_unknown), style = MaterialTheme.typography.labelMedium, color = colors.muted)
-                            Text(entry.text, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = entry.speaker?.let { stringResource(R.string.record_provisional_speaker, it) }
+                                        ?: stringResource(R.string.record_speaker_unknown),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.text2,
+                                )
+                                Text(
+                                    text = stringResource(R.string.record_live_badge),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.faint,
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color = bubbleColors[colorIndex],
+                                        shape = RoundedCornerShape(
+                                            topStart = 5.dp,
+                                            topEnd = 16.dp,
+                                            bottomEnd = 16.dp,
+                                            bottomStart = 16.dp,
+                                        ),
+                                    )
+                                    .border(TingoDimens.hairline, colors.lineSoft, RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                            ) {
+                                Text(
+                                    text = entry.text,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = colors.text,
+                                )
+                            }
                         }
                     }
                 }
