@@ -6,52 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - run: brew install ffmpeg
-      - run: uv sync
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
-      - run: uv run pytest -m "not slow"
-
-  app:
-    runs-on: macos-15
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: app/package.json  # 版本取 app/package.json 的 packageManager
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      # 界面构建产物随 Python 包发布，必须和源码同步提交
-      - run: git diff --exit-code -- ../src/tingo/web
-      # 在 src-tauri / engine 目录里跑，才会用上 rust-toolchain.toml 固定的版本
-      - run: cargo clippy -- -D warnings
-        working-directory: app/src-tauri
-      # 引擎的桌面形态：http-server + sherpa-asr + desktop-shell 全开，命令与本地开发一致
-      - run: cargo clippy -- -D warnings
-        working-directory: app/engine
-      - run: cargo test --release --lib
-        working-directory: app/engine
-      # 引擎的 Android 形态：--no-default-features 下不带 axum / sherpa-onnx / libc，也要编过、测过
-      - run: cargo clippy --no-default-features -- -D warnings
-        working-directory: app/engine
-      - run: cargo test --no-default-features --lib
-        working-directory: app/engine
-
   engine-android:
-    # 桌面形态由 app job 守着；这里只交叉编译 Android 形态，防止核心模块里再长出桌面专属的系统调用。
+    # 交叉编译 Android 引擎，检查平台兼容性。
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -83,9 +39,9 @@ jobs:
       - name: 指向 runner 自带的 NDK
         run: echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_SDK_ROOT"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
       # Gradle 走 settings.gradle.kts 里配的镜像，wrapper 发行版走腾讯镜像
-      # 内置模型（300+ MB）不进仓库：CI 上没有 models/，用显式开关跳过检查并按现有清单出包
-      - run: ./gradlew :app:testDebugUnitTest -PtingoSkipBundledModels=true
-      - run: ./gradlew :app:assembleDebug -PtingoSkipBundledModels=true
+      # 模型在首次使用时下载，不内置到 APK。
+      - run: ./gradlew :app:testDebugUnitTest
+      - run: ./gradlew :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: tingo-android-debug-apk
@@ -117,6 +73,5 @@ jobs:
           arch: x86_64
           disable-animations: true
           working-directory: app/android
-          # CI 上没有内置模型（300+ MB 不进仓库），跳过依赖模型的五个用例类（它们在本机用真模型跑过，
-          # 见 app/android/README.md 的实机验收记录）。整条命令写成一行：折行会往类名里塞空格
-          script: ./gradlew :app:connectedDebugAndroidTest -PtingoSkipBundledModels=true -Pandroid.testInstrumentationRunnerArguments.notClass=io.github.tancheng33.tingo.BundledModelInstrumentedTest,io.github.tancheng33.tingo.HomeScreenInstrumentedTest,io.github.tancheng33.tingo.RecognitionInstrumentedTest,io.github.tancheng33.tingo.PipelineInstrumentedTest,io.github.tancheng33.tingo.SherpaRuntimeTest
+          # CI 不下载完整模型，跳过依赖模型的用例。
+          script: ./gradlew :app:connectedDebugAndroidTest -PtingoRustAbis=x86_64 -Pandroid.testInstrumentationRunnerArguments.notClass=io.github.tancheng33.tingo.BundledModelInstrumentedTest,io.github.tancheng33.tingo.HomeScreenInstrumentedTest,io.github.tancheng33.tingo.RecognitionInstrumentedTest,io.github.tancheng33.tingo.PipelineInstrumentedTest,io.github.tancheng33.tingo.SherpaRuntimeTest

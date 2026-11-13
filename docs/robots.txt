@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://tancheng33.github.io/tingo/sitemap.xml
