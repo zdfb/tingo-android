@@ -34,6 +34,8 @@ import kotlinx.coroutines.withContext
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
+    val wearAudioBridge = io.github.tancheng33.tingo.wear.WearAudioBridge()
+
     private val recordingScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate,
     )

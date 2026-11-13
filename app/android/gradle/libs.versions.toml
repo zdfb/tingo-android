@@ -15,9 +15,11 @@ androidxTestRunner = "1.7.0"
 jna = "5.19.1"
 sherpaOnnx = "v2.0.1"
 json = "20250107"
+playServicesWearable = "19.0.0"
 
 [libraries]
 json = { module = "org.json:json", version.ref = "json" }
+play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "playServicesWearable" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }

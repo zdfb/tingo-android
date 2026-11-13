@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.TingoWatch" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#6D8DFF</item>
+        <item name="android:navigationBarColor">#0D1324</item>
+        <item name="android:statusBarColor">#0D1324</item>
+    </style>
+</resources>

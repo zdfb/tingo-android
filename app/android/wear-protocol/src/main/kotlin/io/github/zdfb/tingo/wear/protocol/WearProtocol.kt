@@ -3,6 +3,7 @@ package io.github.zdfb.tingo.wear.protocol
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 
 /**
  * 手机与手表之间共享的音频帧协议。
@@ -32,6 +33,28 @@ data class WearControlMessage(
     val action: WearControlAction,
     val detail: String = "",
 )
+
+object WearControlCodec {
+    private const val VERSION = "1"
+
+    fun encode(message: WearControlMessage): ByteArray {
+        val session = Base64.getUrlEncoder().withoutPadding().encodeToString(message.sessionId.toByteArray(StandardCharsets.UTF_8))
+        val detail = Base64.getUrlEncoder().withoutPadding().encodeToString(message.detail.toByteArray(StandardCharsets.UTF_8))
+        return (VERSION + "|" + message.action.name + "|" + session + "|" + detail).toByteArray(StandardCharsets.UTF_8)
+    }
+
+    fun decode(bytes: ByteArray): WearControlMessage {
+        val parts = String(bytes, StandardCharsets.UTF_8).split('|', limit = 4)
+        require(parts.size == 4 && parts[0] == VERSION) { "无效的 Wear 控制消息" }
+        val action = runCatching { WearControlAction.valueOf(parts[1]) }.getOrElse {
+            throw IllegalArgumentException("未知的 Wear 控制动作", it)
+        }
+        val session = String(Base64.getUrlDecoder().decode(parts[2]), StandardCharsets.UTF_8)
+        val detail = String(Base64.getUrlDecoder().decode(parts[3]), StandardCharsets.UTF_8)
+        require(session.isNotBlank()) { "sessionId 不能为空" }
+        return WearControlMessage(session, action, detail)
+    }
+}
 
 sealed interface WearSequenceResult {
     data object Accepted : WearSequenceResult

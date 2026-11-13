@@ -1,10 +1,10 @@
 # Tasks
 
-- [ ] 建立 `wear` Wear OS module、Manifest、Compose 入口和共享签名配置。
-- [ ] 定义 `WearProtocol` 帧格式、控制消息、状态消息和版本字段。
-- [ ] 先写协议编解码、序号幂等和缺帧测试，再实现协议代码。
+- [x] 建立 `wear` Wear OS module、Manifest、Compose 入口和共享签名配置。
+- [x] 定义 `WearProtocol` 帧格式、控制消息、状态消息和版本字段。
+- [x] 先写协议编解码、序号幂等和缺帧测试，再实现协议代码。
 - [ ] 先写 `WearRecorderPort` 的状态机测试，再接入手表麦克风和本地分片文件。
-- [ ] 先写手机 `WearStreamReceiver` 的内存通道测试，再接入 `ChannelClient`。
+- [x] 先写手机 `WearStreamReceiver` 的内存通道测试，再接入 `ChannelClient`。
 - [ ] 先写 `WearTranscriptionBridge` 的实时结果测试，再接入 `LiveAsr` 和 `RecordViewModel`。
 - [ ] 实现手表开始/暂停/继续/结束界面、前台通知和断线提示。
 - [ ] 实现手机端最近转写、连接状态和录音来源标记。

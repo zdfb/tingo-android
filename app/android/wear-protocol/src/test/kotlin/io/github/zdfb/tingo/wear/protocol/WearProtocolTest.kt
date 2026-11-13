@@ -46,4 +46,10 @@ class WearProtocolTest {
         assertEquals(WearSequenceResult.Gap(1, 3), tracker.accept(3))
         assertEquals(WearSequenceResult.Accepted, tracker.accept(1))
     }
+
+    @Test
+    fun controlMessageRoundTripsUnicodeDetail() {
+        val original = WearControlMessage("session-123", WearControlAction.STATUS, "手机延迟 2 秒")
+        assertEquals(original, WearControlCodec.decode(WearControlCodec.encode(original)))
+    }
 }

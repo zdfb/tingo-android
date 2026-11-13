@@ -45,6 +45,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
+        <service
+            android:name=".wear.WearDataLayerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.BIND_LISTENER" />
+            </intent-filter>
+        </service>
 
         <!-- 导出的纪要放在 cache/exports，只把这个子目录授权给分享面板 -->
         <provider
