@@ -212,6 +212,7 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAss
 }
 
 dependencies {
+    implementation(project(":wear-protocol"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

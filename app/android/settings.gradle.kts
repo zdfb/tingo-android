@@ -29,3 +29,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "tingo-android"
 include(":app")
+include(":wear-protocol")
