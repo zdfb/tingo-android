@@ -198,6 +198,7 @@ fun LibraryScreen(
         }
 
         is LibraryUiState.Content -> Column(modifier.fillMaxSize()) {
+            val visibleHitCount = state.hits.count { it.meetingId in state.searchScopeIds }
             LibraryHeader(
                 query = state.query,
                 onQueryChange = onQueryChange,
@@ -222,7 +223,7 @@ fun LibraryScreen(
                     onBatch = manage.onBatch,
                 )
             } else if (state.query.isNotBlank() &&
-                (state.hits.any { it.meetingId in state.searchScopeIds } || state.expandedTerms.size > 1)
+                (visibleHitCount > 0 || state.expandedTerms.size > 1)
             ) {
                 SearchHits(state = state, onOpenAt = onOpenAtHit)
             }
@@ -236,7 +237,7 @@ fun LibraryScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(TingoDimens.gapTight),
             ) {
-                if (state.items.isEmpty() && state.hits.isEmpty()) {
+                if (state.items.isEmpty() && visibleHitCount == 0) {
                     item {
                         Box(
                             Modifier.fillMaxWidth().padding(TingoDimens.gutter),
