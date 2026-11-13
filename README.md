@@ -1,70 +1,52 @@
 <p align="center"><img src="brand/tingo-icon.svg" width="112" alt="Tingo"></p>
-
 <h1 align="center">听过 · Tingo for Android</h1>
-
-<p align="center"><b>开过的会，都听过。</b><br>在 Android 手机上录下会议、本地转写，再把每条纪要结论对应回原话。</p>
-
+<p align="center">录下会议，在手机上转写，把重要内容整理成纪要。</p>
 <p align="center">
-  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4"><img src="https://img.shields.io/badge/版本-v0.5.4-2457ff" alt="v0.5.4"></a>
-  <img src="https://img.shields.io/badge/Android-10%2B-3ddc84?logo=android&logoColor=white" alt="Android 10+">
-  <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT license">
-  <a href="README.en.md"><img src="https://img.shields.io/badge/README-English-555" alt="English README"></a>
+  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4">v0.5.4 测试版</a> · Android 10+ · <a href="README.en.md">English</a>
 </p>
 
-<p align="center"><a href="docs/android/demo.mp4"><img src="docs/android/demo.gif" width="480" alt="Tingo Android v0.5.2 操作录屏预览"></a></p>
-<p align="center"><a href="docs/android/demo.mp4">播放 Android 操作录像（MP4，约 34 秒）</a></p>
+## 界面
 
-截图与录屏来自 Android API 36 模拟器上实际运行的 v0.5.2；会议内容是 App 内置的演示会议，不是界面稿或用户录音。GIF 由这段录屏转换而来。
+以下截图来自 v0.5.4 在 Android 真机上运行的实际界面。会议列表中的条目是测试录音。
 
-## 项目来源
+<table><tr>
+<td align="center"><b>录音</b><br><img src="docs/android/v0.5.4/record.png" width="360" alt="录音页面"></td>
+<td align="center"><b>会议记录</b><br><img src="docs/android/v0.5.4/library.png" width="360" alt="会议记录页面"></td>
+<td align="center"><b>设置</b><br><img src="docs/android/v0.5.4/settings.png" width="360" alt="设置页面"></td>
+</tr></table>
 
-本项目是基于开源项目 [tancheng33/tingo](https://github.com/tancheng33/tingo) 开发的 Android 版本。感谢原作者及贡献者。本仓库作为独立项目维护，Android 客户端由本项目单独实现。
+## 可以做什么
 
-## Android 界面
+- **录音和实时文字**：录制麦克风，可按需尝试录制其他应用的声音；录音工作台展示实时文字、临时说话人和重点标记。
+- **本地转写**：首次下载 Paraformer 及配套模型后，在手机上进行语音识别和说话人区分。录音和转写保存在本机。
+- **生成和回看纪要**：配置自己的模型服务，将转写文本整理成纪要；通过时间戳回听原录音。
+- **管理会议**：搜索、归档、删除和恢复会议，备份与恢复数据，导出会议内容及 PDF。
 
-<table>
-  <tr>
-    <td align="center"><b>录音</b><br><img src="docs/android/record.png" alt="录音主页" width="100%"></td>
-    <td align="center"><b>会议库</b><br><img src="docs/android/library.png" alt="会议列表" width="100%"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>会议详情</b><br><img src="docs/android/detail.png" alt="会议纪要详情" width="100%"></td>
-    <td align="center"><b>设置</b><br><img src="docs/android/settings.png" alt="应用设置" width="100%"></td>
-  </tr>
-</table>
+系统声音录制需要 Android 的系统授权；部分应用禁止捕获声音。锁屏录音、双路音频同步等功能仍需进一步真机验收。
 
-## 功能
+## 安装与使用
 
-- **录音与转写留在手机上**：录麦克风；也可以尝试录会议软件的系统声音。Paraformer 语音识别、标点和说话人区分在本机运行，转写不需要联网。
-- **纪要能回到原话**：配置你自己的大模型服务后，用转写文本生成会议纪要；时间戳可以跳回录音对应位置。Tingo 不会把录音上传给纪要服务。
-- **管理会议**：搜索会议内容，归档、恢复已删除会议，导出或备份数据；支持中文和英文界面。
-- **本地数据可控**：录音和会议文件保存在 Android 应用专属目录。卸载 App 会删除该目录；要长期保留会议，请先从设置中备份或导出。
+1. 从 [v0.5.4 发布页](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4)下载 `Tingo-Android-v0.5.4-debug.apk`，安装到 Android 10 或更新版本的设备。
+2. 首次启动时确认下载语音模型，并按提示授予麦克风权限。使用系统声音录制时，还需确认系统授权。
+3. 如需自动生成纪要，在设置中填写模型服务地址、模型名称和 API Key。
 
-系统内录使用 Android 的 MediaProjection / Audio Playback Capture，必须在录音时确认系统提示；部分会议应用会禁止捕获对方声音，具体取决于应用和设备。
+**版本状态：**这是 debug 签名的测试包，正式签名尚未配置。JVM 单元测试和 Debug 构建已通过；完整真机自动化测试因设备系统拦截尚未完成。新版应用 ID 为 `io.github.zdfb.tingo`，不自动迁移旧版数据。
 
-## 下载与安装
+## 数据与隐私
 
-1. 从 [v0.5.4 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4) 下载 `Tingo-Android-v0.5.4-debug.apk`。
-2. 在 Android 提示时，允许当前文件管理器或浏览器安装应用，然后继续安装。
-3. 首次使用时确认下载 Paraformer 及配套模型；录音时授予麦克风权限。录系统声音时，按提示开启系统录制授权。
-
-v0.5.4 为测试版，附件使用 debug 签名，安装包约 108 MiB。最低支持 Android 10（API 29）。本版采用独立包名，不迁移旧版数据。完整真机自动化测试尚未通过。
-
-### 纪要服务与隐私
-
-语音识别和说话人区分在设备上完成。生成纪要时，会议**转写文本**会发送到你在设置中配置的服务商；录音文件不会发送。API Key 保存在应用私有配置中。未配置模型服务时，录音、转写和回听仍可使用。
+录音和本地转写保存在设备的应用专属目录中。生成纪要时，转写文本会发送给你配置的模型服务商；录音文件不会发送给该服务。卸载应用会删除其专属目录，卸载前请备份需要保留的数据。
 
 ## 从源码构建
 
-需要 JDK 21、Android SDK 37、NDK 30、Rust 和 `cargo-ndk`。模型不内置，首次使用时下载；构建产物约 108 MiB。
+需要 JDK 21、Android SDK 37、NDK 30、Rust 和 `cargo-ndk`。模型不内置于安装包，首次使用时下载。
 
 ```bash
 cd app/android
 ./gradlew :app:assembleDebug
 ```
 
-模型来源与许可证、完整配置和测试说明见 [Android 开发文档](app/android/README.md)。桌面版与 Android 版的功能对照见 [功能对照表](docs/android-parity.md)。
+构建环境和历史测试记录见 [Android 开发文档](app/android/README.md)。
 
-## 许可证
+## 项目来源与许可证
 
-[MIT](LICENSE)
+本项目基于 [tancheng33/tingo](https://github.com/tancheng33/tingo) 开发，作为独立的 Android 项目维护。感谢原作者及贡献者。项目采用 [MIT 许可证](LICENSE)。

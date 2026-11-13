@@ -1,70 +1,46 @@
 <p align="center"><img src="brand/tingo-icon.svg" width="112" alt="Tingo"></p>
-
 <h1 align="center">Tingo for Android</h1>
+<p align="center">Record meetings, transcribe on your phone, and turn the conversation into minutes.</p>
+<p align="center"><a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4">v0.5.4 test release</a> · Android 10+ · <a href="README.md">中文</a></p>
 
-<p align="center"><b>Every meeting, heard.</b><br>Record meetings on Android, transcribe them on device, and trace each conclusion back to the original words.</p>
+## Screenshots
 
-<p align="center">
-  <a href="https://github.com/zdfb/tingo-android/releases/tag/v0.5.4"><img src="https://img.shields.io/badge/version-v0.5.4-2457ff" alt="v0.5.4"></a>
-  <img src="https://img.shields.io/badge/Android-10%2B-3ddc84?logo=android&logoColor=white" alt="Android 10+">
-  <img src="https://img.shields.io/badge/license-MIT-34c6f4" alt="MIT license">
-  <a href="README.md"><img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-555" alt="中文 README"></a>
-</p>
+These screenshots show v0.5.4 running on an Android device. The listed meetings are test recordings.
 
-<p align="center"><a href="docs/android/demo.mp4"><img src="docs/android/demo.gif" width="480" alt="Tingo Android v0.5.2 screen recording preview"></a></p>
-<p align="center"><a href="docs/android/demo.mp4">Watch the Android screen recording (MP4, about 34 seconds)</a></p>
-
-The screenshots and recording were captured from v0.5.2 running in an Android API 36 emulator. The meeting is Tingo's built-in sample, not a mockup or a user's recording. The GIF was converted from that recording.
-
-## Project origin
-
-This Android app is based on the open-source [tancheng33/tingo](https://github.com/tancheng33/tingo) project. Thanks to the original author and contributors. This repository is maintained as an independent project, with its Android client implemented separately.
-
-## Android screenshots
-
-<table>
-  <tr>
-    <td align="center"><b>Record</b><br><img src="docs/android/record.png" alt="Recording screen" width="100%"></td>
-    <td align="center"><b>Meetings</b><br><img src="docs/android/library.png" alt="Meeting library" width="100%"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Meeting details</b><br><img src="docs/android/detail.png" alt="Meeting minutes" width="100%"></td>
-    <td align="center"><b>Settings</b><br><img src="docs/android/settings.png" alt="App settings" width="100%"></td>
-  </tr>
-</table>
+<table><tr><td align="center"><b>Record</b><br><img src="docs/android/v0.5.4/record.png" width="360" alt="Recording screen"></td><td align="center"><b>Meeting library</b><br><img src="docs/android/v0.5.4/library.png" width="360" alt="Meeting library"></td><td align="center"><b>Settings</b><br><img src="docs/android/v0.5.4/settings.png" width="360" alt="Settings screen"></td></tr></table>
 
 ## Features
 
-- **Audio and transcription stay on your device.** Record the microphone and optionally try to capture meeting app audio. Paraformer speech recognition, punctuation, and speaker separation run locally; transcription works offline.
-- **Trace minutes back to the source.** Connect your own LLM service to create minutes from the transcript. Timestamps jump to the matching audio. Tingo does not upload recordings to the minutes service.
-- **Manage meetings.** Search meeting content, archive or restore deleted meetings, export or back up data, and switch between Chinese and English.
-- **Keep control of local data.** Recordings and meetings live in Android's app-specific directory. Uninstalling the app deletes that directory, so export or back up meetings you want to keep.
+- Record microphone audio, optionally attempt to capture audio from other apps, and view live text, provisional speaker labels, and highlights.
+- Download Paraformer and its supporting models on first use for on-device transcription and speaker separation.
+- Configure your own model service to generate minutes from transcripts, and use timestamps to return to the recording.
+- Search, archive, delete and restore meetings; back up data and export meeting content or PDF.
 
-System audio capture uses Android MediaProjection / Audio Playback Capture and requires confirmation during recording. Some meeting apps block playback capture, depending on the app and device.
+System audio capture requires Android authorization, and some apps prevent capture. Lock-screen recording and dual-source audio synchronization need further device validation.
 
-## Download and install
+## Install
 
-1. Download `Tingo-Android-v0.5.4-debug.apk` from [v0.5.4 Releases](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4).
-2. When Android prompts you, allow your browser or file manager to install apps, then continue.
-3. Confirm the Paraformer model download on first use and grant microphone access when recording. Follow the system prompt to capture system audio.
+1. Download `Tingo-Android-v0.5.4-debug.apk` from the [v0.5.4 release](https://github.com/zdfb/tingo-android/releases/tag/v0.5.4) and install it on Android 10 or later.
+2. Confirm the speech model download and grant microphone access. System audio capture requires additional system authorization.
+3. To generate minutes, configure a model service URL, model name and API key in Settings.
 
-v0.5.4 is a debug-signed test build, approximately 108 MiB, requiring Android 10 (API 29) or later. Its new application ID does not migrate data from the previous app. Full device automation has not passed yet.
+**Release status:** This test build uses a debug signing key; production signing has not been configured. JVM unit tests and the Debug build passed. Full device automation remains incomplete because the device blocked test activity launches. The new application ID is `io.github.zdfb.tingo` and does not automatically migrate data from older versions.
 
-### Minutes service and privacy
+## Privacy
 
-Speech recognition and speaker separation run on device. To generate minutes, the **transcript text** is sent to the provider configured in Settings; audio files are not sent. Your API key is stored in app-private settings. Recording, transcription, and playback remain available without an LLM service.
+Recordings and local transcripts are stored in the app's device-specific directory. Generating minutes sends transcript text to the configured model provider; audio files are not sent to that service. Uninstalling the app removes its app-specific files, so back up data first.
 
-## Build from source
+## Build
 
-Requires JDK 21, Android SDK 37, NDK 30, Rust, and `cargo-ndk`. Speech models are downloaded on first use; the APK is about 108 MiB.
+You need JDK 21, Android SDK 37, NDK 30, Rust and `cargo-ndk`. Speech models are downloaded on first use.
 
 ```bash
 cd app/android
 ./gradlew :app:assembleDebug
 ```
 
-See the [Android development guide](app/android/README.md) for model licenses, configuration, and test details. The [feature parity table](docs/android-parity.md) compares Android and desktop.
+See the [Android development guide](app/android/README.md) for build details and historical test results.
 
-## License
+## Origin and license
 
-[MIT](LICENSE)
+This independent Android project is based on [tancheng33/tingo](https://github.com/tancheng33/tingo). Thanks to the original author and contributors. Licensed under the [MIT License](LICENSE).
